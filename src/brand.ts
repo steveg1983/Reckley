@@ -15,7 +15,8 @@
  *
  * ── WHAT MOVES AND WHAT DOES NOT ────────────────────────────────────────────
  *
- * Moved to this prefix (by `lib/storageMigration.ts`, copy-not-move):
+ * Moved to this prefix (by `lib/storageMigration.ts`: copied in generation 1,
+ * the old copies deleted in generation 2 once the copy is proven present):
  *   every `wealthtracker_*` key — the IndexedDB records in `secureData` and the
  *   localStorage keys of the same generation. They carried the old brand.
  *

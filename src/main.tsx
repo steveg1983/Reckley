@@ -337,9 +337,10 @@ const renderApp = (): void => {
 
 // The storage-generation migration runs to completion BEFORE the first render,
 // because the first thing the app does after mounting is read storage, and the
-// migration is what puts the data under the names it will read. It is
-// copy-not-move and never blocks boot: a failure is logged and the app renders
-// against whatever is there (the old keys still are). See lib/storageMigration.
+// migration is what puts the data under the names it will read. It copies
+// first and deletes an old copy only behind a present new one, and it never
+// blocks boot: a failure is logged and the app renders against whatever is
+// there. See lib/storageMigration.
 void migrateStorage()
   .catch(error => {
     bootstrapLogger.error('Storage migration failed; rendering anyway', error);
