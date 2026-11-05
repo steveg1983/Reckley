@@ -8,6 +8,7 @@ import {
   boxFigure,
   budgetHistoryWindow,
   buildWizardRows,
+  clampCustomWindow,
   groupWizardRows,
   planBudgetWrites,
   runFromDate,
@@ -18,6 +19,7 @@ import {
   wizardBoxValue,
   type BudgetMode,
   type RunFromKind,
+  type SpendWindowCustom,
   type WizardEntry,
   type WizardGroup,
   type WizardRow,
@@ -50,7 +52,8 @@ import { parseMoneyInput, toDecimal, type DecimalInstance } from '../utils/decim
  *      already typed rather than re-reading it (owner, 2 Sep 2026: "Yes, it
  *      should convert") — see `chooseMode` and utils/budgetWizardPlan.
  *   2. THE GRID. Evidence beside every box: what that category really cost
- *      over twelve complete months, as a year and as a month.
+ *      over the chosen window — twelve complete months by default, a named
+ *      year, or months of the user's choosing — as a year and as a month.
  *   3. WHAT WILL HAPPEN. The totals, the shortfall or headroom in words, and
  *      every removal named — before a single row is written.
  *
@@ -194,11 +197,37 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
    * measurement, and it survives a change of measuring stick.
    */
   const [windowKind, setWindowKind] = useState<WizardWindowKind>('full-months');
-  const historyWindow = useMemo(() => budgetHistoryWindow(now, windowKind), [now, windowKind]);
+  /**
+   * The months a 'custom' window runs over, as the user typed them (owner,
+   * 5 Nov 2026: "a custom option for the guide period"). The inputs show the
+   * ASK; the heading and the figures show the window as clamped by the
+   * summariser — never the month still running, at most 36 — so a range
+   * typed into the future is answered on screen rather than quietly obeyed.
+   */
+  const [customWindow, setCustomWindow] = useState<SpendWindowCustom | undefined>(undefined);
+  const historyWindow = useMemo(
+    () => budgetHistoryWindow(now, windowKind, customWindow),
+    [now, windowKind, customWindow]
+  );
+  /** The latest month a custom window may end in: last month, as YYYY-MM. */
+  const lastCompleteMonth = useMemo(() => clampCustomWindow(undefined, now).toMonth, [now]);
+
+  const chooseWindow = (chosen: WizardWindowKind): void => {
+    if (chosen === 'custom' && customWindow === undefined) {
+      // Start from the months being looked at, when they ARE whole months —
+      // the three named years all are. A window seeded from what is on screen
+      // changes no figure at the moment of choosing; the user then moves an end.
+      setCustomWindow(clampCustomWindow({
+        fromMonth: historyWindow.from.slice(0, 7),
+        toMonth: historyWindow.to.slice(0, 7),
+      }, now));
+    }
+    setWindowKind(chosen);
+  };
 
   const summary = useMemo(
-    () => summariseForWizard(transactions, transactionSplits, categories, now, windowKind),
-    [transactions, transactionSplits, categories, now, windowKind]
+    () => summariseForWizard(transactions, transactionSplits, categories, now, windowKind, customWindow),
+    [transactions, transactionSplits, categories, now, windowKind, customWindow]
   );
   const rows = useMemo(
     () => buildWizardRows(summary, categories, budgets),
@@ -655,12 +684,26 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
   );
 
   // ── Step 2 ────────────────────────────────────────────────────────────────
+  /**
+   * A custom window that is not twelve months makes "a year" and "a month" a
+   * RATE, and the explainer says so in the same breath as the count — the
+   * house rule about naming what a figure is before anyone reads it.
+   */
+  const customExplainer = (): string => {
+    const stillRunning = 'The month still running is never counted.';
+    if (historyWindow.months === 12) return `Twelve complete months of your choosing. ${stillRunning}`;
+    const count = historyWindow.months === 1 ? 'One complete month' : `${historyWindow.months} complete months`;
+    return `${count} — "a year" and "a month" here are what you spent over them, at a yearly and a monthly rate. ${stillRunning}`;
+  };
   const windowExplainer =
     windowKind === 'full-months'
       ? 'Twelve complete months — this month is still running, so it is not counted.'
       : windowKind === 'calendar-year'
         ? 'The last complete calendar year.'
-        : 'The last complete tax year — 6 April to 5 April.';
+        : windowKind === 'tax-year'
+          ? 'The last complete tax year — 6 April to 5 April.'
+          : customExplainer();
+  const atARate = historyWindow.months !== 12;
 
   const renderGrid = (): React.JSX.Element => (
     <div>
@@ -683,8 +726,8 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
               value={windowKind}
               onChange={event => {
                 const chosen = event.target.value;
-                if (chosen === 'full-months' || chosen === 'calendar-year' || chosen === 'tax-year') {
-                  setWindowKind(chosen);
+                if (chosen === 'full-months' || chosen === 'calendar-year' || chosen === 'tax-year' || chosen === 'custom') {
+                  chooseWindow(chosen);
                 }
               }}
               className="px-2 py-2 min-h-[44px] text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
@@ -692,8 +735,44 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
               <option value="full-months">The last 12 full months</option>
               <option value="calendar-year">Last calendar year</option>
               <option value="tax-year">Last tax year</option>
+              <option value="custom">Months I choose</option>
             </select>
           </label>
+          {windowKind === 'custom' && (
+            // The same month inputs as the Plan page's custom range. `max` is
+            // the browser's half of the rule the summariser enforces; a month
+            // typed past it is clamped there and the heading says what counted.
+            <>
+              <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                From
+                <input
+                  type="month"
+                  aria-label="Measured from month"
+                  value={customWindow?.fromMonth ?? ''}
+                  max={lastCompleteMonth}
+                  onChange={event => setCustomWindow({
+                    fromMonth: event.target.value,
+                    toMonth: customWindow?.toMonth ?? lastCompleteMonth,
+                  })}
+                  className="px-2 py-2 min-h-[44px] text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                To
+                <input
+                  type="month"
+                  aria-label="Measured to month"
+                  value={customWindow?.toMonth ?? ''}
+                  max={lastCompleteMonth}
+                  onChange={event => setCustomWindow({
+                    fromMonth: customWindow?.fromMonth ?? lastCompleteMonth,
+                    toMonth: event.target.value,
+                  })}
+                  className="px-2 py-2 min-h-[44px] text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+              </label>
+            </>
+          )}
           <button
             type="button"
             onClick={startFromHistory}
@@ -847,16 +926,24 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
         </h3>
         <p className="text-sm text-gray-700 dark:text-gray-200 tabular-nums">
           {formatCurrency(plan.monthlyTotal)} a month ({formatCurrency(plan.annualTotal)} a year),
-          against {formatCurrency(plan.spentTotal)} actually spent in those categories over{' '}
-          {historyWindow.label}.
+          {atARate
+            // Over a window that is not a year, the comparison figure is a
+            // RATE — what those categories would cost in a year at the pace
+            // they ran — and the sentence says so rather than calling it spending.
+            ? ` against ${formatCurrency(plan.spentTotal)} a year at the rate those categories ran over ${historyWindow.label} (${historyWindow.months} month${historyWindow.months === 1 ? '' : 's'}).`
+            : ` against ${formatCurrency(plan.spentTotal)} actually spent in those categories over ${historyWindow.label}.`}
         </p>
         {plan.budgetedCount > 0 && (
           <p className={`mt-2 text-sm font-medium tabular-nums ${level}`}>
             {plan.difference.isZero()
-              ? 'That is exactly what those categories cost.'
+              ? (atARate ? 'That is exactly that rate.' : 'That is exactly what those categories cost.')
               : short
-                ? `That is ${formatCurrency(plan.difference.abs())} a year LESS than they really cost — you would have to spend less than last year to stay inside it.`
-                : `That is ${formatCurrency(plan.difference)} a year MORE than they really cost, so there is room in it.`}
+                ? (atARate
+                    ? `That is ${formatCurrency(plan.difference.abs())} a year LESS than that rate — you would have to spend more slowly than you did over ${historyWindow.label} to stay inside it.`
+                    : `That is ${formatCurrency(plan.difference.abs())} a year LESS than they really cost — you would have to spend less than last year to stay inside it.`)
+                : (atARate
+                    ? `That is ${formatCurrency(plan.difference)} a year MORE than that rate, so there is room in it.`
+                    : `That is ${formatCurrency(plan.difference)} a year MORE than they really cost, so there is room in it.`)}
           </p>
         )}
 

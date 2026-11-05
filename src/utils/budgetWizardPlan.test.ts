@@ -186,15 +186,43 @@ describe('budgetHistoryWindow — the measuring stick is a choice', () => {
     expect(budgetHistoryWindow(now, 'full-months')).toEqual(budgetHistoryWindow(now));
   });
 
+  it('every named window says it is twelve months', () => {
+    const now = new Date(2026, 8, 1);
+    for (const kind of ['full-months', 'calendar-year', 'tax-year'] as const) {
+      expect(budgetHistoryWindow(now, kind).months).toBe(12);
+    }
+  });
+
+  it('custom months are named like the default window, and counted', () => {
+    const window = budgetHistoryWindow(new Date(2026, 8, 1), 'custom', { fromMonth: '2026-01', toMonth: '2026-06' });
+    expect(window.from).toBe('2026-01-01');
+    expect(window.to).toBe('2026-06-30');
+    expect(window.label).toBe('Jan 2026 – Jun 2026');
+    expect(window.months).toBe(6);
+  });
+
+  it('a custom window of one month has one name', () => {
+    const window = budgetHistoryWindow(new Date(2026, 8, 1), 'custom', { fromMonth: '2026-06', toMonth: '2026-06' });
+    expect(window.label).toBe('Jun 2026');
+    expect(window.months).toBe(1);
+  });
+
+  it('custom with nothing chosen is the default window under another name', () => {
+    const now = new Date(2026, 8, 1);
+    expect(budgetHistoryWindow(now, 'custom')).toEqual(budgetHistoryWindow(now));
+  });
+
   it('the summary is summed over the same window the header names', () => {
     // One source for the range — the label and the figures cannot describe
     // different windows, whichever measuring stick is chosen.
     const now = new Date(2026, 8, 1);
-    for (const kind of ['full-months', 'calendar-year', 'tax-year'] as const) {
-      const summary = summariseForWizard([], [], [], now, kind);
-      const window = budgetHistoryWindow(now, kind);
+    const custom = { fromMonth: '2026-02', toMonth: '2026-07' };
+    for (const kind of ['full-months', 'calendar-year', 'tax-year', 'custom'] as const) {
+      const summary = summariseForWizard([], [], [], now, kind, custom);
+      const window = budgetHistoryWindow(now, kind, custom);
       expect(summary.window.from).toBe(window.from);
       expect(summary.window.to).toBe(window.to);
+      expect(summary.window.months).toBe(window.months);
     }
   });
 });

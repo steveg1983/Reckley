@@ -350,6 +350,76 @@ describe('step 2 — the measuring stick and the scoreboard', () => {
     expect(boxFor('Food Shopping')).toHaveValue('150');
   });
 
+  /** The twelve complete months the suite's fixture spends in, as the screen names them. */
+  const lastComplete = (): { start: Date; end: Date } => {
+    const now = new Date();
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { start: new Date(end.getFullYear(), end.getMonth() - 11, 1), end };
+  };
+  const ym = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const month = (d: Date): string => d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  const chooseCustom = (): void => {
+    fireEvent.change(screen.getByLabelText(/Measured over/), { target: { value: 'custom' } });
+  };
+
+  it('"Months I choose" shows From and To, seeded with the months already on screen — nothing moves at the moment of choosing', () => {
+    renderWizard();
+    chooseMonthly();
+    const { start, end } = lastComplete();
+    chooseCustom();
+    expect(screen.getByLabelText('Measured from month')).toHaveValue(ym(start));
+    expect(screen.getByLabelText('Measured to month')).toHaveValue(ym(end));
+    expect(screen.getByText(`What you spent, ${month(start)} – ${month(end)}`)).toBeInTheDocument();
+    expect(screen.getByText(/Twelve complete months of your choosing/)).toBeInTheDocument();
+    expect(within(rowFor('Food Shopping')).getByText('£1200.00 a year')).toBeInTheDocument();
+  });
+
+  it('a shorter window names its count, and reads "a year" and "a month" as a RATE over it', () => {
+    renderWizard();
+    chooseMonthly();
+    chooseCustom();
+    const { end } = lastComplete();
+    const from = new Date(end.getFullYear(), end.getMonth() - 5, 1);
+    fireEvent.change(screen.getByLabelText('Measured from month'), { target: { value: ym(from) } });
+    expect(screen.getByText(`What you spent, ${month(from)} – ${month(end)}`)).toBeInTheDocument();
+    expect(screen.getByText(/6 complete months — "a year" and "a month" here are what you spent over them/)).toBeInTheDocument();
+    // £100 in each of the six months: £600 over the window, which is £100 a
+    // month and £1,200 a year AT THAT RATE — the figure a budget is set against.
+    const row = rowFor('Food Shopping');
+    expect(within(row).getByText('£1200.00 a year')).toBeInTheDocument();
+    expect(within(row).getByText('£100.00 a month')).toBeInTheDocument();
+  });
+
+  it('the month inputs stop at last month — the month still running is never evidence', () => {
+    renderWizard();
+    chooseMonthly();
+    chooseCustom();
+    const { end } = lastComplete();
+    expect(screen.getByLabelText('Measured from month')).toHaveAttribute('max', ym(end));
+    expect(screen.getByLabelText('Measured to month')).toHaveAttribute('max', ym(end));
+  });
+
+  it('a range typed into this month is answered on screen rather than obeyed', () => {
+    renderWizard();
+    chooseMonthly();
+    chooseCustom();
+    const { start, end } = lastComplete();
+    fireEvent.change(screen.getByLabelText('Measured to month'), { target: { value: ym(new Date()) } });
+    // The input keeps the ask; the heading says what actually counted.
+    expect(screen.getByLabelText('Measured to month')).toHaveValue(ym(new Date()));
+    expect(screen.getByText(`What you spent, ${month(start)} – ${month(end)}`)).toBeInTheDocument();
+  });
+
+  it('a window of one month has one name', () => {
+    renderWizard();
+    chooseMonthly();
+    chooseCustom();
+    const { end } = lastComplete();
+    fireEvent.change(screen.getByLabelText('Measured from month'), { target: { value: ym(end) } });
+    expect(screen.getByText(`What you spent, ${month(end)}`)).toBeInTheDocument();
+    expect(screen.getByText(/One complete month — "a year" and "a month"/)).toBeInTheDocument();
+  });
+
   it('the scoreboard counts a typed box as I go along', () => {
     renderWizard();
     chooseMonthly();
@@ -742,6 +812,25 @@ describe('step 3 — what will happen, before it happens', () => {
     fireEvent.change(boxFor('Food Shopping'), { target: { value: '150' } });
     review();
     expect(screen.getByText(/£600\.00 a year MORE than they really cost/)).toBeInTheDocument();
+  });
+
+  it('over a window that is not a year, the comparison is called a RATE, not spending', () => {
+    renderWizard();
+    chooseMonthly();
+    fireEvent.change(screen.getByLabelText(/Measured over/), { target: { value: 'custom' } });
+    const now = new Date();
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    const from = new Date(end.getFullYear(), end.getMonth() - 5, 1);
+    const ym = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    fireEvent.change(screen.getByLabelText('Measured from month'), { target: { value: ym(from) } });
+    fireEvent.change(boxFor('Food Shopping'), { target: { value: '90' } });
+    review();
+    // £600 over six months is £1,200 a year at that rate; £90 a month is £120 a year under it.
+    expect(
+      screen.getByText(/£90\.00 a month \(£1080\.00 a year\), against £1200\.00 a year at the rate those categories ran over .* \(6 months\)\./)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/£120\.00 a year LESS than that rate — you would have to spend more slowly/)).toBeInTheDocument();
+    expect(screen.queryByText(/actually spent/)).not.toBeInTheDocument();
   });
 
   it('lists every removal BY NAME', () => {

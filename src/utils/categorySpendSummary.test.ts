@@ -8,6 +8,8 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  MAX_CUSTOM_MONTHS,
+  clampCustomWindow,
   groupSubtotals,
   spendWindow,
   summariseCategorySpend,
@@ -47,20 +49,71 @@ describe('spendWindow', () => {
     // Jul 2026 inclusive. Counting a part-month would read every category low
     // by however much of August is left.
     expect(spendWindow('full-months', NOW)).toEqual({
-      kind: 'full-months', from: '2025-08-01', to: '2026-07-31',
+      kind: 'full-months', from: '2025-08-01', to: '2026-07-31', months: 12,
     });
   });
 
   it('to-yesterday is the rolling year ending yesterday — today is a part-day too', () => {
     expect(spendWindow('to-yesterday', NOW)).toEqual({
-      kind: 'to-yesterday', from: '2025-08-29', to: '2026-08-28',
+      kind: 'to-yesterday', from: '2025-08-29', to: '2026-08-28', months: 12,
     });
   });
 
   it('full-months on the FIRST of a month still ends with the month just gone', () => {
     expect(spendWindow('full-months', new Date(2026, 0, 1))).toEqual({
-      kind: 'full-months', from: '2025-01-01', to: '2025-12-31',
+      kind: 'full-months', from: '2025-01-01', to: '2025-12-31', months: 12,
     });
+  });
+});
+
+describe('spendWindow — months the user chooses (custom)', () => {
+  it('runs from the first of the from-month to the last day of the to-month, and counts them', () => {
+    expect(spendWindow('custom', NOW, { fromMonth: '2026-01', toMonth: '2026-06' })).toEqual({
+      kind: 'custom', from: '2026-01-01', to: '2026-06-30', months: 6,
+    });
+  });
+
+  it('a single month is a window of one', () => {
+    expect(spendWindow('custom', NOW, { fromMonth: '2026-02', toMonth: '2026-02' })).toEqual({
+      kind: 'custom', from: '2026-02-01', to: '2026-02-28', months: 1,
+    });
+  });
+
+  it('never includes the month still running — a range reaching into it is cut back to last month', () => {
+    // 29 Aug: August is not finished. A range "to August" ends in July.
+    expect(spendWindow('custom', NOW, { fromMonth: '2026-05', toMonth: '2026-08' })).toEqual({
+      kind: 'custom', from: '2026-05-01', to: '2026-07-31', months: 3,
+    });
+    // …and a range entirely in the future collapses to last month alone.
+    expect(spendWindow('custom', NOW, { fromMonth: '2026-09', toMonth: '2026-12' })).toEqual({
+      kind: 'custom', from: '2026-07-01', to: '2026-07-31', months: 1,
+    });
+  });
+
+  it('a range stated backwards is turned the right way round', () => {
+    expect(spendWindow('custom', NOW, { fromMonth: '2026-06', toMonth: '2026-01' })).toEqual({
+      kind: 'custom', from: '2026-01-01', to: '2026-06-30', months: 6,
+    });
+  });
+
+  it('keeps the most recent 36 months of a longer range — the recent evidence is the evidence', () => {
+    const w = spendWindow('custom', NOW, { fromMonth: '2020-01', toMonth: '2026-07' });
+    expect(w.months).toBe(MAX_CUSTOM_MONTHS);
+    expect(w.to).toBe('2026-07-31');
+    expect(w.from).toBe('2023-08-01');
+  });
+
+  it('with no range stated it is the last twelve complete months — choosing "custom" and typing nothing changes nothing', () => {
+    const named = spendWindow('full-months', NOW);
+    expect(spendWindow('custom', NOW)).toEqual({ ...named, kind: 'custom' });
+    expect(spendWindow('custom', NOW, { fromMonth: '', toMonth: '2026-06' })).toEqual({ ...named, kind: 'custom' });
+  });
+
+  it('clampCustomWindow is the rule the screen can show back', () => {
+    expect(clampCustomWindow({ fromMonth: '2026-09', toMonth: '2026-12' }, NOW)).toEqual({
+      fromMonth: '2026-07', toMonth: '2026-07',
+    });
+    expect(clampCustomWindow(undefined, NOW)).toEqual({ fromMonth: '2025-08', toMonth: '2026-07' });
   });
 });
 
@@ -86,6 +139,28 @@ describe('summariseCategorySpend — what counts', () => {
   it('gives the monthly figure as exactly a twelfth of the year', () => {
     const s = summariseCategorySpend(rows, [], CATEGORIES, { now: NOW });
     expect(s.byCategory.get('det-shop')?.monthly.toNumber()).toBe(25); // 300 / 12
+  });
+
+  it('over a twelve-month window, annual IS the total — to the digit, no ÷12×12 round trip', () => {
+    const s = summariseCategorySpend([txn({ id: 'odd', date: '2026-01-10', amount: -100 })], [], CATEGORIES, { now: NOW });
+    const spend = s.byCategory.get('det-shop');
+    expect(spend?.total.toString()).toBe('100');
+    expect(spend?.annual.toString()).toBe('100');
+    expect(spend?.monthly.times(12).toString()).toBe('100');
+  });
+
+  it('over a custom window, the figures are AT A RATE: a month is total ÷ months, a year is that × 12', () => {
+    // Jan–Jun 2026 holds only the £80 of March: £80 over six months.
+    const s = summariseCategorySpend(rows, [], CATEGORIES, {
+      kind: 'custom', now: NOW, custom: { fromMonth: '2026-01', toMonth: '2026-06' },
+    });
+    const spend = s.byCategory.get('det-shop');
+    expect(s.window.months).toBe(6);
+    expect(spend?.total.toNumber()).toBe(80);
+    expect(spend?.monthly.toString()).toBe('13.333333333333333333');
+    expect(spend?.annual.toNumber()).toBe(160);
+    // The invariant every screen relies on holds whatever the window: monthly = annual ÷ 12.
+    expect(spend?.annual.dividedBy(12).toString()).toBe(spend?.monthly.toString());
   });
 
   it('the window choice changes what is counted, visibly', () => {

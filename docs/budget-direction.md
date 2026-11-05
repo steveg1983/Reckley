@@ -206,11 +206,13 @@ screen whose whole purpose is to say what will happen:
 inputs and the same `buildPlWindow` the Plan page already uses, so the two screens
 cannot disagree about a range.
 
-- A custom range is whole months, 1 to 36. The history column shows "a month" as
-  total ÷ months, and "a year" as that × 12, captioned **"scaled to a year"** when the
-  range is not twelve months — the one place the wizard's "both windows are exactly
-  twelve months" assumption has to be relaxed, and it is relaxed by saying so.
-- The named range ("Jan – Dec 2025", "Apr – Sep 2026") stays the heading, as now.
+- A custom range is whole months, 1 to 36, never the month still running. The
+  history column shows "a month" as total ÷ months, and "a year" as that × 12; when
+  the range is not twelve months the explainer says the figures are **a rate** over
+  it — the one place the wizard's "both windows are exactly twelve months" assumption
+  has to be relaxed, and it is relaxed by saying so. (Built as "Months I choose",
+  5 Nov — §8, PR B.)
+- The named range ("Jan – Dec 2025", "Apr 2026 – Sep 2026") stays the heading, as now.
 
 ### 5.4 The Budget page says the dates and the pace
 
@@ -368,3 +370,19 @@ re‑dated without retyping a figure. `BudgetModal` gains **Starts** (default th
 this month; a legacy row shows the calendar day it is measured from today; weekly has
 no field) and previews the first period. `BudgetRollover` is scoped to monthly budgets
 by name and says how many of another rhythm it leaves alone.
+
+**PR B (the guide window)** — "Measured over" gains **Months I choose**: a From and a
+To month, the same inputs as the Plan page's custom range and the same `buildPlWindow`
+behind them, so the two screens agree about what "Jan to Jun" holds. The summariser
+owns the rule: whole months, never the month still running (a range typed into this
+month is cut back to last month, and the heading says what counted while the input
+keeps the ask), at most 36, the most recent kept when a range is longer, a backwards
+range turned round, and an empty one the last twelve complete months — so choosing
+"custom" and typing nothing changes nothing. The figures are stated **at a rate**:
+`monthly` = total ÷ months, `annual` = total × 12 ÷ months, each one division from the
+total, so a twelve‑month window's `annual` is still its total to the digit and
+`monthly` is exactly a twelfth of `annual` whatever the window. The explainer names the
+count and says the figures are a rate; step 3 says "against £X a year at the rate
+those categories ran over Jan 2026 – Jun 2026 (6 months)" rather than calling it
+spending. One month has one name ("Jun 2026"). Choosing the option seeds the months
+from whatever was on screen, so nothing moves at the moment of choosing.

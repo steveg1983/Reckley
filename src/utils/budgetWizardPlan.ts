@@ -117,12 +117,17 @@ import {
   spendWindow,
   summariseCategorySpend,
   type CategorySpendSummary,
+  type SpendWindowCustom,
   type SpendWindowKind,
 } from './categorySpendSummary';
 import { getDateLocale } from './dateFormatter';
 import { resolveBudgetAnchor } from './budgetPeriods';
 import type { Budget, Category, Transaction, TransactionSplit } from '../types';
 import { compareNames } from './localeFormat';
+
+/** The wizard reads its window types from here, as it reads everything else. */
+export type { SpendWindowCustom } from './categorySpendSummary';
+export { clampCustomWindow } from './categorySpendSummary';
 
 const ZERO = toDecimal(0);
 const MONTHS_IN_YEAR = 12;
@@ -140,13 +145,23 @@ export interface BudgetHistoryWindow {
   to: string;
   /** "Sep 2025 – Aug 2026" — the range named, so it can be checked. */
   label: string;
+  /**
+   * How many months the range holds — twelve for every named kind, the
+   * user's choice for 'custom'. When it is not twelve, "a year" and "a month"
+   * in the grid are RATES over the window, and the screen says so.
+   */
+  months: number;
 }
 
-/** The measurement windows the wizard offers. All are exactly twelve months. */
-export type WizardWindowKind = Extract<SpendWindowKind, 'full-months' | 'calendar-year' | 'tax-year'>;
+/**
+ * The measurement windows the wizard offers: three named years, or months of
+ * the user's choosing ('custom', owner 5 Nov 2026 — "a custom option for the
+ * guide period").
+ */
+export type WizardWindowKind = Extract<SpendWindowKind, 'full-months' | 'calendar-year' | 'tax-year' | 'custom'>;
 
 /**
- * The chosen twelve-month window, named so it can be checked.
+ * The chosen window, named so it can be checked.
  *
  * 'full-months' (the default) is the twelve complete calendar months before
  * the month `now` falls in — the month `now` is in is never one of them,
@@ -154,15 +169,18 @@ export type WizardWindowKind = Extract<SpendWindowKind, 'full-months' | 'calenda
  * completes at midnight. 'calendar-year' and 'tax-year' are the last
  * COMPLETE such year (owner, 1 Sep 2026: a calendar-year budgeter sets this
  * year's budgets against Jan–Dec of last year, part-way through and
- * unbothered). The RANGES all come from `spendWindow`, which is also what
- * the summariser sums over — one source, so the label and the figures
- * cannot describe different windows.
+ * unbothered). 'custom' is whole months from one to another, clamped by the
+ * summariser's own rule (never the month still running, at most 36). The
+ * RANGES all come from `spendWindow`, which is also what the summariser sums
+ * over — one source, so the label and the figures cannot describe different
+ * windows.
  */
 export function budgetHistoryWindow(
   now: Date,
-  kind: WizardWindowKind = 'full-months'
+  kind: WizardWindowKind = 'full-months',
+  custom?: SpendWindowCustom
 ): BudgetHistoryWindow {
-  const window = spendWindow(kind, now);
+  const window = spendWindow(kind, now, custom);
   const part = (isoDate: string): Date => {
     const [year, month1, day] = isoDate.split('-').map(Number);
     return new Date(year, month1 - 1, day);
@@ -180,8 +198,11 @@ export function budgetHistoryWindow(
         `${dayLabel(from)} – ${dayLabel(to)}`
       : kind === 'calendar-year'
         ? `${from.toLocaleDateString(getDateLocale(), { month: 'short' })} – ${monthLabel(to)}`
-        : `${monthLabel(from)} – ${monthLabel(to)}`;
-  return { from: window.from, to: window.to, label };
+        : window.months === 1
+          ? // One month has one name; "Jun 2026 – Jun 2026" would read as a mistake.
+            monthLabel(to)
+          : `${monthLabel(from)} – ${monthLabel(to)}`;
+  return { from: window.from, to: window.to, label, months: window.months };
 }
 
 /**
@@ -277,9 +298,12 @@ export interface WizardRow {
   /** The group this row sits under — '' for a row with no parent group. */
   groupName: string;
   groupId: string | null;
-  /** What the window cost, positive, netted of refunds. */
+  /**
+   * What the window cost at a year's rate, positive, netted of refunds — the
+   * window's total for a twelve-month window, scaled to twelve months otherwise.
+   */
   annual: DecimalInstance;
-  /** The same year per month — exactly annual ÷ 12. */
+  /** The same at a month's rate — exactly annual ÷ 12, whatever the window. */
   monthly: DecimalInstance;
   /** How many rows made the figure up: evidence it is not one freak charge. */
   rows: number;
@@ -815,19 +839,20 @@ export function planBudgetWrites(
 }
 
 /**
- * The history for the whole wizard, over the fixed twelve-month window.
+ * The history for the whole wizard, over the chosen window.
  *
  * A thin composition on purpose: the aggregation itself is
  * `summariseCategorySpend`, which the reports' classifier drives, so this
  * screen and the reports can never disagree about what a category cost. The
- * only thing added here is that the window is not a choice — see the header.
+ * window is the one `budgetHistoryWindow` names, from the same arguments.
  */
 export function summariseForWizard(
   transactions: Transaction[],
   splits: TransactionSplit[],
   categories: Category[],
   now: Date,
-  kind: WizardWindowKind = 'full-months'
+  kind: WizardWindowKind = 'full-months',
+  custom?: SpendWindowCustom
 ): CategorySpendSummary {
-  return summariseCategorySpend(transactions, splits, categories, { kind, now });
+  return summariseCategorySpend(transactions, splits, categories, { kind, now, custom });
 }
