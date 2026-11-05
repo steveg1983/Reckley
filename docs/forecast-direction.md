@@ -35,6 +35,24 @@ This composes the strengths of Design's options 1 and 3: the interrogability
 of stated adjustments over a visible base, with Budget only ever changed by a
 user's explicit, scoped instruction.
 
+## The budget side, 5 November 2026
+
+Budgets now carry their own start and cycle (`docs/budget-direction.md`), which
+raised the question from the other direction: should a budget drive the forecast?
+The owner's answer keeps the ruling above and sharpens the horizon:
+
+- **The forecast is a project of its own, planned before it is built.** A budget
+  is twelve months; a forecast runs for years and needs rules of growth a budget
+  has no place for — "salary £X for the next twelve months, then 5% more each
+  year for five years", and the same for a given expense.
+- **The join is one explicit button**, *"Use my budgets as the basis for the
+  forecast"*: the budgets become year one, the forecast owns every year after.
+  Stage 2 above (forecast → budgets) and this (budgets → forecast) are the two
+  directions of the same bridge, both user‑driven, neither silent.
+- **Income belongs here, not to Budget.** "Budgets concentrate on people
+  spending. The forecast is their Personal P&L." So the forecast's base table
+  carries income and growth; the budget wizard stays expense‑only.
+
 ## Build order (unchanged from the handover's §8)
 
 1. ✅ Detection, read-only ("What I'm committed to", shipped 17 Aug).
