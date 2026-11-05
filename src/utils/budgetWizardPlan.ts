@@ -120,6 +120,7 @@ import {
   type SpendWindowKind,
 } from './categorySpendSummary';
 import { getDateLocale } from './dateFormatter';
+import { resolveBudgetAnchor } from './budgetPeriods';
 import type { Budget, Category, Transaction, TransactionSplit } from '../types';
 import { compareNames } from './localeFormat';
 
@@ -261,6 +262,13 @@ export interface ExistingBudget {
   period: BudgetMode | null;
   /** The raw stored period, for the read-only note on a refused row. */
   storedPeriod: string;
+  /**
+   * The day the budget's cycles are counted from, as an ISO date — or null
+   * for a legacy row that keeps the calendar (see utils/budgetPeriods). What
+   * "Run these budgets from" compares against to know which rows a chosen
+   * start would move.
+   */
+  anchor: string | null;
 }
 
 /** One line of the grid: a category, what it cost, and what is budgeted on it. */
@@ -311,9 +319,81 @@ export function indexExistingBudgets(budgets: Budget[]): Map<string, ExistingBud
       amount: toDecimal(budget.amount),
       period: wizardPeriodOf(budget.period),
       storedPeriod: budget.period,
+      anchor: resolveBudgetAnchor(budget),
     });
   }
   return byCategory;
+}
+
+/**
+ * Where a stored budget runs from, in words: its anchor as a day, or the
+ * calendar period a legacy row still keeps. Step 3 names it beside the count
+ * of budgets a chosen start would move, so the move is checkable.
+ */
+export function describeAnchor(existing: Pick<ExistingBudget, 'anchor' | 'period'>): string {
+  if (existing.anchor === null) return existing.period === 'yearly' ? 'the calendar year' : 'the calendar month';
+  const [year, month1, day] = existing.anchor.split('-').map(Number);
+  return new Date(year, month1 - 1, day).toLocaleDateString(getDateLocale(), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+// ── "RUN THESE BUDGETS FROM" ────────────────────────────────────────────────
+//
+// The question the wizard never asked (owner, 5 Nov 2026). A budget is an
+// allowance for a cycle counted from its start, so the save has to say which
+// day that is. The choices are the boundaries a person actually budgets from:
+// this month, next month, the next calendar year, the next tax year — or any
+// day they name. The 1st of the current month is the default by the owner's
+// ruling: a budget that starts on the 5th invites the same confusion as one
+// that starts on the 29th, and every product in the field defaults to a
+// period boundary. Someone paid on the 15th chooses the 15th under "Another
+// date", and their months then run 15th to 14th.
+
+export type RunFromKind = 'this-month' | 'next-month' | 'next-calendar-year' | 'next-tax-year' | 'custom';
+
+export interface RunFromOption {
+  kind: Exclude<RunFromKind, 'custom'>;
+  /** ISO date of the first day. */
+  date: string;
+  /** "This month — 1 Nov 2026": the choice AND the day it means, so it can be checked. */
+  label: string;
+}
+
+const isoDayOf = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** The four dated choices, as they stand on `now`. */
+export function runFromOptions(now: Date): RunFromOption[] {
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const nextCalendarYear = new Date(now.getFullYear() + 1, 0, 1);
+  // The next 6 April strictly after today: on 6 April itself the tax year
+  // beginning today has begun, so "the next" one is a year off.
+  const pastApril6 = now.getMonth() > 3 || (now.getMonth() === 3 && now.getDate() >= 6);
+  const nextTaxYear = new Date(now.getFullYear() + (pastApril6 ? 1 : 0), 3, 6);
+  const day = (d: Date): string =>
+    d.toLocaleDateString(getDateLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+  return [
+    { kind: 'this-month', date: isoDayOf(thisMonth), label: `This month — ${day(thisMonth)}` },
+    { kind: 'next-month', date: isoDayOf(nextMonth), label: `Next month — ${day(nextMonth)}` },
+    { kind: 'next-calendar-year', date: isoDayOf(nextCalendarYear), label: `The next calendar year — ${day(nextCalendarYear)}` },
+    { kind: 'next-tax-year', date: isoDayOf(nextTaxYear), label: `The next tax year — ${day(nextTaxYear)}` },
+  ];
+}
+
+/**
+ * The day a choice means, or null when "Another date" has not yet been given
+ * one — in which case there is nothing to write and the save waits.
+ */
+export function runFromDate(kind: RunFromKind, now: Date, custom: string): string | null {
+  if (kind === 'custom') {
+    const trimmed = custom.trim();
+    return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) && Number.isFinite(Date.parse(trimmed)) ? trimmed : null;
+  }
+  return runFromOptions(now).find(option => option.kind === kind)?.date ?? null;
 }
 
 /**
@@ -531,12 +611,29 @@ export interface BudgetUpsert {
   period: BudgetMode;
   /** The same money per month — what the totals are summed in. */
   monthly: DecimalInstance;
+  /** The day the budget's cycles are counted from — the chosen "run from". Absent only while none is chosen. */
+  startDate?: string;
 }
 
 export interface BudgetRemoval {
   budgetId: string;
   categoryId: string;
   categoryName: string;
+}
+
+/**
+ * A stored budget the save is NOT otherwise touching, whose cycles run from a
+ * different day than the one chosen. Moving it is a separate, explicit act —
+ * step 3 offers it with a count and the days it would move from, and the
+ * wizard writes these only when that offer is taken. Nothing inherits a start
+ * silently.
+ */
+export interface BudgetRedate {
+  budgetId: string;
+  categoryId: string;
+  categoryName: string;
+  /** Where it runs from today, in words — see describeAnchor. */
+  from: string;
 }
 
 /** A row whose typed figure could not be read as money — reported, never guessed at. */
@@ -550,6 +647,10 @@ export interface BudgetWritePlan {
   upserts: BudgetUpsert[];
   removals: BudgetRemoval[];
   rejections: BudgetRejection[];
+  /** Budgets the save does not touch that a chosen start would move — offered, never assumed. */
+  redatable: BudgetRedate[];
+  /** The chosen "run from", carried so the confirmation and the write name one day. */
+  startDate: string | null;
   /** How many categories carry a budget once this plan is applied. */
   budgetedCount: number;
   /** The per-month total of every budget that will exist afterwards. */
@@ -578,15 +679,24 @@ export interface BudgetWritePlan {
  * it is in neither list, and its money is still counted in the totals, because
  * it will still exist afterwards and pretending otherwise would understate
  * what the user is committing to.
+ *
+ * `startDate` — the chosen "run from" — goes on every row the save writes.
+ * A row the save would NOT otherwise write (untouched, or re-typed to the
+ * same money) whose cycles run from a different day is listed in `redatable`
+ * instead: moving it is offered in step 3, and the wizard writes it only when
+ * the offer is taken.
  */
 export function planBudgetWrites(
   rows: WizardRow[],
   entries: WizardEntries,
-  mode: BudgetMode
+  mode: BudgetMode,
+  options: { startDate?: string | null } = {}
 ): BudgetWritePlan {
+  const startDate = options.startDate ?? null;
   const upserts: BudgetUpsert[] = [];
   const removals: BudgetRemoval[] = [];
   const rejections: BudgetRejection[] = [];
+  const redatable: BudgetRedate[] = [];
   let monthlyTotal = ZERO;
   let spentTotal = ZERO;
   let budgetedCount = 0;
@@ -596,6 +706,17 @@ export function planBudgetWrites(
     budgetedCount += 1;
     monthlyTotal = monthlyTotal.plus(monthly);
     spentTotal = spentTotal.plus(row.annual);
+  };
+
+  /** A budget left as it is, whose start the chosen day would move. */
+  const offerRedate = (row: WizardRow, existing: ExistingBudget): void => {
+    if (startDate === null || existing.anchor === startDate) return;
+    redatable.push({
+      budgetId: existing.id,
+      categoryId: row.category.id,
+      categoryName: row.category.name,
+      from: describeAnchor(existing),
+    });
   };
 
   for (const row of rows) {
@@ -625,6 +746,7 @@ export function planBudgetWrites(
     if (raw === undefined) {
       if (existing !== null && existing.period !== null) {
         willBudget(row, monthlyEquivalent(existing.amount, existing.period));
+        offerRedate(row, existing);
       }
       continue;
     }
@@ -660,7 +782,10 @@ export function planBudgetWrites(
     // without changing the figure writes nothing (see the header).
     if (existing !== null && existing.period !== null) {
       const before = monthlyEquivalent(existing.amount, existing.period);
-      if (before.minus(monthly).abs().lessThan(SAME_MONEY)) continue;
+      if (before.minus(monthly).abs().lessThan(SAME_MONEY)) {
+        offerRedate(row, existing);
+        continue;
+      }
     }
 
     upserts.push({
@@ -670,6 +795,7 @@ export function planBudgetWrites(
       amount,
       period: mode,
       monthly,
+      ...(startDate !== null ? { startDate } : {}),
     });
   }
 
@@ -678,6 +804,8 @@ export function planBudgetWrites(
     upserts,
     removals,
     rejections,
+    redatable,
+    startDate,
     budgetedCount,
     monthlyTotal: monthlyTotal.toDecimalPlaces(2),
     annualTotal,

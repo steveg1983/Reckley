@@ -4,8 +4,27 @@ import { Modal, ModalBody, ModalFooter } from './common/Modal';
 import MoneyInput from './common/MoneyInput';
 import { useModalForm } from '../hooks/useModalForm';
 import { parseMoneyInput } from '../utils/decimal';
+import { getBudgetPeriodWindow, resolveBudgetAnchor } from '../utils/budgetPeriods';
+import { describeBudgetWindow } from '../utils/budgetPace';
 import CategorySelector from './CategorySelector';
 import type { Budget, Category } from '../types';
+
+const isoDay = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/**
+ * The day a budget's cycles count from, as this form first shows it.
+ *
+ * A new budget starts on the 1st of this month (the owner's default, 5 Nov
+ * 2026). An existing one shows its anchor — or, for a legacy row that still
+ * keeps the calendar, the first day of the calendar period it is being
+ * measured over right now, which is the truth of where it runs from and the
+ * day a save would make explicit. See utils/budgetPeriods.
+ */
+function seededStart(budget: Budget | undefined, now: Date): string {
+  if (!budget) return isoDay(new Date(now.getFullYear(), now.getMonth(), 1));
+  return resolveBudgetAnchor(budget) ?? isoDay(getBudgetPeriodWindow(budget, now).start);
+}
 
 interface BudgetModalProps {
   isOpen: boolean;
@@ -24,6 +43,8 @@ interface FormData {
   categoryId: string;
   amount: string;
   period: Budget['period'];
+  /** ISO day the cycles count from. Not asked for a weekly budget, which has no anchor. */
+  startDate: string;
   isActive: boolean;
 }
 
@@ -72,12 +93,15 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
     (): string => resolveCategoryId(budget?.categoryId),
     [budget?.categoryId, resolveCategoryId]
   );
+  const openedAt = useMemo(() => new Date(), []);
+  const seededStartDate = useMemo(() => seededStart(budget, openedAt), [budget, openedAt]);
 
   const { formData, updateField, handleSubmit, setFormData, errors, isSubmitting } = useModalForm<FormData>(
     {
       categoryId: seededCategoryId,
       amount: budget?.amount?.toString() || '',
       period: budget?.period || 'monthly',
+      startDate: seededStartDate,
       isActive: budget?.isActive !== false
     },
     {
@@ -89,7 +113,10 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
           period: data.period,
           isActive: data.isActive,
           createdAt: budget?.createdAt || now,
-          updatedAt: now
+          updatedAt: now,
+          // A weekly budget has no anchor to write; every other period's
+          // cycles count from this day.
+          ...(data.period === 'weekly' ? {} : { startDate: data.startDate })
         };
 
         // Awaited: a limit that failed to save must keep the modal open with
@@ -153,10 +180,26 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
         categoryId: seededCategoryId,
         amount: budget.amount?.toString() || '',
         period: budget.period || 'monthly',
+        startDate: seededStartDate,
         isActive: budget.isActive !== false
       });
     }
-  }, [budget, setFormData, seededCategoryId]);
+  }, [budget, setFormData, seededCategoryId, seededStartDate]);
+
+  /**
+   * The first period the form's choices add up to — "1 Nov 2026 – 31 Oct
+   * 2027" — so the reader sees the consequence of the start before saving.
+   * No creation stamp is passed: the day typed here is chosen by definition.
+   */
+  const firstPeriod = useMemo((): string | null => {
+    if (formData.period === 'weekly' || !/^\d{4}-\d{2}-\d{2}$/.test(formData.startDate)) return null;
+    const [year, month1, day] = formData.startDate.split('-').map(Number);
+    const window = getBudgetPeriodWindow(
+      { period: formData.period, startDate: formData.startDate, createdAt: null },
+      new Date(year, month1 - 1, day)
+    );
+    return describeBudgetWindow(window);
+  }, [formData.period, formData.startDate]);
 
 
   return (
@@ -238,6 +281,33 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
               ))}
             </select>
           </div>
+
+          {/* STARTS — the day the cycles count from (owner, 5 Nov 2026). A
+              yearly budget from 6 April is a tax year; a monthly one from the
+              15th runs 15th to 14th. Weekly has no anchor, so no field. */}
+          {formData.period !== 'weekly' && (
+            <div>
+              <label htmlFor="budget-start" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Starts
+              </label>
+              <input
+                id="budget-start"
+                type="date"
+                required
+                value={formData.startDate}
+                onChange={(e) => updateField('startDate', e.target.value)}
+                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {firstPeriod
+                  ? `First ${formData.period === 'monthly' ? 'month' : formData.period === 'quarterly' ? 'quarter' : 'year'}: ${firstPeriod}. `
+                  : ''}
+                {formData.period === 'monthly'
+                  ? 'A budget from the 15th runs 15th to 14th.'
+                  : 'A budget from 6 April runs with the tax year.'}
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <input

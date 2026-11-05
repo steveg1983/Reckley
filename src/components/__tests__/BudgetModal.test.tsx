@@ -263,4 +263,71 @@ describe('BudgetModal', () => {
       expect(inFlight).toHaveBeenCalledTimes(1);
     });
   });
+
+  /**
+   * STARTS — the day a budget's cycles count from (owner, 5 Nov 2026). The
+   * default is the 1st of this month; a monthly budget from the 15th runs
+   * 15th to 14th; weekly has no anchor and no field.
+   */
+  describe('Starts — the day the cycles count from', () => {
+    const isoDay = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const firstOfThisMonth = (): string => {
+      const now = new Date();
+      return isoDay(new Date(now.getFullYear(), now.getMonth(), 1));
+    };
+
+    const fillAndAdd = (): void => {
+      openCategoryPicker();
+      fireEvent.click(screen.getByText('Groceries'));
+      fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '250' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Add Budget' }));
+    };
+
+    it('a new budget starts on the 1st of this month, says its first period, and writes that day', () => {
+      renderWithProviders(<BudgetModal {...defaultProps} />);
+      expect(screen.getByLabelText('Starts')).toHaveValue(firstOfThisMonth());
+      expect(screen.getByText(/^First month: /)).toBeInTheDocument();
+
+      fillAndAdd();
+      expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: firstOfThisMonth() });
+    });
+
+    it('a budget from the 15th says it runs 15th to 14th', () => {
+      renderWithProviders(<BudgetModal {...defaultProps} />);
+      fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-15' } });
+      expect(screen.getByText(/First month: 15 Jan\s*–\s*14 Feb 2027/)).toBeInTheDocument();
+
+      fillAndAdd();
+      expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: '2027-01-15' });
+    });
+
+    it('a weekly budget has no start to give', () => {
+      renderWithProviders(<BudgetModal {...defaultProps} />);
+      fireEvent.change(screen.getByDisplayValue('Monthly'), { target: { value: 'weekly' } });
+      expect(screen.queryByLabelText('Starts')).not.toBeInTheDocument();
+
+      fillAndAdd();
+      expect(addBudget.mock.calls[0][0]).not.toHaveProperty('startDate');
+    });
+
+    it('a budget written before the cycle model shows the calendar start it is measured from today', () => {
+      // The 29 Oct shape: start = creation day, yearly, so it keeps the
+      // calendar year until re-dated — and that is the day the form shows.
+      const legacy = {
+        id: 'b-1',
+        categoryId: 'det-groceries',
+        amount: 1200,
+        period: 'yearly',
+        isActive: true,
+        spent: 0,
+        startDate: '2026-10-29',
+        createdAt: new Date('2026-10-29T18:03:11.000Z'),
+        updatedAt: new Date('2026-10-29T18:03:11.000Z'),
+      } satisfies Budget;
+
+      renderWithProviders(<BudgetModal {...defaultProps} budget={legacy} />);
+      expect(screen.getByLabelText('Starts')).toHaveValue(`${new Date().getFullYear()}-01-01`);
+    });
+  });
 });

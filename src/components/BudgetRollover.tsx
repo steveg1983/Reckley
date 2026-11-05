@@ -7,6 +7,7 @@ import MoneyInput from './common/MoneyInput';
 import { toDecimal, toStorageNumber, parseMoneyInput } from '../utils/decimal';
 import type { DecimalInstance } from '../utils/decimal';
 import { getEffectiveBudgetAmount, sumBudgetCarry } from '../utils/budgetAmounts';
+import { normaliseBudgetPeriod } from '../utils/budgetPeriods';
 import { getDateLocale, formatShortDate } from '../utils/dateFormatter';
 import {
   ArrowRightIcon,
@@ -176,6 +177,20 @@ interface BudgetRolloverSummary {
 
 export default function BudgetRollover() {
   const { categories, transactions, budgets, updateBudget } = useApp();
+  /**
+   * MONTHLY BUDGETS ONLY (5 Nov 2026). Everything below carries LAST MONTH's
+   * headroom into THIS month: the previous period is computed as the previous
+   * calendar month and nothing else. Applied to a yearly budget that would
+   * carry a month's slice of a year's allowance, which is no figure at all —
+   * so a budget of any other rhythm is left alone here, and the fold says
+   * how many. A year's carry, derived from the same window module the Budget
+   * page reads, is a later build.
+   */
+  const monthlyBudgets = useMemo(
+    () => budgets.filter(budget => normaliseBudgetPeriod(budget.period) === 'monthly'),
+    [budgets]
+  );
+  const otherRhythmCount = budgets.length - monthlyBudgets.length;
   const { showSuccess, showError } = useToast();
   const { formatCurrency } = useCurrencyDecimal();
 
@@ -271,7 +286,7 @@ export default function BudgetRollover() {
         amount: toDecimal(t.amount)
       }));
 
-    return budgets.map<BudgetRolloverSummary>(budget => {
+    return monthlyBudgets.map<BudgetRolloverSummary>(budget => {
       const categoryId = budget.categoryId;
       const categoryName = categoryNameLookup.get(categoryId) ?? categoryId;
       const budgetAmount = toDecimal(budget.amount).plus(previousPeriodCarry.get(budget.id) ?? toDecimal(0));
@@ -323,13 +338,13 @@ export default function BudgetRollover() {
         willRollover: rolloverAmount.abs().greaterThan(0)
       };
     });
-  }, [budgets, categories, exclusionSet, previousMonth, previousPeriodCarry, previousYear, rolloverSettings, transactions]);
+  }, [monthlyBudgets, categories, exclusionSet, previousMonth, previousPeriodCarry, previousYear, rolloverSettings, transactions]);
 
   const totalRollover = rolloverData.reduce((sum, data) => sum.plus(data.rolloverAmount), toDecimal(0));
   const eligibleBudgets = rolloverData.filter(data => data.isEligible).length;
   const budgetsWithSurplus = rolloverData.filter(data => data.remaining.greaterThan(0)).length;
   const budgetsWithDeficit = rolloverData.filter(data => data.remaining.lessThan(0)).length;
-  const currentCarry = useMemo(() => sumBudgetCarry(budgets), [budgets]);
+  const currentCarry = useMemo(() => sumBudgetCarry(monthlyBudgets), [monthlyBudgets]);
 
   // `'default'` here meant the RUNTIME's locale, not the reader's choice: a
   // browser set to French printed "janvier" under an app set to English (UK).
@@ -412,6 +427,12 @@ export default function BudgetRollover() {
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Carry forward unused budget from {getMonthName(previousMonth)} {previousYear}
             </p>
+            {otherRhythmCount > 0 && (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Monthly budgets only: {otherRhythmCount} budget{otherRhythmCount === 1 ? '' : 's'} of another
+                rhythm {otherRhythmCount === 1 ? 'is' : 'are'} left alone.
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -485,7 +506,7 @@ export default function BudgetRollover() {
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
               <p className="text-xs text-gray-600 dark:text-gray-400">Eligible Budgets</p>
               <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                {eligibleBudgets} of {budgets.length}
+                {eligibleBudgets} of {monthlyBudgets.length}
               </p>
             </div>
             
