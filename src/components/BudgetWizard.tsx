@@ -10,11 +10,14 @@ import {
   buildWizardRows,
   groupWizardRows,
   planBudgetWrites,
+  runFromDate,
+  runFromOptions,
   summariseForWizard,
   totalBudgeted,
   twinFigure,
   wizardBoxValue,
   type BudgetMode,
+  type RunFromKind,
   type WizardEntry,
   type WizardGroup,
   type WizardRow,
@@ -76,6 +79,24 @@ interface Props {
 }
 
 type Step = 'rhythm' | 'grid' | 'confirm';
+
+/** `{ startDate }` to spread into a write when a day is chosen, nothing when not. */
+const datedWith = (startDate: string | null): { startDate?: string } =>
+  startDate === null ? {} : { startDate };
+
+/**
+ * "the calendar year (48) and 1 Jan 2026 (3)" — where the budgets a re-date
+ * would move run from today, each distinct day with its count, most first.
+ */
+function describeRedateFroms(redatable: ReadonlyArray<{ from: string }>): string {
+  const counts = new Map<string, number>();
+  for (const entry of redatable) counts.set(entry.from, (counts.get(entry.from) ?? 0) + 1);
+  const parts = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([from, count]) => (counts.size === 1 ? from : `${from} (${count})`));
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
 
 /**
  * The shaded band a group heading is drawn on (owner, 1 Sep 2026: "category
@@ -141,10 +162,30 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
   const [entries, setEntries] = useState<Record<string, WizardEntry | undefined>>({});
   const [showQuiet, setShowQuiet] = useState(false);
   const [applying, setApplying] = useState(false);
+  /**
+   * WHEN THE BUDGETS RUN FROM (owner, 5 Nov 2026) — the question this screen
+   * never asked, and the reason budgets saved in late October read as ten
+   * months overspent. The 1st of the current month is the default by his
+   * ruling; "Another date" is how someone paid on the 15th gets months that
+   * run 15th to 14th. See utils/budgetWizardPlan, "RUN THESE BUDGETS FROM".
+   */
+  const [runFrom, setRunFrom] = useState<RunFromKind>('this-month');
+  const [customStart, setCustomStart] = useState('');
+  /**
+   * Whether the chosen start also moves the budgets this save is NOT
+   * otherwise touching. OFF by default and offered with a count: a start is
+   * a decision about the budgets being set, and moving every other one
+   * behind it would be exactly the silent inheritance the forecast ruling
+   * forbids. Re-running the wizard with this ticked is how the owner
+   * re-dates his October budgets without retyping a figure.
+   */
+  const [redateUntouched, setRedateUntouched] = useState(false);
 
   // One evaluation instant for the whole wizard: the window named in the
   // header and the figures under it describe the same "now".
   const now = useMemo(() => new Date(), []);
+  const runFromChoices = useMemo(() => runFromOptions(now), [now]);
+  const startDate = useMemo(() => runFromDate(runFrom, now, customStart), [runFrom, now, customStart]);
   /**
    * Which twelve months the evidence covers (owner, 1 Sep 2026: "Some people
    * may want to work on calendar years"). Changing it changes the EVIDENCE —
@@ -215,7 +256,13 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
    */
   const quietBudget = useMemo(() => totalBudgeted(quiet, entries, mode), [quiet, entries, mode]);
 
-  const plan = useMemo(() => planBudgetWrites(rows, entries, mode), [rows, entries, mode]);
+  const plan = useMemo(
+    () => planBudgetWrites(rows, entries, mode, { startDate }),
+    [rows, entries, mode, startDate]
+  );
+  /** The re-dates that WILL be written: the offer, only once it is taken. */
+  const redates = redateUntouched ? plan.redatable : [];
+  const nothingToSave = plan.upserts.length === 0 && plan.removals.length === 0 && redates.length === 0;
 
   /**
    * The string a box shows: what was typed, else what is stored, else empty.
@@ -277,6 +324,9 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
     setStep('rhythm');
     setEntries({});
     setShowQuiet(false);
+    setRunFrom('this-month');
+    setCustomStart('');
+    setRedateUntouched(false);
     onClose();
   };
 
@@ -306,12 +356,17 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
     const failed: string[] = [];
     let written = 0;
 
+    // The chosen start goes on every row written — the one thing that makes
+    // "run from 1 November" true of a budget edited here.
+    const dated = datedWith(plan.startDate);
+
     for (const upsert of plan.upserts) {
       try {
         if (upsert.budgetId !== undefined) {
           await updateBudget(upsert.budgetId, {
             amount: upsert.amount.toNumber(),
             period: upsert.period,
+            ...dated,
           });
         } else {
           await addBudget({
@@ -322,6 +377,7 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
             isActive: true,
             createdAt: new Date(),
             updatedAt: new Date(),
+            ...dated,
           });
         }
         written += 1;
@@ -336,6 +392,16 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
         written += 1;
       } catch {
         failed.push(removal.categoryName);
+      }
+    }
+
+    // The re-dates: the money untouched, only the day the cycles count from.
+    for (const redate of redates) {
+      try {
+        await updateBudget(redate.budgetId, { ...dated });
+        written += 1;
+      } catch {
+        failed.push(redate.categoryName);
       }
     }
 
@@ -794,6 +860,54 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
           </p>
         )}
 
+        {/* RUN THESE BUDGETS FROM. The day every budget written here counts
+            its cycles from, said before the save — a budget saved without it
+            read ten months of earlier spending as overspend (5 Nov 2026). */}
+        <fieldset className="mt-4">
+          <legend className="text-sm font-medium text-gray-900 dark:text-white">Run these budgets from</legend>
+          <div className="mt-2 grid gap-1.5">
+            {runFromChoices.map(choice => (
+              <label key={choice.kind} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200 min-h-[32px]">
+                <input
+                  type="radio"
+                  name="run-from"
+                  value={choice.kind}
+                  checked={runFrom === choice.kind}
+                  onChange={() => setRunFrom(choice.kind)}
+                  className="border-gray-300 dark:border-gray-600"
+                />
+                {choice.label}
+              </label>
+            ))}
+            <label className="flex flex-wrap items-center gap-2 text-sm text-gray-700 dark:text-gray-200 min-h-[32px]">
+              <input
+                type="radio"
+                name="run-from"
+                value="custom"
+                checked={runFrom === 'custom'}
+                onChange={() => setRunFrom('custom')}
+                className="border-gray-300 dark:border-gray-600"
+              />
+              Another date
+              {runFrom === 'custom' && (
+                <input
+                  type="date"
+                  aria-label="The day the budgets run from"
+                  value={customStart}
+                  onChange={event => setCustomStart(event.target.value)}
+                  className="px-2 py-1.5 min-h-[36px] text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+              )}
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            {mode === 'yearly'
+              ? 'Each budget runs for a year from that day, then starts again. '
+              : 'Each budget runs month by month from that day. '}
+            Nothing spent before it counts against it.
+          </p>
+        </fieldset>
+
         <dl className="mt-4 grid gap-2 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-gray-600 dark:text-gray-300">Budgets to set or change</dt>
@@ -803,7 +917,33 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
             <dt className="text-gray-600 dark:text-gray-300">Budgets to remove</dt>
             <dd className="text-gray-900 dark:text-white tabular-nums">{plan.removals.length}</dd>
           </div>
+          {plan.redatable.length > 0 && (
+            <div className="flex justify-between gap-4">
+              <dt className="text-gray-600 dark:text-gray-300">Budgets to re-date</dt>
+              <dd className="text-gray-900 dark:text-white tabular-nums">{redates.length}</dd>
+            </div>
+          )}
         </dl>
+
+        {/* THE RE-DATE OFFER. Budgets this save is not otherwise touching keep
+            the start they have unless the reader says otherwise, here, with
+            the count and the days they run from today — so the move is a
+            decision, never an inheritance. */}
+        {plan.redatable.length > 0 && (
+          <label className="mt-3 flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200">
+            <input
+              type="checkbox"
+              checked={redateUntouched}
+              onChange={event => setRedateUntouched(event.target.checked)}
+              className="mt-1 rounded border-gray-300 dark:border-gray-600"
+            />
+            <span>
+              Also move the {plan.redatable.length} budget{plan.redatable.length === 1 ? '' : 's'} I'm not changing
+              to this start. {plan.redatable.length === 1 ? 'It runs' : 'They run'} from {describeRedateFroms(plan.redatable)}{' '}
+              today; the amounts stay as they are.
+            </span>
+          </label>
+        )}
 
         {/* Removals are named, never counted only: taking a budget off is the
             one thing here nobody can undo by retyping a number. */}
@@ -822,9 +962,14 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
           </p>
         )}
 
-        {plan.upserts.length === 0 && plan.removals.length === 0 && (
+        {nothingToSave && (
           <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
             Nothing has changed, so there is nothing to save.
+          </p>
+        )}
+        {!nothingToSave && startDate === null && (
+          <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+            Choose the day the budgets run from to save.
           </p>
         )}
       </div>
@@ -874,7 +1019,7 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
             <button
               type="button"
               onClick={() => void apply()}
-              disabled={applying || (plan.upserts.length === 0 && plan.removals.length === 0)}
+              disabled={applying || nothingToSave || startDate === null}
               className="px-4 py-2 min-h-[44px] text-sm font-medium bg-primary-action text-on-primary-action rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {applying ? 'Saving…' : 'Save budgets'}

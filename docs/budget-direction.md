@@ -314,3 +314,14 @@ every stored row was either start = creation day or start = 1 January (the showc
 seeder), and both read exactly as before. No migration, in any of the three engines.
 The one theoretical collision — a legacy row re‑dated to exactly its own creation
 day — cannot occur for any row that exists.
+
+**PR A2 (write side)** — the wizard's step 3 asks **"Run these budgets from"**: this
+month (the 1st, default), next month, the next calendar year, the next tax year, or
+another date. The day goes on every row the save writes. Budgets the save is not
+otherwise touching are **offered** a move — "Also move the N budgets I'm not changing
+to this start; they run from the calendar year today" — never moved silently, and the
+offer taken with nothing typed is itself a save: that is how the 29 Oct budgets get
+re‑dated without retyping a figure. `BudgetModal` gains **Starts** (default the 1st of
+this month; a legacy row shows the calendar day it is measured from today; weekly has
+no field) and previews the first period. `BudgetRollover` is scoped to monthly budgets
+by name and says how many of another rhythm it leaves alone.

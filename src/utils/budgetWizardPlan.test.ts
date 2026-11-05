@@ -16,6 +16,9 @@ import {
   amountInMode,
   budgetHistoryWindow,
   budgetPeriodSuffix,
+  describeAnchor,
+  runFromDate,
+  runFromOptions,
   buildWizardRows,
   entryInMode,
   groupWizardRows,
@@ -681,5 +684,102 @@ describe('wizardBoxValue — what a box holds', () => {
   it('is empty for a row the wizard will not re-express — nothing is being typed there', () => {
     const rows = rowsFor([budget({ id: 'b-wk', categoryId: 'det-shop', amount: 30, period: 'weekly' })]);
     expect(wizardBoxValue(rowFor(rows, 'det-shop'), {}, 'monthly')).toBe('');
+  });
+});
+
+/**
+ * "RUN THESE BUDGETS FROM" (owner, 5 Nov 2026) — the question the wizard
+ * never asked. See the module header's section of the same name.
+ */
+describe('runFromOptions / runFromDate — the choices and the day each means', () => {
+  it('offers this month, next month, the next calendar year and the next tax year, as dates', () => {
+    const options = runFromOptions(new Date(2026, 10, 5));
+    expect(options.map(o => [o.kind, o.date])).toEqual([
+      ['this-month', '2026-11-01'],
+      ['next-month', '2026-12-01'],
+      ['next-calendar-year', '2027-01-01'],
+      ['next-tax-year', '2027-04-06'],
+    ]);
+    // The choice AND the day it means, so it can be checked.
+    expect(options[0].label).toBe('This month — 1 Nov 2026');
+  });
+
+  it('the next tax year is the next 6 April strictly after today', () => {
+    expect(runFromDate('next-tax-year', new Date(2027, 2, 1), '')).toBe('2027-04-06');
+    expect(runFromDate('next-tax-year', new Date(2027, 3, 5), '')).toBe('2027-04-06');
+    expect(runFromDate('next-tax-year', new Date(2027, 3, 6), '')).toBe('2028-04-06');
+  });
+
+  it('next month crosses December into the next year', () => {
+    expect(runFromDate('next-month', new Date(2026, 11, 20), '')).toBe('2027-01-01');
+  });
+
+  it('"another date" is the typed day, and nothing until a real one is typed', () => {
+    expect(runFromDate('custom', new Date(2026, 10, 5), '2027-07-15')).toBe('2027-07-15');
+    expect(runFromDate('custom', new Date(2026, 10, 5), '')).toBeNull();
+    expect(runFromDate('custom', new Date(2026, 10, 5), '15/07/2027')).toBeNull();
+  });
+});
+
+describe('planBudgetWrites — the chosen start', () => {
+  /** A legacy row with a chosen 1 January: anchored there (see utils/budgetPeriods). */
+  const fromJanuary = (over: Partial<Budget> & { id: string; categoryId: string }): Budget =>
+    budget({ startDate: '2026-01-01', createdAt: new Date(2026, 7, 29), updatedAt: new Date(2026, 7, 29), ...over });
+
+  it('goes on every row written', () => {
+    const plan = planBudgetWrites(rowsFor(), typedIn('monthly', { 'det-shop': '95' }), 'monthly', { startDate: '2026-11-01' });
+    expect(plan.upserts[0].startDate).toBe('2026-11-01');
+    expect(plan.startDate).toBe('2026-11-01');
+  });
+
+  it('offers to move each budget left alone that runs from another day, naming where it runs from', () => {
+    const rows = rowsFor([
+      fromJanuary({ id: 'b-1', categoryId: 'det-shop', amount: 120 }),
+      // No start ever chosen: a legacy row that keeps the calendar month.
+      budget({ id: 'b-2', categoryId: 'det-dining', amount: 60 }),
+    ]);
+    const plan = planBudgetWrites(rows, {}, 'monthly', { startDate: '2026-11-01' });
+    expect(plan.upserts).toHaveLength(0);
+    expect(plan.redatable.map(r => [r.budgetId, r.categoryName, r.from]).sort()).toEqual([
+      ['b-1', 'Food Shopping', '1 Jan 2026'],
+      ['b-2', 'Dining Out', 'the calendar month'],
+    ]);
+  });
+
+  it('describes a calendar-keeping yearly budget as the calendar year', () => {
+    expect(describeAnchor({ anchor: null, period: 'yearly' })).toBe('the calendar year');
+    expect(describeAnchor({ anchor: '2027-04-06', period: 'yearly' })).toBe('6 Apr 2027');
+  });
+
+  it('does not offer one that already runs from the chosen day', () => {
+    const rows = rowsFor([fromJanuary({ id: 'b-1', categoryId: 'det-shop', amount: 120, startDate: '2026-11-01' })]);
+    const plan = planBudgetWrites(rows, {}, 'monthly', { startDate: '2026-11-01' });
+    expect(plan.redatable).toEqual([]);
+  });
+
+  it('re-typing the stored figure keeps the row out of the writes but in the offer', () => {
+    const rows = rowsFor([budget({ id: 'b-1', categoryId: 'det-shop', amount: 120 })]);
+    const plan = planBudgetWrites(rows, typedIn('monthly', { 'det-shop': '120' }), 'monthly', { startDate: '2026-11-01' });
+    expect(plan.upserts).toHaveLength(0);
+    expect(plan.redatable.map(r => r.budgetId)).toEqual(['b-1']);
+  });
+
+  it('a removal is not offered a re-date, and a changed figure is dated in its own write', () => {
+    const rows = rowsFor([
+      budget({ id: 'b-1', categoryId: 'det-shop', amount: 120 }),
+      budget({ id: 'b-2', categoryId: 'det-dining', amount: 60 }),
+    ]);
+    const plan = planBudgetWrites(rows, typedIn('monthly', { 'det-shop': '', 'det-dining': '65' }), 'monthly', { startDate: '2026-11-01' });
+    expect(plan.removals.map(r => r.budgetId)).toEqual(['b-1']);
+    expect(plan.upserts.map(u => [u.budgetId, u.startDate])).toEqual([['b-2', '2026-11-01']]);
+    expect(plan.redatable).toEqual([]);
+  });
+
+  it('with no day chosen there is nothing to offer and nothing is dated', () => {
+    const rows = rowsFor([budget({ id: 'b-1', categoryId: 'det-shop', amount: 120 })]);
+    const plan = planBudgetWrites(rows, typedIn('monthly', { 'det-dining': '50' }), 'monthly');
+    expect(plan.startDate).toBeNull();
+    expect(plan.redatable).toEqual([]);
+    expect(plan.upserts[0].startDate).toBeUndefined();
   });
 });
