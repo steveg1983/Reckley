@@ -206,11 +206,13 @@ screen whose whole purpose is to say what will happen:
 inputs and the same `buildPlWindow` the Plan page already uses, so the two screens
 cannot disagree about a range.
 
-- A custom range is whole months, 1 to 36. The history column shows "a month" as
-  total ÷ months, and "a year" as that × 12, captioned **"scaled to a year"** when the
-  range is not twelve months — the one place the wizard's "both windows are exactly
-  twelve months" assumption has to be relaxed, and it is relaxed by saying so.
-- The named range ("Jan – Dec 2025", "Apr – Sep 2026") stays the heading, as now.
+- A custom range is whole months, 1 to 36, never the month still running. The
+  history column shows "a month" as total ÷ months, and "a year" as that × 12; when
+  the range is not twelve months the explainer says the figures are **a rate** over
+  it — the one place the wizard's "both windows are exactly twelve months" assumption
+  has to be relaxed, and it is relaxed by saying so. (Built as "Months I choose",
+  5 Nov — §8, PR B.)
+- The named range ("Jan – Dec 2025", "Apr 2026 – Sep 2026") stays the heading, as now.
 
 ### 5.4 The Budget page says the dates and the pace
 
@@ -279,7 +281,8 @@ build"). Deriving the previous window properly from `budgetPeriods` is a follow�
 5. **Single editor "Starts" + rollover scoped to monthly** (`BudgetModal.tsx`,
    `BudgetRollover.tsx`).
 
-Then the forecast bridge, on its own track.
+1–3 and 5 shipped as #612 and #614 (§8). After 4, the second round in §7 — in the
+order given there. The forecast bridge is a project of its own (§7, second round, 1).
 
 ## 7. The owner's decisions (5 Nov 2026)
 
@@ -293,8 +296,50 @@ Then the forecast bridge, on its own track.
 
 And a standard: "flexible and the best out there", with PocketSmith named as the
 closest competitor for the household‑CFO reader. §4 carries what it does that we do
-not; the suggestions drawn from it are in the owner's conversation of 5 Nov and will
-move here as they are accepted.
+not. Seven suggestions were drawn from it; the owner answered each the same day.
+
+### The second round (5 Nov 2026) — what PocketSmith does that we will, and will not, take
+
+1. **Budgets feed the forecast — a project of its own, not now.** A budget is an
+   allowance for twelve months; a forecast runs for years and needs rules a budget has
+   no place for — "salary £X for the next twelve months, then 5% more each year for
+   five years", and the same shape for a given expense. The owner wants it in depth
+   and planned first. When it comes, the join is one button, *"Use my budgets as the
+   basis for the forecast"*: the budgets are year one, the forecast owns everything
+   after. Nothing here changes `docs/forecast-direction.md`; that file carries the
+   same ruling from its side.
+2. **Lumpy categories and the pace — plan proposed, awaiting the owner.** The owner
+   asked how PocketSmith labels an expense a "bill": a flag on each transaction, or a
+   tidy‑up screen like our payee clean‑up? Neither, and we propose neither. In
+   PocketSmith a "bill" is a *repeating* item — its forecast calendar is built from
+   recurring transactions, which is what our `recurring_transactions` and "What I'm
+   committed to" already are, and those belong to the forecast (1), not to budgets.
+   What budgets need is narrower: a yearly budget for a category paid once a year
+   (insurance, car tax, a season ticket) should not read "£x behind pace" for eleven
+   months. So the unit is the **budget row**, which gains a pace **shape**: *Spread
+   evenly* (default) or *Paid in one go*. The wizard proposes the shape from the
+   guide window — when most of a category's spend in the window fell in one month,
+   the review grid says so ("paid once last year, in March") and pre‑selects it; the
+   editor can change it under Starts. With *Paid in one go* the card's pace line says
+   "Not yet paid · once a year, last time in March" until the payment lands, then
+   spent against allowance with no pace. No transaction carries a flag; no screen
+   exists to set one; the category's own history is the evidence.
+3. **Rollover modes** — carry a surplus, carry an overspend, or neither, per budget;
+   where a surplus goes; a year's carry for yearly budgets. **Agreed.**
+4. **Any repeat interval** — every N weeks or months, not only the six named rhythms.
+   **Agreed.**
+5. **An end date, and one‑off budgets** — a project, a holiday, a wedding: an
+   allowance that runs from a day to a day and then is finished. The model already
+   honours `end_date` (§8); this is the asking and the showing. **Agreed.**
+6. **Income budgets — no.** "Budgets concentrate on people spending. The forecast is
+   their Personal P&L." Income is the forecast's (1).
+7. **Per‑category cycle history** — how this budget did in each past cycle, on the
+   budget's own page. **Agreed.**
+
+**Order after the custom guide window (§6, 4):** 5, then 4, then 3, then 7 — each
+shippable alone; 5 first because the model already does the work and it is the
+smallest ask, 3 before 7 because the history should show the carries once they exist.
+2 waits for the owner's word on the shape above.
 
 ## 8. What shipped, and how the rule for legacy rows works
 
@@ -325,3 +370,19 @@ re‑dated without retyping a figure. `BudgetModal` gains **Starts** (default th
 this month; a legacy row shows the calendar day it is measured from today; weekly has
 no field) and previews the first period. `BudgetRollover` is scoped to monthly budgets
 by name and says how many of another rhythm it leaves alone.
+
+**PR B (the guide window)** — "Measured over" gains **Months I choose**: a From and a
+To month, the same inputs as the Plan page's custom range and the same `buildPlWindow`
+behind them, so the two screens agree about what "Jan to Jun" holds. The summariser
+owns the rule: whole months, never the month still running (a range typed into this
+month is cut back to last month, and the heading says what counted while the input
+keeps the ask), at most 36, the most recent kept when a range is longer, a backwards
+range turned round, and an empty one the last twelve complete months — so choosing
+"custom" and typing nothing changes nothing. The figures are stated **at a rate**:
+`monthly` = total ÷ months, `annual` = total × 12 ÷ months, each one division from the
+total, so a twelve‑month window's `annual` is still its total to the digit and
+`monthly` is exactly a twelfth of `annual` whatever the window. The explainer names the
+count and says the figures are a rate; step 3 says "against £X a year at the rate
+those categories ran over Jan 2026 – Jun 2026 (6 months)" rather than calling it
+spending. One month has one name ("Jun 2026"). Choosing the option seeds the months
+from whatever was on screen, so nothing moves at the moment of choosing.

@@ -45,10 +45,23 @@
  *
  * ── MONEY IS DECIMAL, ALWAYS ───────────────────────────────────────────────
  * Every total is a Decimal from first addition to last, and the monthly
- * figure is the annual divided by twelve at full precision — the caller
- * rounds for display. Twelve is exact here BY CONSTRUCTION: both windows are
- * exactly twelve months long, which is the other reason the window is defined
- * in whole months rather than in days.
+ * figure is the window's total divided by its months at full precision — the
+ * caller rounds for display. The named windows are all exactly twelve months,
+ * so for them `annual` IS the total and `monthly` is a twelfth of it, which
+ * is the other reason the window is defined in whole months rather than days.
+ *
+ * ── A WINDOW THE USER CHOOSES ('custom', 5 Nov 2026) ───────────────────────
+ * The owner's ask: the guide should be able to measure over months of the
+ * user's choosing, not only the three named years. A custom window is whole
+ * calendar months from one month to another, 1 to 36 of them, never
+ * including the month still running. Its figures are stated AT A RATE:
+ * `monthly` is total ÷ months and `annual` is total × 12 ÷ months — so a
+ * six-month window of £600 reads "£100 a month, £1,200 a year", which is the
+ * figure a budget is set against. `total` carries what the window actually
+ * cost, and `window.months` says how many months, so the screen can say the
+ * figures are a rate rather than a year's spending. The range itself comes
+ * from `buildPlWindow`, the same month inputs the Plan page uses, so the two
+ * screens cannot disagree about a range.
  */
 
 import { toDecimal, type DecimalInstance } from './decimal';
@@ -57,20 +70,40 @@ import { buildCategoryKindLookup, classifyFlow } from './incomeExpense';
 import { expandSplitTransactions } from './transactionSplits';
 import type { Category, Transaction, TransactionSplit } from '../types';
 
-export type SpendWindowKind = 'full-months' | 'to-yesterday' | 'calendar-year' | 'tax-year';
+export type SpendWindowKind = 'full-months' | 'to-yesterday' | 'calendar-year' | 'tax-year' | 'custom';
+
+/** The months a 'custom' window runs over, inclusive, as YYYY-MM. */
+export interface SpendWindowCustom {
+  fromMonth: string;
+  toMonth: string;
+}
+
+/** The most months a custom window may hold — three years of evidence is plenty. */
+export const MAX_CUSTOM_MONTHS = 36;
 
 export interface SpendWindow {
   kind: SpendWindowKind;
   /** Inclusive ISO dates — the range the figures were summed over. */
   from: string;
   to: string;
+  /**
+   * How many months the range holds. Twelve for every named kind; what the
+   * user chose, after clamping, for 'custom'. The screen reads it to say
+   * when "a year" is a rate rather than a year.
+   */
+  months: number;
 }
 
 export interface CategorySpend {
   categoryId: string;
-  /** What the window cost, positive. Refunds are netted; never below zero. */
+  /** What the window actually cost, positive. Refunds are netted; never below zero. */
+  total: DecimalInstance;
+  /**
+   * The window's spending at a year's rate: exactly `total` for a twelve-month
+   * window, total × 12 ÷ months otherwise. The figure a yearly budget is set against.
+   */
   annual: DecimalInstance;
-  /** The same year, per month. Exactly annual ÷ 12 — both windows are 12 months. */
+  /** The same at a month's rate: total ÷ months. Exactly annual ÷ 12 for every window. */
   monthly: DecimalInstance;
   /** How many rows made it up — evidence the figure is not one freak charge. */
   rows: number;
@@ -93,18 +126,67 @@ const ZERO = toDecimal(0);
 const iso = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+const MONTH_INPUT = /^\d{4}-\d{2}$/;
+const monthKey = (d: Date): string => iso(d).slice(0, 7);
+/** Months from one YYYY-MM to another, inclusive — "2026-01" to "2026-06" is 6. */
+const monthsBetween = (fromMonth: string, toMonth: string): number =>
+  (Number(toMonth.slice(0, 4)) - Number(fromMonth.slice(0, 4))) * 12 +
+  (Number(toMonth.slice(5, 7)) - Number(fromMonth.slice(5, 7))) + 1;
+const shiftMonth = (month: string, by: number): string =>
+  monthKey(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1 + by, 1));
+
 /**
- * The twelve months a summary covers, from a given "now".
+ * The months a custom window may run over, as it stands today: whole months,
+ * none of them the one still running, at most `MAX_CUSTOM_MONTHS`.
  *
- * Both kinds are exactly twelve months long — see the note on `monthly`.
+ * A range that reaches into this month is cut back to last month; a range
+ * longer than the cap keeps its END and loses its earliest months — the
+ * recent evidence is the evidence. A range stated backwards is turned the
+ * right way round. A range not yet stated, or malformed, is the last twelve
+ * complete months, which is what 'full-months' is — so choosing "custom" and
+ * typing nothing changes nothing.
  */
-export function spendWindow(kind: SpendWindowKind, now: Date): SpendWindow {
+export function clampCustomWindow(custom: SpendWindowCustom | undefined, now: Date): SpendWindowCustom {
+  const cap = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  if (!custom || !MONTH_INPUT.test(custom.fromMonth) || !MONTH_INPUT.test(custom.toMonth)) {
+    return { fromMonth: shiftMonth(cap, -11), toMonth: cap };
+  }
+  const ordered = custom.fromMonth <= custom.toMonth
+    ? [custom.fromMonth, custom.toMonth]
+    : [custom.toMonth, custom.fromMonth];
+  const toMonth = ordered[1] < cap ? ordered[1] : cap;
+  const fromMonth = ordered[0] < toMonth ? ordered[0] : toMonth;
+  const earliest = shiftMonth(toMonth, -(MAX_CUSTOM_MONTHS - 1));
+  return { fromMonth: fromMonth < earliest ? earliest : fromMonth, toMonth };
+}
+
+/**
+ * The months a summary covers, from a given "now".
+ *
+ * Every named kind is exactly twelve months long — see the note on `monthly`.
+ * 'custom' is whatever the user chose, clamped by `clampCustomWindow`.
+ */
+export function spendWindow(kind: SpendWindowKind, now: Date, custom?: SpendWindowCustom): SpendWindow {
   if (kind === 'full-months') {
     // The last COMPLETE month is the one before this one; the window is that
     // month and the eleven before it.
     const end = new Date(now.getFullYear(), now.getMonth(), 0);        // last day of last month
     const start = new Date(end.getFullYear(), end.getMonth() - 11, 1); // first day, 11 months earlier
-    return { kind, from: iso(start), to: iso(end) };
+    return { kind, from: iso(start), to: iso(end), months: 12 };
+  }
+  if (kind === 'custom') {
+    // The range is `buildPlWindow`'s — the Plan page's own custom months — so
+    // the two screens agree about what "Jan to Jun" holds; the clamping is
+    // this module's, because only the guide refuses the month still running.
+    const chosen = clampCustomWindow(custom, now);
+    const pl = buildPlWindow('custom', now, chosen);
+    const [year, month1, day] = pl.endExclusive.split('-').map(Number);
+    return {
+      kind,
+      from: pl.start,
+      to: iso(new Date(year, month1 - 1, day - 1)),
+      months: monthsBetween(chosen.fromMonth, chosen.toMonth),
+    };
   }
   if (kind === 'calendar-year' || kind === 'tax-year') {
     // A budgeter who thinks in calendar or tax years measures against the
@@ -120,11 +202,11 @@ export function spendWindow(kind: SpendWindowKind, now: Date): SpendWindow {
     // annual ÷ 12 like every other window.
     const pl = buildPlWindow(kind, now);
     const [year, month1, day] = pl.endExclusive.split('-').map(Number);
-    return { kind, from: pl.start, to: iso(new Date(year, month1 - 1, day - 1)) };
+    return { kind, from: pl.start, to: iso(new Date(year, month1 - 1, day - 1)), months: 12 };
   }
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1); // yesterday
   const start = new Date(end.getFullYear(), end.getMonth() - 12, end.getDate() + 1);
-  return { kind, from: iso(start), to: iso(end) };
+  return { kind, from: iso(start), to: iso(end), months: 12 };
 }
 
 /**
@@ -136,9 +218,9 @@ export function summariseCategorySpend(
   transactions: Transaction[],
   splits: TransactionSplit[],
   categories: Category[],
-  options: { kind?: SpendWindowKind; now?: Date } = {}
+  options: { kind?: SpendWindowKind; now?: Date; custom?: SpendWindowCustom } = {}
 ): CategorySpendSummary {
-  const window = spendWindow(options.kind ?? 'full-months', options.now ?? new Date());
+  const window = spendWindow(options.kind ?? 'full-months', options.now ?? new Date(), options.custom);
   const kinds = buildCategoryKindLookup(categories);
 
   const totals = new Map<string, { total: DecimalInstance; rows: number }>();
@@ -177,14 +259,19 @@ export function summariseCategorySpend(
 
   const byCategory = new Map<string, CategorySpend>();
   for (const [categoryId, { total, rows }] of totals) {
-    // Netted below zero means refunds outweighed spending: the year cost
+    // Netted below zero means refunds outweighed spending: the window cost
     // nothing, and no budget follows from it.
-    const annual = total.isNegative() ? ZERO : total;
-    if (annual.isZero() && rows === 0) continue;
+    const cost = total.isNegative() ? ZERO : total;
+    if (cost.isZero() && rows === 0) continue;
+    // ONE division each, from the total: a twelve-month window's `annual` is
+    // its total to the digit (no ÷12×12 round trip), and every window's
+    // `monthly` is exactly a twelfth of its `annual`.
+    const annual = window.months === 12 ? cost : cost.times(12).dividedBy(window.months);
     byCategory.set(categoryId, {
       categoryId,
+      total: cost,
       annual,
-      monthly: annual.dividedBy(12),
+      monthly: cost.dividedBy(window.months),
       rows,
     });
   }
