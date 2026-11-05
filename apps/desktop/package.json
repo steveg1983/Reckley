@@ -1,7 +1,7 @@
 {
   "name": "reckley-desktop",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "The desktop shell's own manifest. The web app's package.json deliberately carries no desktop dependencies (see README) — the Tauri CLI lives here instead, so `npm run tauri --prefix apps/desktop` works without the web install ever knowing about it.",
   "scripts": {
     "tauri": "tauri"
