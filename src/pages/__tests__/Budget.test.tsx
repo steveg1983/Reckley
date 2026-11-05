@@ -139,9 +139,23 @@ describe('Budget page — what a card says has been spent', () => {
       expect(within(card('Groceries')).getByText('35% used')).toBeInTheDocument();
     });
 
-    it('captions the card with the budget’s actual period', () => {
+    it('captions the card with the budget’s actual period and the days it covers', () => {
       renderBudget();
-      expect(within(card('Groceries')).getByText(/Monthly budget/)).toBeInTheDocument();
+      const caption = within(card('Groceries')).getByText(/^Monthly ·/).textContent?.replace(/\s+/g, ' ') ?? '';
+      // "Monthly · 1–30 Nov 2026": both ends of the month, which Intl folds
+      // together where they share a month and year.
+      expect(caption).toMatch(/^Monthly · 1(?: \w{3}(?: \d{4})?)?\s?–\s?\d{2} \w{3} \d{4}$/);
+      expect(caption).toContain(now.toLocaleDateString('en-GB', { month: 'short' }));
+    });
+
+    it('says how far through the month it is, and how spending runs against that pace', () => {
+      renderBudget();
+      const groceries = within(card('Groceries'));
+      expect(groceries.getByText(new RegExp(`^day ${now.getDate()} of \\d+$`))).toBeInTheDocument();
+      // £70 of £200 spent; whether that is over or under the pace depends on
+      // the day the suite runs, so only the SHAPE is pinned here. The arithmetic
+      // is pinned in budgetPace.test.
+      expect(groceries.getByText(/^(on pace|£\d+\.\d\d (over|under) the pace)$/)).toBeInTheDocument();
     });
   });
 
@@ -195,6 +209,91 @@ describe('Budget page — what a card says has been spent', () => {
       renderBudget();
 
       expect(within(card('Food')).getByText('£65.00 of £300.00')).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * THE CYCLE MODEL (owner, 5 Nov 2026). A yearly budget runs twelve months
+   * from its own start; one that starts in the future has not begun; and the
+   * page's totals never add a month's allowance to a year's.
+   */
+  describe('budgets anchored on their own start', () => {
+    const inThreeMonths = new Date(now.getFullYear(), now.getMonth() + 3, 1);
+    const iso = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    beforeEach(() => {
+      __setAppContextValue({
+        accounts: ACCOUNTS,
+        categories: CATEGORIES,
+        transactions: [txn({ id: 't-1', amount: -40 }), txn({ id: 't-2', amount: -60, category: 'det-household' })],
+        transactionSplits: [],
+        budgets: [
+          // Written after the model shipped, from the 1st of this month: a
+          // year that began this month.
+          budget({
+            id: 'bud-groceries', categoryId: 'det-groceries', amount: 1200, period: 'yearly',
+            startDate: iso(new Date(now.getFullYear(), now.getMonth(), 1)),
+            createdAt: now, updatedAt: now
+          }),
+          // …and one that does not begin for three months.
+          budget({
+            id: 'bud-household', categoryId: 'det-household', amount: 600, period: 'yearly',
+            startDate: iso(inThreeMonths), createdAt: now, updatedAt: now
+          })
+        ]
+      });
+    });
+
+    it('measures a yearly budget over the year from its start, and says which year', () => {
+      renderBudget();
+      const groceries = within(card('Groceries'));
+      expect(groceries.getByText('£40.00 of £1,200.00')).toBeInTheDocument();
+      expect(groceries.getByText(/^0 of 12 months gone$/)).toBeInTheDocument();
+      // "Yearly · 1 Nov 2026 – 31 Oct 2027", or "1 Jan – 31 Dec 2026" when the
+      // year happens to be a calendar one and Intl folds the shared year.
+      const caption = groceries.getByText(/^Yearly ·/).textContent?.replace(/\s+/g, ' ') ?? '';
+      const monthAfter = new Date(now.getFullYear(), now.getMonth() + 12, 0);
+      expect(caption).toMatch(new RegExp(`^Yearly · 1 ${now.toLocaleDateString('en-GB', { month: 'short' })}( ${now.getFullYear()})? – ${monthAfter.getDate()} ${monthAfter.toLocaleDateString('en-GB', { month: 'short' })} ${monthAfter.getFullYear()}$`));
+    });
+
+    it('a budget that has not started says when it starts, and draws no bar', () => {
+      renderBudget();
+      const household = within(card('Household'));
+      expect(household.getByText(/^Starts 1 \w{3} \d{4} · £600\.00 for the year$/)).toBeInTheDocument();
+      expect(household.queryByRole('progressbar')).not.toBeInTheDocument();
+      expect(household.queryByText(/used/)).not.toBeInTheDocument();
+    });
+
+    it('totals one rhythm as itself, captioned', () => {
+      renderBudget();
+      expect(screen.getByText('£1,800.00')).toBeInTheDocument();
+      expect(screen.getAllByText('Yearly budgets').length).toBe(3);
+    });
+  });
+
+  describe('a page holding two rhythms', () => {
+    beforeEach(() => {
+      __setAppContextValue({
+        accounts: ACCOUNTS,
+        categories: CATEGORIES,
+        transactions: [txn({ id: 't-1', amount: -40 })],
+        transactionSplits: [],
+        budgets: [
+          budget({ id: 'bud-groceries', categoryId: 'det-groceries', amount: 200 }),
+          budget({ id: 'bud-household', categoryId: 'det-household', amount: 2400, period: 'yearly' })
+        ]
+      });
+    });
+
+    it('never adds a month to a year — each rhythm is totalled on its own line', () => {
+      renderBudget();
+      expect(screen.queryByText('£2,600.00')).not.toBeInTheDocument();
+      const budgeted = screen.getByText('Total Budgeted').closest('div') as HTMLElement;
+      expect(within(budgeted).getByText('Monthly')).toBeInTheDocument();
+      expect(within(budgeted).getByText('£200.00')).toBeInTheDocument();
+      expect(within(budgeted).getByText('Yearly')).toBeInTheDocument();
+      expect(within(budgeted).getByText('£2,400.00')).toBeInTheDocument();
     });
   });
 });

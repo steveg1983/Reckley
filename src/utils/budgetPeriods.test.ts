@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   getBudgetPeriodLabel,
   getBudgetPeriodWindow,
-  normaliseBudgetPeriod
+  normaliseBudgetPeriod,
+  resolveBudgetAnchor
 } from './budgetPeriods';
 
 /** Local date, written the way the windows are built. */
@@ -156,5 +157,165 @@ describe('getBudgetPeriodWindow', () => {
 
       expect(stamp(window.start)).toBe('2026-08-01 00:00:00.000');
     });
+  });
+});
+
+/**
+ * THE CYCLE MODEL (5 Nov 2026). A repeating budget is measured over the cycle
+ * containing now, counted from its own start — see the module header for why
+ * a yearly budget written on 29 October must not be measured against January.
+ */
+describe('getBudgetPeriodWindow — anchored on the budget’s start', () => {
+  /** A row written after the model shipped: its start is its anchor, whatever day it was created. */
+  const written = (over: Record<string, unknown>) => ({ createdAt: new Date(2026, 10, 10), ...over });
+
+  it('a yearly budget runs twelve months from its start, not the calendar year', () => {
+    const window = getBudgetPeriodWindow(written({ period: 'yearly', startDate: '2026-11-01' }), at(2027, 7, 15));
+    expect(stamp(window.start)).toBe('2026-11-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2027-10-31 23:59:59.999');
+    expect(window.label).toBe('Yearly');
+    expect(window.notStarted).toBe(false);
+    expect(window.ended).toBe(false);
+  });
+
+  it('…and starts again the day the year is up', () => {
+    const window = getBudgetPeriodWindow(written({ period: 'yearly', startDate: '2026-11-01' }), at(2027, 10, 1));
+    expect(stamp(window.start)).toBe('2027-11-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2028-10-31 23:59:59.999');
+  });
+
+  it('a tax-year budgeter anchors on 6 April and gets 6 April to 5 April, no special case', () => {
+    const budget = written({ period: 'yearly', startDate: '2026-04-06' });
+    const lastDay = getBudgetPeriodWindow(budget, at(2027, 3, 5));
+    expect(stamp(lastDay.start)).toBe('2026-04-06 00:00:00.000');
+    expect(stamp(lastDay.end)).toBe('2027-04-05 23:59:59.999');
+    const firstDay = getBudgetPeriodWindow(budget, at(2027, 3, 6));
+    expect(stamp(firstDay.start)).toBe('2027-04-06 00:00:00.000');
+  });
+
+  it('a monthly budget from the 15th runs 15th to 14th (the owner, for people paid mid-month)', () => {
+    const budget = written({ period: 'monthly', startDate: '2027-01-15' });
+    const early = getBudgetPeriodWindow(budget, at(2027, 1, 10));
+    expect(stamp(early.start)).toBe('2027-01-15 00:00:00.000');
+    expect(stamp(early.end)).toBe('2027-02-14 23:59:59.999');
+    const late = getBudgetPeriodWindow(budget, at(2027, 1, 20));
+    expect(stamp(late.start)).toBe('2027-02-15 00:00:00.000');
+    expect(stamp(late.end)).toBe('2027-03-14 23:59:59.999');
+  });
+
+  it('a monthly budget from the 1st is the calendar month, exactly as before', () => {
+    const window = getBudgetPeriodWindow(written({ period: 'monthly', startDate: '2026-11-01' }), at(2027, 1, 10));
+    expect(stamp(window.start)).toBe('2027-02-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2027-02-28 23:59:59.999');
+  });
+
+  it('an anchor on the 31st is clamped to the month it lands in, never carried into the next', () => {
+    const budget = written({ period: 'monthly', startDate: '2027-01-31' });
+    const feb = getBudgetPeriodWindow(budget, at(2027, 1, 28));
+    expect(stamp(feb.start)).toBe('2027-02-28 00:00:00.000');
+    expect(stamp(feb.end)).toBe('2027-03-30 23:59:59.999');
+    const stillJan = getBudgetPeriodWindow(budget, at(2027, 1, 27));
+    expect(stamp(stillJan.start)).toBe('2027-01-31 00:00:00.000');
+    expect(stamp(stillJan.end)).toBe('2027-02-27 23:59:59.999');
+  });
+
+  it('a quarterly budget counts three months from its start', () => {
+    const window = getBudgetPeriodWindow(written({ period: 'quarterly', startDate: '2026-11-01' }), at(2027, 0, 15));
+    expect(stamp(window.start)).toBe('2026-11-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2027-01-31 23:59:59.999');
+    expect(window.label).toBe('Quarterly');
+  });
+
+  it('a budget that has not started yet shows its FIRST cycle and says so', () => {
+    const window = getBudgetPeriodWindow(written({ period: 'yearly', startDate: '2027-04-06' }), at(2026, 10, 15));
+    expect(stamp(window.start)).toBe('2027-04-06 00:00:00.000');
+    expect(stamp(window.end)).toBe('2028-04-05 23:59:59.999');
+    expect(window.notStarted).toBe(true);
+    expect(window.ended).toBe(false);
+  });
+
+  it('an end date cuts the current cycle short', () => {
+    const window = getBudgetPeriodWindow(
+      written({ period: 'yearly', startDate: '2026-11-01', endDate: '2027-06-30' }),
+      at(2027, 2, 15)
+    );
+    expect(stamp(window.start)).toBe('2026-11-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2027-06-30 23:59:59.999');
+    expect(window.ended).toBe(false);
+  });
+
+  it('past its end date a budget shows its LAST cycle, finished, rather than a new one', () => {
+    const window = getBudgetPeriodWindow(
+      written({ period: 'yearly', startDate: '2026-11-01', endDate: '2027-06-30' }),
+      at(2027, 7, 15)
+    );
+    expect(stamp(window.start)).toBe('2026-11-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2027-06-30 23:59:59.999');
+    expect(window.ended).toBe(true);
+  });
+});
+
+/**
+ * LEGACY ROWS KEEP THE CALENDAR. Before 5 Nov 2026 nothing collected a start
+ * date and the service filled it with the creation day; reading that as an
+ * anchor would move every existing budget on deploy day. Measured before
+ * shipping: every stored row was one of the two shapes pinned here.
+ */
+describe('getBudgetPeriodWindow — rows written before the cycle model', () => {
+  it('a yearly budget whose start is its creation day keeps the calendar year (the 29 Oct rows)', () => {
+    const window = getBudgetPeriodWindow(
+      { period: 'yearly', startDate: '2026-10-29', createdAt: '2026-10-29T18:03:11.000Z' },
+      at(2026, 10, 15)
+    );
+    expect(stamp(window.start)).toBe('2026-01-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2026-12-31 23:59:59.999');
+    expect(resolveBudgetAnchor({ startDate: '2026-10-29', createdAt: '2026-10-29T18:03:11.000Z' })).toBeNull();
+  });
+
+  it('…judged by the creation day in UTC as well as local time, which is the day the old default wrote', () => {
+    // Created 23:30 UTC on the 29th, which is already the 30th in a zone ahead
+    // of UTC; the service wrote the UTC day. Either match means "unchosen".
+    expect(resolveBudgetAnchor({ startDate: '2026-10-29', createdAt: '2026-10-29T23:30:00.000Z' })).toBeNull();
+  });
+
+  it('a monthly budget of the same shape keeps the calendar month', () => {
+    const window = getBudgetPeriodWindow(
+      { period: 'monthly', startDate: '2026-08-29', createdAt: '2026-08-29T09:00:00.000Z' },
+      at(2026, 10, 15)
+    );
+    expect(stamp(window.start)).toBe('2026-11-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2026-11-30 23:59:59.999');
+  });
+
+  it('a legacy row whose start is NOT its creation day was chosen, and is the anchor (the seeder’s 1 January)', () => {
+    const window = getBudgetPeriodWindow(
+      { period: 'yearly', startDate: '2026-01-01', createdAt: '2026-08-29T09:00:00.000Z' },
+      at(2026, 10, 15)
+    );
+    expect(stamp(window.start)).toBe('2026-01-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2026-12-31 23:59:59.999');
+    expect(resolveBudgetAnchor({ startDate: '2026-01-01', createdAt: '2026-08-29T09:00:00.000Z' })).toBe('2026-01-01');
+  });
+
+  it('a legacy row re-dated by the wizard gains its anchor', () => {
+    const window = getBudgetPeriodWindow(
+      { period: 'yearly', startDate: '2026-11-01', createdAt: '2026-10-29T18:03:11.000Z' },
+      at(2027, 7, 15)
+    );
+    expect(stamp(window.start)).toBe('2026-11-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2027-10-31 23:59:59.999');
+  });
+
+  it('a row written on or after the ship day is anchored on its start even when that is its creation day', () => {
+    expect(resolveBudgetAnchor({ startDate: '2026-11-06', createdAt: '2026-11-06T10:00:00.000Z' })).toBe('2026-11-06');
+  });
+
+  it('a row with no creation stamp takes its start at face value', () => {
+    expect(resolveBudgetAnchor({ startDate: '2026-07-01' })).toBe('2026-07-01');
+  });
+
+  it('a row with no start has no anchor, whenever it was written', () => {
+    expect(resolveBudgetAnchor({ createdAt: '2026-11-10T10:00:00.000Z' })).toBeNull();
+    expect(resolveBudgetAnchor({ startDate: 'not a date', createdAt: '2026-11-10T10:00:00.000Z' })).toBeNull();
   });
 });
