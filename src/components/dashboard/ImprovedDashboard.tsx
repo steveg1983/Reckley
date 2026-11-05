@@ -398,7 +398,13 @@ export function ImprovedDashboard() {
       transactionSplits,
       categories,
       foreignAccountIds: foreignCurrencyAccountIds(accounts, displayCurrency),
-    }).map(({ budget, categoryId, effectiveAmount, spent, remaining, percentage, window, countedRowIds }) => ({
+    })
+      // This card answers "how am I doing": a budget past its end date has
+      // nothing to be doing, and one that has not started would read "0%
+      // used" for a budget nobody has had the chance to use. Both stay on the
+      // Budget page, captioned as what they are.
+      .filter(({ window }) => !window.ended && !window.notStarted)
+      .map(({ budget, categoryId, effectiveAmount, spent, remaining, percentage, window, countedRowIds }) => ({
       ...budget,
       categoryId,
       // The budget's own category, NAMED. It was rendering `categoryId`

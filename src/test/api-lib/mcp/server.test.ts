@@ -370,11 +370,31 @@ describe('reckley_budget_status', () => {
     });
   });
 
+  it('leaves out a budget past its end date — the fixture’s June one-off is active, and over', async () => {
+    const result = await call('reckley_budget_status', { response_format: 'json' });
+    const body = result.structuredContent as { count: number; budgets: { id: string }[] };
+    expect(body.budgets.map(entry => entry.id)).toEqual(['b-groceries']);
+  });
+
   it('says so when there are none', async () => {
     await client.close();
     await handler.close();
     await connect(fakePort({ budgets: [] }));
     expect(textOf(await call('reckley_budget_status'))).toBe('No active budgets.');
+  });
+
+  it('says so, differently, when the active budgets have all finished or not started', async () => {
+    await client.close();
+    await handler.close();
+    await connect(fakePort({
+      budgets: [
+        { id: 'b-done', name: 'June trip', categoryId: 'det-fuel', amount: 40, period: 'custom', isActive: true, startDate: '2026-06-01', endDate: '2026-06-30', createdAt: new Date(2026, 5, 1), updatedAt: new Date(2026, 5, 1), spent: 0 },
+        { id: 'b-soon', name: 'Next year', categoryId: 'det-groceries', amount: 1200, period: 'yearly', isActive: true, startDate: '2027-01-01', createdAt: new Date(2026, 9, 1), updatedAt: new Date(2026, 9, 1), spent: 0 },
+      ],
+    }));
+    expect(textOf(await call('reckley_budget_status'))).toBe(
+      'No budgets running today: the active ones have finished or have not started yet.'
+    );
   });
 });
 

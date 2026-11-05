@@ -1123,7 +1123,7 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
     'reckley_budget_status',
     {
       title: 'Budget status',
-      description: `Every active budget measured over its own period — the cycle counted from the budget's own start date (a monthly budget from the 1st is the calendar month; a yearly one runs twelve months from its start), the week for a weekly one — exactly as the app's Budget page shows it: the allowance (with any rollover carried in), what has been spent, what is left or by how much it is over, and the days the period covers.`,
+      description: `Every active budget that is running today, measured over its own period — the cycle counted from the budget's own start date (a monthly budget from the 1st is the calendar month; a yearly one runs twelve months from its start), the week for a weekly one, the single run of a one-off — exactly as the app's Budget page shows it: the allowance (with any rollover carried in), what has been spent, what is left or by how much it is over, and the days the period covers. A budget past its end date, or not yet started, is left out.`,
       inputSchema: z.strictObject({
         response_format: responseFormat,
       }),
@@ -1131,24 +1131,35 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
     },
     async ({ response_format }) => {
       const [budgets, categories, look] = await Promise.all([port.listBudgets(), port.listCategories(), lookups()]);
+      const today = now();
+      // Running today: active, and neither finished (past its end date) nor
+      // yet to start. A finished budget's figure is history, a future one's is
+      // nothing; the Budget page shows both captioned as such, this answer
+      // is about now.
       const active = budgets.filter(budget => budget.isActive);
-      if (active.length === 0) {
+      const running = active.filter(budget => {
+        const window = getBudgetPeriodWindow(budget, today);
+        return !window.ended && !window.notStarted;
+      });
+      if (running.length === 0) {
         const body = { count: 0, budgets: [] as never[] };
+        const text = active.length === 0
+          ? 'No active budgets.'
+          : 'No budgets running today: the active ones have finished or have not started yet.';
         return response_format === ResponseFormat.JSON
           ? { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body }
-          : { content: [{ type: 'text', text: 'No active budgets.' }] };
+          : { content: [{ type: 'text', text }] };
       }
       // Budgets are measured over their own windows — since 5 Nov 2026 a
       // repeating budget runs its cycle from its OWN start, so a yearly one
       // can straddle two calendar years. The read covers the earliest start
       // to the latest end among them, nothing wider and nothing narrower.
-      const today = now();
-      const windows = active.map(budget => getBudgetPeriodWindow(budget, today));
+      const windows = running.map(budget => getBudgetPeriodWindow(budget, today));
       const earliest = windows.reduce((soFar, w) => (w.start < soFar ? w.start : soFar), windows[0].start);
       const latest = windows.reduce((soFar, w) => (w.end > soFar ? w.end : soFar), windows[0].end);
       const range = await port.transactionsBetween(localDay(earliest), localDay(latest), AGGREGATE_ROW_CAP);
       const currency = look.accounts.values().next().value?.currency ?? 'GBP';
-      const evaluated = evaluateBudgets(active, {
+      const evaluated = evaluateBudgets(running, {
         transactions: range.rows,
         transactionSplits: range.splits,
         categories,
