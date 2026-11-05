@@ -685,6 +685,23 @@ describe('Budget Status', () => {
     expect(screen.getByTestId('budget-drill-total')).toHaveTextContent('380');
   });
 
+  it('leaves a finished budget off the card — it has nothing to be doing (5 Nov 2026)', () => {
+    mocks.app.budgets = [
+      ...(mocks.app.budgets as object[]),
+      // A one-off that ran in June and is over: active, with a figure that is history.
+      {
+        id: 'b-done', categoryId: 'cat-fuel', amount: 100, period: 'custom', isActive: true,
+        startDate: '2026-06-01', endDate: '2026-06-30',
+        createdAt: new Date(2026, 5, 1), updatedAt: new Date(2026, 5, 1), spent: 0,
+      },
+    ] as never[];
+
+    render(<ImprovedDashboard />);
+
+    expect(screen.getAllByTestId('budget-status-row')).toHaveLength(1);
+    expect(within(screen.getByTestId('budget-status')).queryByText('Fuel')).not.toBeInTheDocument();
+  });
+
   it('marks an overspend against the allowance the Budget page shows — rollover carried in', () => {
     mocks.app.budgets = [{
       ...(mocks.app.budgets[0] as object),

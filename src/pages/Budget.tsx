@@ -219,10 +219,11 @@ function BudgetView() {
     }
   }, [budgets, transactions, categories]);
 
-  // Check for budget alerts
+  // Check for budget alerts. A budget that has finished, or has not begun, is
+  // not something to be warned about: its figure is history or nothing.
   useEffect(() => {
     const alerts = budgetsWithSpent
-      .filter(budget => budget.isActive)
+      .filter(budget => budget.isActive && !budget.window.ended && !budget.window.notStarted)
       .map(budget => {
         const categoryLabel = getBudgetCategoryLabel(budget);
         if (budget.percentage >= 100) {
@@ -308,9 +309,14 @@ function BudgetView() {
    * that is nobody's budget, and a page holding both used to print exactly
    * that as "Total Budgeted". A page with one rhythm reads as it always did,
    * captioned with the rhythm; a page with two lists each on its own line.
+   *
+   * A FINISHED budget is left out: its allowance was for days that are over,
+   * and adding it to this period's total would print a figure that is nobody's
+   * budget today. One that has not started stays in — it is a commitment made,
+   * and the card beside it says when it begins.
    */
   const rhythmTotals = useMemo(() => {
-    const active = budgetsWithSpent.filter(b => b && b.isActive !== false);
+    const active = budgetsWithSpent.filter(b => b && b.isActive !== false && !b.window.ended);
     const order: BudgetPeriodName[] = ['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly', 'custom'];
     return order.flatMap(period => {
       const rows = active.filter(b => b.window.period === period);
@@ -519,6 +525,11 @@ function BudgetView() {
                       exact days it covers right now (owner, 5 Nov 2026: a card
                       that said "Yearly" never said which year, or from when). */}
                   {budget.periodLabel} · {describeBudgetWindow(budget.window)}
+                  {/* Past its end date the card still shows what the last
+                      period came to, and says in the caption that it is over —
+                      a finished one-off among live cards must not read as this
+                      month's. Neutral: finished needs no colour. */}
+                  {budget.window.ended && ' · finished'}
                   {budget.isActive === false && ' (Inactive)'}
                 </p>
               </div>

@@ -46,7 +46,7 @@ describe('getBudgetPeriodLabel', () => {
     expect(getBudgetPeriodLabel('biweekly')).toBe('Fortnightly');
     expect(getBudgetPeriodLabel('quarterly')).toBe('Quarterly');
     expect(getBudgetPeriodLabel('yearly')).toBe('Yearly');
-    expect(getBudgetPeriodLabel('custom')).toBe('Custom');
+    expect(getBudgetPeriodLabel('custom')).toBe('One-off');
   });
 });
 
@@ -128,7 +128,7 @@ describe('getBudgetPeriodWindow', () => {
 
       expect(stamp(window.start)).toBe('2026-04-06 00:00:00.000');
       expect(stamp(window.end)).toBe('2027-04-05 23:59:59.999');
-      expect(window.label).toBe('Custom');
+      expect(window.label).toBe('One-off');
     });
 
     it('runs an open-ended custom period up to now', () => {
@@ -141,12 +141,12 @@ describe('getBudgetPeriodWindow', () => {
       expect(stamp(window.end)).toBe('2026-08-15 23:59:59.999');
     });
 
-    it('falls back to the current month when the dates are missing, still captioned Custom', () => {
+    it('falls back to the current month when the dates are missing, still captioned One-off', () => {
       const window = getBudgetPeriodWindow({ period: 'custom' }, at(2026, 7, 15));
 
       expect(stamp(window.start)).toBe('2026-08-01 00:00:00.000');
       expect(stamp(window.end)).toBe('2026-08-31 23:59:59.999');
-      expect(window.label).toBe('Custom');
+      expect(window.label).toBe('One-off');
     });
 
     it('ignores an unreadable stored date rather than filing the budget in 1970', () => {
@@ -317,5 +317,88 @@ describe('getBudgetPeriodWindow — rows written before the cycle model', () => 
   it('a row with no start has no anchor, whenever it was written', () => {
     expect(resolveBudgetAnchor({ createdAt: '2026-11-10T10:00:00.000Z' })).toBeNull();
     expect(resolveBudgetAnchor({ startDate: 'not a date', createdAt: '2026-11-10T10:00:00.000Z' })).toBeNull();
+  });
+});
+
+/**
+ * AN END DATE IS HONOURED BY EVERY PERIOD (5 Nov 2026). The month-stepped
+ * cycles honoured one from the day the model shipped; the week, the fortnight
+ * and the legacy calendar did not, so a weekly budget "until the end of June"
+ * would have gone on measuring week after week. One function bounds them all.
+ */
+describe('getBudgetPeriodWindow — an end date is honoured by every period', () => {
+  // 1 November 2026 is a Sunday, so the Sunday weeks are 1–7, 8–14, 15–21 Nov.
+
+  it('a weekly budget is cut short at its end date', () => {
+    const window = getBudgetPeriodWindow({ period: 'weekly', endDate: '2026-11-11' }, at(2026, 10, 10));
+    expect(stamp(window.start)).toBe('2026-11-08 00:00:00.000');
+    expect(stamp(window.end)).toBe('2026-11-11 23:59:59.999');
+    expect(window.ended).toBe(false);
+  });
+
+  it('…and past it shows the week the end fell in, finished', () => {
+    const window = getBudgetPeriodWindow({ period: 'weekly', endDate: '2026-11-11' }, at(2026, 10, 20));
+    expect(stamp(window.start)).toBe('2026-11-08 00:00:00.000');
+    expect(stamp(window.end)).toBe('2026-11-11 23:59:59.999');
+    expect(window.ended).toBe(true);
+  });
+
+  it('a fortnightly budget past its end shows the fortnight the end fell in, finished', () => {
+    const window = getBudgetPeriodWindow(
+      { period: 'biweekly', startDate: '2026-11-01', endDate: '2026-11-20' },
+      at(2026, 11, 1)
+    );
+    expect(stamp(window.start)).toBe('2026-11-15 00:00:00.000');
+    expect(stamp(window.end)).toBe('2026-11-20 23:59:59.999');
+    expect(window.ended).toBe(true);
+  });
+
+  it('a legacy row that keeps the calendar still stops at its end date', () => {
+    // Start = creation day, created before the model: no anchor, calendar
+    // months — and an end date given later still finishes it.
+    const window = getBudgetPeriodWindow(
+      { period: 'monthly', startDate: '2024-01-01', endDate: '2024-06-30', createdAt: '2024-01-01T09:00:00.000Z' },
+      at(2025, 0, 1)
+    );
+    expect(stamp(window.start)).toBe('2024-06-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2024-06-30 23:59:59.999');
+    expect(window.ended).toBe(true);
+  });
+
+  it('an end date before the start is no end at all, not a budget that finished before it began', () => {
+    const window = getBudgetPeriodWindow(
+      { period: 'monthly', startDate: '2026-11-01', endDate: '2026-10-01', createdAt: new Date(2026, 10, 10) },
+      at(2026, 10, 10)
+    );
+    expect(stamp(window.start)).toBe('2026-11-01 00:00:00.000');
+    expect(stamp(window.end)).toBe('2026-11-30 23:59:59.999');
+    expect(window.ended).toBe(false);
+    expect(window.notStarted).toBe(false);
+  });
+
+  describe('a one-off budget runs once', () => {
+    const oneOff = { period: 'custom', startDate: '2026-12-01', endDate: '2027-01-31' };
+
+    it('before its first day it has not started, and is captioned One-off', () => {
+      const window = getBudgetPeriodWindow(oneOff, at(2026, 10, 10));
+      expect(window.label).toBe('One-off');
+      expect(window.notStarted).toBe(true);
+      expect(window.ended).toBe(false);
+      expect(stamp(window.start)).toBe('2026-12-01 00:00:00.000');
+      expect(stamp(window.end)).toBe('2027-01-31 23:59:59.999');
+    });
+
+    it('between its days it is running', () => {
+      const window = getBudgetPeriodWindow(oneOff, at(2026, 11, 15));
+      expect(window.notStarted).toBe(false);
+      expect(window.ended).toBe(false);
+    });
+
+    it('after its last day it is finished, over the same days — never a second run', () => {
+      const window = getBudgetPeriodWindow(oneOff, at(2027, 1, 1));
+      expect(window.ended).toBe(true);
+      expect(stamp(window.start)).toBe('2026-12-01 00:00:00.000');
+      expect(stamp(window.end)).toBe('2027-01-31 23:59:59.999');
+    });
   });
 });

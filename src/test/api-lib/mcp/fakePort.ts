@@ -72,6 +72,8 @@ export const splits: TransactionSplit[] = [
 export const budgets: Budget[] = [
   { id: 'b-groceries', name: 'Groceries', categoryId: 'det-groceries', amount: 150, period: 'monthly', isActive: true, createdAt: new Date(2026, 0, 1), updatedAt: new Date(2026, 0, 1), spent: 0 },
   { id: 'b-paused', name: 'Paused', categoryId: 'det-fuel', amount: 50, period: 'monthly', isActive: false, createdAt: new Date(2026, 0, 1), updatedAt: new Date(2026, 0, 1), spent: 0 },
+  // A one-off that ran in June and is over: active, but not running today.
+  { id: 'b-done', name: 'June trip', categoryId: 'det-fuel', amount: 40, period: 'custom', isActive: true, startDate: '2026-06-01', endDate: '2026-06-30', createdAt: new Date(2026, 5, 1), updatedAt: new Date(2026, 5, 1), spent: 0 },
 ];
 
 const dayOf = (date: Date | string): string => new Date(date).toISOString().slice(0, 10);

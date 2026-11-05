@@ -513,7 +513,11 @@ export interface Budget {
   limit?: number;
   updatedAt: Date;  // Made required to match service
   startDate?: string;
-  endDate?: string;
+  /**
+   * The last day the budget runs, or null to CLEAR one on an update (`undefined`
+   * means "not stated", which an update leaves alone). See utils/budgetPeriods.
+   */
+  endDate?: string | null;
   rollover?: boolean;
   rolloverAmount?: number;
   alertThreshold?: number;
