@@ -287,7 +287,7 @@ describe('BudgetModal', () => {
     it('a new budget starts on the 1st of this month, says its first period, and writes that day', () => {
       renderWithProviders(<BudgetModal {...defaultProps} />);
       expect(screen.getByLabelText('Starts')).toHaveValue(firstOfThisMonth());
-      expect(screen.getByText(/^First period: /)).toBeInTheDocument();
+      expect(screen.getByText(/^First month: /)).toBeInTheDocument();
 
       fillAndAdd();
       expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: firstOfThisMonth() });
@@ -296,7 +296,7 @@ describe('BudgetModal', () => {
     it('a budget from the 15th says it runs 15th to 14th', () => {
       renderWithProviders(<BudgetModal {...defaultProps} />);
       fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-15' } });
-      expect(screen.getByText(/First period: 15 Jan\s*–\s*14 Feb 2027/)).toBeInTheDocument();
+      expect(screen.getByText(/First month: 15 Jan\s*–\s*14 Feb 2027/)).toBeInTheDocument();
 
       fillAndAdd();
       expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: '2027-01-15' });

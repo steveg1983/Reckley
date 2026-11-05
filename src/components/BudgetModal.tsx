@@ -299,7 +299,9 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
                 className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {firstPeriod ? `First period: ${firstPeriod}. ` : ''}
+                {firstPeriod
+                  ? `First ${formData.period === 'monthly' ? 'month' : formData.period === 'quarterly' ? 'quarter' : 'year'}: ${firstPeriod}. `
+                  : ''}
                 {formData.period === 'monthly'
                   ? 'A budget from the 15th runs 15th to 14th.'
                   : 'A budget from 6 April runs with the tax year.'}
