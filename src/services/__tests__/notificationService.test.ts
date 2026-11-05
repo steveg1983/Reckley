@@ -178,4 +178,23 @@ describe('budget alerts say what they leave out', () => {
       /Spending on accounts in another currency is left out, so you have spent more than this\./
     );
   });
+
+  it('raises nothing for a budget past its end date, however far over its last period ran', () => {
+    // Start = creation day and created before the cycle model: a legacy row
+    // on calendar months, finished at the end of June 2024. Its last month
+    // was 80% spent — over the rule's line — and is history (now is 2025).
+    const { service } = createService();
+    service.addRule(rule);
+    const finished: Budget[] = [
+      {
+        id: 'b-done', categoryId: 'cat-food', amount: 100, period: 'monthly', isActive: true,
+        startDate: '2024-01-01', endDate: '2024-06-30', createdAt: new Date(Date.UTC(2024, 0, 1))
+      }
+    ];
+    const inItsLastMonth: Transaction[] = [
+      { id: 't-june', accountId: 'acc-gbp', amount: -80, category: 'cat-food', date: new Date(Date.UTC(2024, 5, 15)), type: 'expense', description: 'shop' }
+    ];
+
+    expect(service.checkBudgetAlerts(finished, inItsLastMonth, categories, { transactionSplits: [] })).toEqual([]);
+  });
 });

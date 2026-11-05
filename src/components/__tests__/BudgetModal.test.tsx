@@ -330,4 +330,115 @@ describe('BudgetModal', () => {
       expect(screen.getByLabelText('Starts')).toHaveValue(`${new Date().getFullYear()}-01-01`);
     });
   });
+
+  /**
+   * ENDS — the day a budget stops, and a budget that runs once (owner, 5 Nov
+   * 2026). Optional for a repeating period, honoured by every one of them;
+   * required for a one-off, which is nothing but its two days.
+   */
+  describe('Ends — the day the budget stops, and a budget that runs once', () => {
+    const fillAndAdd = (): void => {
+      openCategoryPicker();
+      fireEvent.click(screen.getByText('Groceries'));
+      fireEvent.change(screen.getByPlaceholderText('0.00'), { target: { value: '250' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Add Budget' }));
+    };
+    const choosePeriod = (value: string): void => {
+      fireEvent.change(screen.getByDisplayValue('Monthly'), { target: { value } });
+    };
+
+    it('a repeating budget has no end unless one is given, and writes none', () => {
+      renderWithProviders(<BudgetModal {...defaultProps} />);
+      expect(screen.getByLabelText('Ends')).toHaveValue('');
+      expect(screen.getByText('Optional — leave blank to keep the budget running.')).toBeInTheDocument();
+
+      fillAndAdd();
+      // null, not undefined: an end cleared here must clear the stored one.
+      expect(addBudget.mock.calls[0][0]).toMatchObject({ endDate: null });
+    });
+
+    it('an end date names the last period beside the first, and is written', () => {
+      renderWithProviders(<BudgetModal {...defaultProps} />);
+      fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-01' } });
+      fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2027-06-30' } });
+      expect(screen.getByTestId('budget-choice')).toHaveTextContent(
+        /^First month: 1\s*[–-]\s*31 Jan 2027\. Last month: 1\s*[–-]\s*30 Jun 2027\.$/
+      );
+
+      fillAndAdd();
+      expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: '2027-01-01', endDate: '2027-06-30' });
+    });
+
+    it('an end before the start is refused, and nothing is written', () => {
+      renderWithProviders(<BudgetModal {...defaultProps} />);
+      fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-06-01' } });
+      fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2027-01-31' } });
+      expect(screen.queryByTestId('budget-choice')).not.toBeInTheDocument();
+
+      fillAndAdd();
+      expect(screen.getByRole('alert')).toHaveTextContent('Ends is before Starts.');
+      expect(addBudget).not.toHaveBeenCalled();
+    });
+
+    it('a weekly budget takes an end date too, and says when it stops', () => {
+      renderWithProviders(<BudgetModal {...defaultProps} />);
+      choosePeriod('weekly');
+      fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2027-06-30' } });
+      expect(screen.getByTestId('budget-choice')).toHaveTextContent('Runs until 30 Jun 2027.');
+
+      fillAndAdd();
+      expect(addBudget.mock.calls[0][0]).toMatchObject({ period: 'weekly', endDate: '2027-06-30' });
+      expect(addBudget.mock.calls[0][0]).not.toHaveProperty('startDate');
+    });
+
+    it('a budget that already has an end shows it', () => {
+      const ending = {
+        id: 'b-1',
+        categoryId: 'det-groceries',
+        amount: 300,
+        period: 'monthly',
+        isActive: true,
+        spent: 0,
+        startDate: '2026-11-01',
+        endDate: '2027-03-31',
+        createdAt: new Date('2026-11-10T10:00:00.000Z'),
+        updatedAt: new Date('2026-11-10T10:00:00.000Z'),
+      } satisfies Budget;
+
+      renderWithProviders(<BudgetModal {...defaultProps} budget={ending} />);
+      expect(screen.getByLabelText('Ends')).toHaveValue('2027-03-31');
+    });
+
+    describe('One-off — a budget that runs once', () => {
+      it('is offered as a period, needs both days, and says so', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        choosePeriod('custom');
+        expect(screen.getByDisplayValue('One-off')).toBeInTheDocument();
+        expect(screen.getByText('A one-off budget runs once, from Starts to Ends, and is then finished.')).toBeInTheDocument();
+
+        fillAndAdd();
+        expect(screen.getByRole('alert')).toHaveTextContent('A one-off budget needs the day it starts and the day it ends.');
+        expect(addBudget).not.toHaveBeenCalled();
+      });
+
+      it('runs once from Starts to Ends, says so, and writes both days', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        choosePeriod('custom');
+        fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2026-12-01' } });
+        fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2027-01-31' } });
+        expect(screen.getByTestId('budget-choice')).toHaveTextContent(
+          /^Runs once, 1 Dec 2026\s*[–-]\s*31 Jan 2027, and is then finished\.$/
+        );
+        // No "runs 15th to 14th" hint: a one-off has no cycle to describe.
+        expect(screen.queryByText(/runs 15th to 14th|runs with the tax year/)).not.toBeInTheDocument();
+
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({
+          period: 'custom',
+          startDate: '2026-12-01',
+          endDate: '2027-01-31',
+        });
+      });
+    });
+  });
 });

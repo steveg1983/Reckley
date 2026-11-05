@@ -128,10 +128,11 @@ export interface PreferencesTransport {
  * to nothing. Both fail SILENTLY, which is what makes this worth spelling out.
  */
 export const PREFERENCE_KEYS_HOLDING_IDS = {
-  /** JSON array of account ids. */
+  /** JSON arrays of row ids — accounts for the first two, budgets for the third. */
   idArray: [
     'dashboardKeyAccounts',
     'reportsAccountFilterIds',
+    'dashboardKeyBudgets',
   ] as readonly string[],
   /** JSON object whose KEYS are account ids. */
   idKeyedObject: [

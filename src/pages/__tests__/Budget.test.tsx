@@ -296,6 +296,52 @@ describe('Budget page — what a card says has been spent', () => {
       expect(within(budgeted).getByText('£2,400.00')).toBeInTheDocument();
     });
   });
+
+  /**
+   * A budget that has FINISHED (owner, 5 Nov 2026: end dates and one-off
+   * budgets). It keeps its card — what the last period came to is worth
+   * seeing — captioned as over, and it is left out of the live total: its
+   * allowance was for days that are gone.
+   */
+  describe('a one-off budget that has finished', () => {
+    const lastYear = now.getFullYear() - 1;
+
+    beforeEach(() => {
+      __setAppContextValue({
+        accounts: ACCOUNTS,
+        categories: CATEGORIES,
+        transactions: [
+          txn({ id: 't-1', amount: -40 }),
+          // Inside the one-off's month, last year — counted by it, by nothing else.
+          txn({ id: 't-done', amount: -120, category: 'det-household', date: new Date(`${lastYear}-06-15`) })
+        ],
+        transactionSplits: [],
+        budgets: [
+          budget({ id: 'bud-groceries', categoryId: 'det-groceries', amount: 200 }),
+          budget({
+            id: 'bud-household', categoryId: 'det-household', amount: 300, period: 'custom',
+            startDate: `${lastYear}-06-01`, endDate: `${lastYear}-06-30`, createdAt: now, updatedAt: now
+          })
+        ]
+      });
+    });
+
+    it('is captioned One-off, over its own days, and finished — and still says what it came to', () => {
+      renderBudget();
+      const household = within(card('Household'));
+      const caption = household.getByText(/^One-off ·/).textContent?.replace(/\s+/g, ' ') ?? '';
+      expect(caption).toMatch(new RegExp(`^One-off · 1\\s*[–-]\\s*30 Jun ${lastYear} · finished$`));
+      expect(household.getByText('£120.00 of £300.00')).toBeInTheDocument();
+      expect(household.getByText(`Finished 30 Jun ${lastYear}`)).toBeInTheDocument();
+    });
+
+    it('is left out of the total, which is then one rhythm, captioned as itself', () => {
+      renderBudget();
+      expect(screen.queryByText('£500.00')).not.toBeInTheDocument();
+      expect(screen.getByText('£200.00')).toBeInTheDocument();
+      expect(screen.getAllByText('Monthly budgets').length).toBe(3);
+    });
+  });
 });
 
 /**

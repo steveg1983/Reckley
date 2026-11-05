@@ -1114,6 +1114,15 @@ describe('remapPreferenceIds', () => {
     expect(JSON.parse(next.values.dashboardKeyAccounts)).toEqual(['a-1-new']);
   });
 
+  it('rewrites the budget ids in the dashboard’s key-budgets list — the same map, the same silence otherwise', () => {
+    const next = remapPreferenceIds(
+      { version: 1, values: { dashboardKeyBudgets: '["a-1"]' } },
+      lookup,
+      () => {}
+    );
+    expect(JSON.parse(next.values.dashboardKeyBudgets)).toEqual(['a-1-new']);
+  });
+
   it('rewrites the account ids a per-account archive cutoff is keyed BY', () => {
     const next = remapPreferenceIds(
       { version: 1, values: { 'archiveManager.overrides.v1': '{"a-1":{"date":"2020-01-01","acknowledged":true}}' } },

@@ -389,10 +389,14 @@ export class NotificationService {
       // The Budget page's calculation, not a second one: the budget's OWN
       // period window, split lines expanded, refunds netted, Decimal throughout.
       const amount = getEffectiveBudgetAmount(budget);
-      const { spent: spentDecimal, excludedForeignCount } = calculateBudgetSpend(budget, prepared, {
+      const { spent: spentDecimal, excludedForeignCount, window } = calculateBudgetSpend(budget, prepared, {
         now,
         foreignAccountIds: context.foreignAccountIds
       });
+      // A budget past its end date, or not yet started, is nothing to be
+      // warned about: the finished one's figure is history and the future
+      // one's is nothing. The Budget page's own alert pass makes the same cut.
+      if (window.ended || window.notStarted) return;
       const spent = spentDecimal.toNumber();
       const percentage = calculateBudgetPercentage({ amount }, spentDecimal);
 

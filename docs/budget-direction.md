@@ -242,8 +242,9 @@ and use.
 ### 5.6 The single editor
 
 `BudgetModal` gains "Starts" (a date, default the 1st of this month) for every period
-but weekly, and shows the resulting first cycle beside it. Custom stays absent until the
-editor also collects an end date.
+but weekly, and shows the resulting first cycle beside it. Custom stayed absent until the
+editor also collected an end date; it does now, as **One‑off**, beside an optional
+**Ends** for every repeating period — PR C (§8).
 
 ### 5.7 Rollover
 
@@ -281,8 +282,8 @@ build"). Deriving the previous window properly from `budgetPeriods` is a follow�
 5. **Single editor "Starts" + rollover scoped to monthly** (`BudgetModal.tsx`,
    `BudgetRollover.tsx`).
 
-1–3 and 5 shipped as #612 and #614 (§8). After 4, the second round in §7 — in the
-order given there. The forecast bridge is a project of its own (§7, second round, 1).
+1–5 shipped as #612, #614 and #615 (§8). Then the second round in §7, in the
+order given there; its 5 shipped as PR C. The forecast bridge is a project of its own (§7, second round, 1).
 
 ## 7. The owner's decisions (5 Nov 2026)
 
@@ -330,7 +331,8 @@ not. Seven suggestions were drawn from it; the owner answered each the same day.
    **Agreed.**
 5. **An end date, and one‑off budgets** — a project, a holiday, a wedding: an
    allowance that runs from a day to a day and then is finished. The model already
-   honours `end_date` (§8); this is the asking and the showing. **Agreed.**
+   honours `end_date` (§8); this is the asking and the showing. **Agreed — built as
+   PR C (§8).**
 6. **Income budgets — no.** "Budgets concentrate on people spending. The forecast is
    their Personal P&L." Income is the forecast's (1).
 7. **Per‑category cycle history** — how this budget did in each past cycle, on the
@@ -386,3 +388,31 @@ count and says the figures are a rate; step 3 says "against £X a year at the ra
 those categories ran over Jan 2026 – Jun 2026 (6 months)" rather than calling it
 spending. One month has one name ("Jun 2026"). Choosing the option seeds the months
 from whatever was on screen, so nothing moves at the moment of choosing.
+
+**PR C (an end, and a budget that runs once)** — the second round's 5. Every period
+honours `end_date` through one function, `boundedWindow` in `utils/budgetPeriods`:
+the current cycle is cut short at the end date; past it the window is the cycle the
+end date falls in, cut there, and `ended` is true. Before this only the month‑stepped
+cycles read the column — a weekly budget "until the end of June" would have gone on
+measuring week after week. An end before the start is read as no end. The `custom`
+period is captioned **One‑off**, the owner's word for a budget that runs once from
+its start to its end. `BudgetModal` gains **Ends** — optional for a repeating period
+(blank keeps it running), and the two days read back in one sentence ("First month:
+1–31 Jan 2027. Last month: 1–30 Jun 2027."; "Runs until 30 Jun 2027." for weekly;
+"Runs once, 1 Dec 2026 – 31 Jan 2027, and is then finished." for a one‑off) — and
+**One‑off** in its period list, needing both days; an end before the start is refused
+by name, and a cleared end is written as null so the stored one clears. A finished
+budget keeps its card on the Budget page, captioned "· finished" with what the last
+period came to, but is out of the live total and raises no alert; the Dashboard card
+and `reckley_budget_status` leave finished and not‑yet‑started budgets out, and the
+notification service raises nothing for either. **The wizard is untouched on
+purpose**: it writes repeating budgets from a chosen start, and an end date is a
+decision about one budget, made in its editor.
+
+**PR D (Key Budgets on the Dashboard, 7 Nov)** — the owner, after the wizard re‑run: the
+key accounts have a cog to choose the six on view; the budget card had none and showed the
+first three in list order. Now "Key Budgets" has the same cog: a picker grouped by category
+group, select all / clear all, a "No budgets are selected" state with the way back, and the
+choice in `dashboardKeyBudgets` — a portable preference whose ids a restore follows, like
+the accounts'. Nothing chosen = the first three, never written. Only budgets running today
+are listed, because only those are on the card. "View All Budgets" is always there.
