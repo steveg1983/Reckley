@@ -252,16 +252,37 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3854 / 1186
  * (+39.6 KiB raw, +1.04%; +12.6 KiB gzip, +1.07%).
+ *
+ * ── RE-RECORDED 2026-11-05: THE BUDGET CYCLE MODEL ──────────────────────────
+ *
+ * Three movements, each built on its own with `npm run desktop:ui` and read
+ * with `--report`:
+ *
+ *     14 Oct baseline         3814.4 KiB raw   1173.4 KiB gzip
+ *     main at bbae2f4d        3851.9 KiB raw   1185.9 KiB gzip   +37.5 / +12.5
+ *     + the cycle model       3855.5 KiB raw   1187.1 KiB gzip    +3.6 /  +1.2
+ *
+ * The +37.5 arrived across the PRs between 14 Oct and 5 Nov, every one inside
+ * the budget, so none was asked to say what it was — the second time this
+ * paragraph's predecessor has had to record exactly that, and with 2.1 KiB of
+ * raw headroom left it was the next arrival that would fail, whatever it was.
+ * The +3.6 is this commit's and is intended: a budget is now an allowance for
+ * a cycle anchored on its start (`utils/budgetPeriods`), and the Budget page
+ * — which the desktop edition mounts — captions each card with the days it
+ * covers, paces it, and totals per rhythm (`utils/budgetPace`).
+ *
+ * Budgets reset to the standing rule, ~1% above measured: 3894 / 1199
+ * (+38.5 KiB raw, +1.00%; +11.9 KiB gzip, +1.00%).
  */
-const BASELINE_TOTAL_RAW_KIB = 3814.4;
-const BASELINE_TOTAL_GZIP_KIB = 1173.4;
+const BASELINE_TOTAL_RAW_KIB = 3855.5;
+const BASELINE_TOTAL_GZIP_KIB = 1187.1;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that
 // slack deliberately rather than banking it, so this is tight ON PURPOSE and
 // intended growth is expected to raise it in the commit that causes it.
-const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3854);
-const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1186);
+const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3894);
+const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1199);
 
 const isReport = process.argv.includes('--report');
 
