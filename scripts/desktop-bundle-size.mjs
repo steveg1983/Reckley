@@ -285,16 +285,29 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3900 / 1201
  * (+38.7 KiB raw, +1.00%; +12.4 KiB gzip, +1.04%).
+ *
+ * ── RE-RECORDED 2026-11-05, SAME DAY AGAIN: "MONTHS I CHOOSE" ───────────────
+ *
+ *     + run-from and Starts   3861.3 KiB raw   1188.6 KiB gzip
+ *     + the custom window     3864.1 KiB raw   1189.3 KiB gzip   +2.8 / +0.7
+ *
+ * Intended: the budget wizard's "Measured over" gains a From and a To month
+ * and the summariser learns to clamp a chosen range and state its figures at
+ * a rate (`utils/categorySpendSummary`). The wizard is mounted by the desktop
+ * edition. Third raise of the day, each the size of the thing it names.
+ *
+ * Budgets reset to the standing rule, ~1% above measured: 3903 / 1202
+ * (+38.9 KiB raw, +1.01%; +12.7 KiB gzip, +1.07%).
  */
-const BASELINE_TOTAL_RAW_KIB = 3861.3;
-const BASELINE_TOTAL_GZIP_KIB = 1188.6;
+const BASELINE_TOTAL_RAW_KIB = 3864.1;
+const BASELINE_TOTAL_GZIP_KIB = 1189.3;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that
 // slack deliberately rather than banking it, so this is tight ON PURPOSE and
 // intended growth is expected to raise it in the commit that causes it.
-const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3900);
-const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1201);
+const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3903);
+const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1202);
 
 const isReport = process.argv.includes('--report');
 
