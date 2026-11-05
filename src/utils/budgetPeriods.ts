@@ -12,17 +12,68 @@
  * One derivation, used by every surface, is the only way those can never drift
  * apart again.
  *
+ * ── A BUDGET IS AN ALLOWANCE FOR A CYCLE, ANCHORED ON ITS START (5 Nov 2026) ─
+ *
+ * Until 5 Nov a yearly budget was measured over the CALENDAR YEAR it was read
+ * in, whatever day it was written. Budgets set on 29 Oct were compared with
+ * ten months of spending that happened before they existed, and the owner's
+ * first sight of his new budgets was most of them already overspent. The
+ * wizard had asked what each category cost and what to allow, and never asked
+ * FROM WHEN — and the page never said.
+ *
+ * Now `start_date` is the anchor for every period that repeats. A monthly,
+ * quarterly or yearly budget is measured over the cycle containing `now`,
+ * counted from its start: 1 Nov 2026 – 31 Oct 2027, then 1 Nov 2027 – …; a
+ * tax-year budgeter anchors on 6 April and gets 6 Apr – 5 Apr with no special
+ * case; a budget from the 15th runs 15th to 14th (a decision the owner made
+ * for people paid mid-month, 5 Nov 2026). Before the anchor the window is the
+ * FIRST cycle and `notStarted` says so; past an `end_date` it is the LAST and
+ * `ended` says so. The arithmetic is in whole months with the day clamped to
+ * the month's length, so an anchor on the 31st steps 31 Jan → 28 Feb → 31 Mar,
+ * the same way `plWindow` and the fortnight code already count.
+ *
+ * ── LEGACY ROWS KEEP THE CALENDAR, AND HOW THEY ARE TOLD APART ──────────────
+ *
+ * No screen ever collected a start date before this shipped: the service
+ * filled `start_date` with the day of creation. Reading that day as an anchor
+ * would move every existing budget's window on the day this deploys — a
+ * yearly budget written on 29 Oct would run 29 Oct to 28 Oct, which nobody
+ * chose. So a row written BEFORE `ANCHOR_SINCE` whose start date is its own
+ * creation day is read as having no anchor, and keeps the calendar month,
+ * quarter or year it has always had. The one way such a row gains an anchor
+ * is to be re-dated — by the wizard's "run these budgets from" or the editor's
+ * "Starts" — which writes a start that is not its creation day. A row written
+ * on or after `ANCHOR_SINCE` always carries a chosen start (the writers put
+ * one on every row), so its date is its anchor, creation day or not.
+ *
+ * Measured before shipping: every stored budget was either start = creation
+ * day (the service default) or start = 1 January (the showcase seeder), and
+ * both read exactly as before under this rule. There is no migration, in any
+ * of the three engines, and none is needed.
+ *
  * BOUNDARIES: windows are inclusive and run to the LAST MILLISECOND of the end
  * day. The old code ended a month at `new Date(y, m + 1, 0)` — local midnight —
  * which dropped the final day of every month for anyone west of the row's
  * timestamp (a date-only "2026-08-31" off the wire is UTC midnight, i.e. 01:00
  * local under BST, which is already past a midnight boundary).
+ *
+ * This module runs in the browser AND in the API (`api/_lib/mcp/server.ts`
+ * evaluates budgets for the connector), so it imports nothing that touches a
+ * window, a locale or storage. Captions that need a locale live in
+ * `utils/budgetPace`.
  */
 
 import { toDateMs } from './dateBoundary.js';
 
 /** Every period a budget can be measured over. */
 export type BudgetPeriodName = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
+
+/**
+ * The day the cycle model shipped. A budget created on or after this day
+ * always carries a chosen start; one created before it carries the service's
+ * default unless it has since been re-dated. See the header.
+ */
+export const ANCHOR_SINCE = '2026-11-06';
 
 /**
  * What a window is derived FROM. Structural on purpose: `Budget`,
@@ -33,11 +84,14 @@ export type BudgetPeriodName = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' |
  */
 export interface BudgetPeriodSource {
   period?: string | null;
-  /** Custom periods only — the stored `budgets.start_date`. */
+  /** The stored `budgets.start_date` — the anchor of every repeating period, and a custom period's first day. */
   startDate?: string | Date | null;
-  /** Custom periods only — the stored `budgets.end_date`. */
+  /** The stored `budgets.end_date` — the last day the budget runs; a custom period's last day. */
   endDate?: string | Date | null;
-  /** Fallback anchor for a fortnightly budget with no start date. */
+  /**
+   * When the row was written. Tells a chosen start from the service's old
+   * default (see the header), and anchors a fortnightly budget with no start.
+   */
   createdAt?: string | Date | null;
 }
 
@@ -50,6 +104,16 @@ export interface BudgetPeriodWindow {
   period: BudgetPeriodName;
   /** Caption for the card — "Monthly", "Fortnightly", … */
   label: string;
+  /**
+   * `now` is before the budget's first day. The window is the FIRST cycle and
+   * nothing in it has happened yet: a card shows "starts …", not "0% used".
+   */
+  notStarted: boolean;
+  /**
+   * The budget's end date has passed. The window is the LAST cycle, cut at
+   * the end date, and it is finished rather than re-measured against nothing.
+   */
+  ended: boolean;
 }
 
 const PERIOD_LABELS: Record<BudgetPeriodName, string> = {
@@ -63,6 +127,13 @@ const PERIOD_LABELS: Record<BudgetPeriodName, string> = {
 
 /** Days in a fortnight — the biweekly step. */
 const FORTNIGHT_DAYS = 14;
+
+/** How many months one cycle of each repeating period is. */
+const CYCLE_MONTHS: Record<'monthly' | 'quarterly' | 'yearly', number> = {
+  monthly: 1,
+  quarterly: 3,
+  yearly: 12,
+};
 
 /**
  * A stored period string as one of the periods we can measure.
@@ -118,6 +189,16 @@ function partsOf(date: Date): DayParts {
   return { year: date.getFullYear(), month: date.getMonth(), day: date.getDate() };
 }
 
+/** The same instant's calendar day in UTC — the day the service's old default named. */
+function utcPartsOf(date: Date): DayParts {
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth(), day: date.getUTCDate() };
+}
+
+/** "2026-11-01" for a day, so days can be compared as strings or shown. */
+function isoOf(parts: DayParts): string {
+  return `${parts.year}-${String(parts.month + 1).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+}
+
 /**
  * The calendar day a stored value names, or null when it names none.
  *
@@ -145,6 +226,109 @@ function daysBetween(from: DayParts, to: DayParts): number {
   return Math.round((toMs - fromMs) / 86_400_000);
 }
 
+/** Negative when `a` is the earlier day, zero when the same, positive when later. */
+function compareDays(a: DayParts, b: DayParts): number {
+  return daysBetween(b, a);
+}
+
+/**
+ * `months` months on from a day, the day clamped to the month it lands in: an
+ * anchor on the 31st steps 31 Jan → 28 Feb → 31 Mar, never into the month
+ * after. Same rule the P&L windows keep.
+ */
+function addMonths(parts: DayParts, months: number): DayParts {
+  const total = parts.month + months;
+  const year = parts.year + Math.floor(total / 12);
+  const month = ((total % 12) + 12) % 12;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  return { year, month, day: Math.min(parts.day, lastDay) };
+}
+
+/**
+ * The cycle of `stepMonths` months, counted from `anchor`, that contains
+ * `today` — or the first cycle when today is before the anchor.
+ *
+ * The month count alone can overshoot by one (today earlier in its month than
+ * the anchor's day), never by more and never undershoot, so one step back is
+ * the whole correction.
+ */
+function cycleContaining(anchor: DayParts, stepMonths: number, today: DayParts): { start: DayParts; next: DayParts } {
+  const monthsApart = (today.year - anchor.year) * 12 + (today.month - anchor.month);
+  let index = Math.floor(monthsApart / stepMonths);
+  if (index > 0 && compareDays(addMonths(anchor, index * stepMonths), today) > 0) index -= 1;
+  if (index < 0) index = 0;
+  return {
+    start: addMonths(anchor, index * stepMonths),
+    next: addMonths(anchor, (index + 1) * stepMonths),
+  };
+}
+
+/**
+ * The anchor a repeating budget was given, or null for a legacy row that
+ * never had one and keeps the calendar. The whole rule is in the header.
+ */
+export function resolveBudgetAnchor(budget: BudgetPeriodSource): string | null {
+  const start = toDayParts(budget.startDate);
+  if (!start) return null;
+  const createdMs = budget.createdAt === null || budget.createdAt === undefined ? NaN : toDateMs(budget.createdAt);
+  if (!Number.isFinite(createdMs)) return isoOf(start);
+  const created = new Date(createdMs);
+  if (isoOf(partsOf(created)) >= ANCHOR_SINCE) return isoOf(start);
+  const isCreationDay = compareDays(start, partsOf(created)) === 0 || compareDays(start, utcPartsOf(created)) === 0;
+  return isCreationDay ? null : isoOf(start);
+}
+
+/** A window from its day parts, with the two flags. */
+function windowOf(
+  start: DayParts,
+  end: DayParts,
+  period: BudgetPeriodName,
+  flags: { notStarted: boolean; ended: boolean } = { notStarted: false, ended: false }
+): BudgetPeriodWindow {
+  return {
+    start: startOfDay(start.year, start.month, start.day),
+    end: endOfDay(end.year, end.month, end.day),
+    period,
+    label: PERIOD_LABELS[period],
+    ...flags,
+  };
+}
+
+/** The day before a day. */
+function dayBefore(parts: DayParts): DayParts {
+  return partsOf(new Date(parts.year, parts.month, parts.day - 1));
+}
+
+/**
+ * A repeating budget with an anchor: the cycle containing today, cut at the
+ * end date if there is one, with the two flags set.
+ */
+function anchoredWindow(
+  anchorIso: string,
+  period: 'monthly' | 'quarterly' | 'yearly',
+  endDate: string | Date | null | undefined,
+  today: DayParts
+): BudgetPeriodWindow {
+  const anchor = toDayParts(anchorIso) as DayParts;
+  const step = CYCLE_MONTHS[period];
+  const last = toDayParts(endDate);
+
+  // Past the end date: the last cycle, the one the end date falls in, cut there.
+  if (last && compareDays(today, last) > 0 && compareDays(last, anchor) >= 0) {
+    const cycle = cycleContaining(anchor, step, last);
+    const cycleEnd = dayBefore(cycle.next);
+    return windowOf(cycle.start, compareDays(last, cycleEnd) < 0 ? last : cycleEnd, period, {
+      notStarted: false,
+      ended: true,
+    });
+  }
+
+  const cycle = cycleContaining(anchor, step, today);
+  const cycleEnd = dayBefore(cycle.next);
+  const end = last && compareDays(last, cycleEnd) < 0 ? last : cycleEnd;
+  return windowOf(cycle.start, end, period, { notStarted: compareDays(today, anchor) < 0, ended: false });
+}
+
 /**
  * The period a budget is currently being measured over.
  *
@@ -155,7 +339,9 @@ function daysBetween(from: DayParts, to: DayParts): number {
  *   start date (or, failing that, the day it was created). A fortnight has no
  *   calendar boundary to sit on, so the budget's own anchor is the only honest
  *   one.
- * - monthly / quarterly / yearly: the calendar month, quarter and year.
+ * - monthly / quarterly / yearly: the cycle containing `now`, counted from the
+ *   budget's anchor (see the header) — or, for a legacy row with none, the
+ *   calendar month, quarter and year.
  * - custom: the stored start/end dates. A custom budget missing them falls
  *   back to the current month — stated in the code rather than silently
  *   inherited, and still captioned "Custom" so the card never claims a period
@@ -166,18 +352,16 @@ export function getBudgetPeriodWindow(
   now: Date = new Date()
 ): BudgetPeriodWindow {
   const period = normaliseBudgetPeriod(budget.period);
-  const label = PERIOD_LABELS[period];
   const today = partsOf(now);
 
   switch (period) {
     case 'weekly': {
       const weekStartDay = today.day - now.getDay();
-      return {
-        start: startOfDay(today.year, today.month, weekStartDay),
-        end: endOfDay(today.year, today.month, weekStartDay + 6),
-        period,
-        label,
-      };
+      return windowOf(
+        { year: today.year, month: today.month, day: weekStartDay },
+        { year: today.year, month: today.month, day: weekStartDay + 6 },
+        period
+      );
     }
 
     case 'biweekly': {
@@ -190,61 +374,48 @@ export function getBudgetPeriodWindow(
       // fortnight is the answer, not a phantom one behind it.
       const index = Math.max(0, Math.floor(elapsed / FORTNIGHT_DAYS));
       const startDay = anchor.day + index * FORTNIGHT_DAYS;
-      return {
-        start: startOfDay(anchor.year, anchor.month, startDay),
-        end: endOfDay(anchor.year, anchor.month, startDay + FORTNIGHT_DAYS - 1),
+      return windowOf(
+        { year: anchor.year, month: anchor.month, day: startDay },
+        { year: anchor.year, month: anchor.month, day: startDay + FORTNIGHT_DAYS - 1 },
         period,
-        label,
-      };
+        { notStarted: elapsed < 0, ended: false }
+      );
     }
 
-    case 'quarterly': {
-      const firstMonth = Math.floor(today.month / 3) * 3;
-      return {
-        start: startOfDay(today.year, firstMonth, 1),
-        // Day 0 of the month AFTER the quarter is the quarter's last day.
-        end: endOfDay(today.year, firstMonth + 3, 0),
-        period,
-        label,
-      };
+    case 'monthly':
+    case 'quarterly':
+    case 'yearly': {
+      const anchor = resolveBudgetAnchor(budget);
+      if (anchor) return anchoredWindow(anchor, period, budget.endDate, today);
+      if (period === 'yearly') {
+        return windowOf({ year: today.year, month: 0, day: 1 }, { year: today.year, month: 11, day: 31 }, period);
+      }
+      const firstMonth = period === 'quarterly' ? Math.floor(today.month / 3) * 3 : today.month;
+      // Day 0 of the month after the cycle is the cycle's last day.
+      return windowOf(
+        { year: today.year, month: firstMonth, day: 1 },
+        partsOf(new Date(today.year, firstMonth + CYCLE_MONTHS[period], 0)),
+        period
+      );
     }
 
-    case 'yearly':
-      return {
-        start: startOfDay(today.year, 0, 1),
-        end: endOfDay(today.year, 11, 31),
-        period,
-        label,
-      };
-
-    case 'custom': {
+    case 'custom':
+    default: {
       const start = toDayParts(budget.startDate);
       if (start) {
         // No end date means "from the start date until now" — an open-ended
         // custom period, measured as far as it has run.
         const end = toDayParts(budget.endDate) ?? today;
-        return {
-          start: startOfDay(start.year, start.month, start.day),
-          end: endOfDay(end.year, end.month, end.day),
-          period,
-          label,
-        };
+        return windowOf(start, end, period, {
+          notStarted: compareDays(today, start) < 0,
+          ended: compareDays(today, end) > 0,
+        });
       }
-      return {
-        start: startOfDay(today.year, today.month, 1),
-        end: endOfDay(today.year, today.month + 1, 0),
-        period,
-        label,
-      };
+      return windowOf(
+        { year: today.year, month: today.month, day: 1 },
+        partsOf(new Date(today.year, today.month + 1, 0)),
+        period
+      );
     }
-
-    case 'monthly':
-    default:
-      return {
-        start: startOfDay(today.year, today.month, 1),
-        end: endOfDay(today.year, today.month + 1, 0),
-        period,
-        label,
-      };
   }
 }

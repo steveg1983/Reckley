@@ -72,6 +72,7 @@ import { buildCategoryNameLookup } from '../../utils/categoryNames';
 import { evaluateBudgets } from '../../utils/budgetEvaluation';
 import { foreignCurrencyAccountIds } from '../../utils/budgetSpending';
 import type { BudgetPeriodWindow } from '../../utils/budgetPeriods';
+import { describeBudgetWindow } from '../../utils/budgetPace';
 import ReportDrillModal, { type ReportDrillTarget } from '../reports/ReportDrillModal';
 import { buildAttentionItems } from '../../utils/attentionItems';
 import { loadAutoSyncPrefs } from '../../utils/bankAutoSync';
@@ -151,11 +152,6 @@ interface BudgetStatusRow {
   spent: number;
   window: BudgetPeriodWindow;
   countedRowIds: ReadonlySet<string>;
-}
-
-function describeBudgetWindow(window: BudgetPeriodWindow): string {
-  return new Intl.DateTimeFormat(getDateLocale(), { day: 'numeric', month: 'short', year: 'numeric' })
-    .formatRange(window.start, window.end);
 }
 
 export function ImprovedDashboard() {

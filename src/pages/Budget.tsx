@@ -21,6 +21,8 @@ import PageTip from '../components/PageTip';
 import EmptyState from '../components/EmptyState';
 import { foreignCurrencyAccountIds } from '../utils/budgetSpending';
 import { evaluateBudgets } from '../utils/budgetEvaluation';
+import type { BudgetPeriodName } from '../utils/budgetPeriods';
+import { budgetPace, describeBudgetWindow, paceDifference } from '../utils/budgetPace';
 import { toDecimal } from '../utils/decimal';
 import type { DecimalInstance } from '../utils/decimal';
 import { formatDecimal } from '../utils/decimal-format';
@@ -113,15 +115,24 @@ function BudgetView() {
     return evaluateBudgets(
       budgets.filter((budget): budget is Budget => budget !== null && budget !== undefined),
       { transactions, transactionSplits, categories, foreignAccountIds, now: evaluatedAt }
-    ).map(({ budget, effectiveAmount, spent, percentage, remaining, window, excludedForeignCount }) => ({
-      ...budget,
-      effectiveAmount,
-      spent: spent.toNumber(),
-      percentage,
-      remaining: remaining.toNumber(),
-      periodLabel: window.label,
-      excludedForeignCount
-    }));
+    ).map(({ budget, effectiveAmount, spent, percentage, remaining, window, excludedForeignCount }) => {
+      // How far through its window the budget is, and spending against that
+      // pace (owner, 5 Nov 2026): a year read on day five and on day 360 used
+      // to show the same bar. See utils/budgetPace.
+      const pace = budgetPace(window, evaluatedAt);
+      return {
+        ...budget,
+        effectiveAmount,
+        spent: spent.toNumber(),
+        percentage,
+        remaining: remaining.toNumber(),
+        periodLabel: window.label,
+        window,
+        pace,
+        paceDifference: paceDifference(effectiveAmount, spent, pace),
+        excludedForeignCount
+      };
+    });
   }, [budgets, transactions, transactionSplits, categories, foreignAccountIds, evaluatedAt]);
 
   const categoryNameById = useMemo(() => {
@@ -288,23 +299,69 @@ function BudgetView() {
     return 'bg-green-500';
   };
 
-  // Calculate totals with memoization
-  const { totalBudgeted, totalSpent, totalSpentValue, totalRemaining, totalRemainingValue } = useMemo(() => {
+  /**
+   * THE TOTALS, ONE SET PER RHYTHM (owner, 5 Nov 2026).
+   *
+   * Summed from exactly what the cards show — the effective amount (plan plus
+   * carry) and the same spend — so the header can never contradict them. But
+   * never ACROSS rhythms: a month's allowance added to a year's is a figure
+   * that is nobody's budget, and a page holding both used to print exactly
+   * that as "Total Budgeted". A page with one rhythm reads as it always did,
+   * captioned with the rhythm; a page with two lists each on its own line.
+   */
+  const rhythmTotals = useMemo(() => {
     const active = budgetsWithSpent.filter(b => b && b.isActive !== false);
-    // Summed from exactly what the cards show — the effective amount (plan plus
-    // carry) and the same spend — so the header can never contradict them.
-    const budgeted = active.reduce((sum, b) => sum.plus(b.effectiveAmount), toDecimal(0));
-    const spent = active.reduce((sum, b) => sum.plus(toDecimal(b.spent || 0)), toDecimal(0));
-    const remaining = budgeted.minus(spent);
-    
-    return {
-      totalBudgeted: formatCurrency(budgeted),
-      totalSpent: formatCurrency(spent),
-      totalSpentValue: spent.toNumber(),
-      totalRemaining: formatCurrency(remaining),
-      totalRemainingValue: remaining.toNumber()
-    };
-  }, [budgetsWithSpent, formatCurrency]);
+    const order: BudgetPeriodName[] = ['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly', 'custom'];
+    return order.flatMap(period => {
+      const rows = active.filter(b => b.window.period === period);
+      if (rows.length === 0) return [];
+      const budgeted = rows.reduce((sum, b) => sum.plus(b.effectiveAmount), toDecimal(0));
+      const spent = rows.reduce((sum, b) => sum.plus(toDecimal(b.spent || 0)), toDecimal(0));
+      return [{ period, label: rows[0].window.label, budgeted, spent, remaining: budgeted.minus(spent) }];
+    });
+  }, [budgetsWithSpent]);
+
+  /**
+   * One of the three summary cards' figures: the single rhythm's total, big,
+   * or one line per rhythm when the page holds more than one. `tone` colours
+   * a figure by its sign where the card asks for it (Remaining), neutral at
+   * zero — £0.00 in green reads as good news on a page with nothing set up.
+   */
+  const renderTotal = (
+    pick: (total: (typeof rhythmTotals)[number]) => DecimalInstance,
+    tone: 'plain' | 'signed' = 'plain'
+  ): React.JSX.Element => {
+    const colour = (value: DecimalInstance): string =>
+      tone === 'plain' || value.isZero()
+        ? 'text-gray-900 dark:text-white'
+        : value.greaterThan(0) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+    if (rhythmTotals.length === 1) {
+      const value = pick(rhythmTotals[0]);
+      return (
+        <>
+          <p className={`text-page font-bold ${colour(value)}`}>{formatCurrency(value)}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{rhythmTotals[0].label} budgets</p>
+        </>
+      );
+    }
+    return (
+      <dl className="grid gap-0.5">
+        {rhythmTotals.map(total => {
+          const value = pick(total);
+          return (
+            <div key={total.period} className="flex items-baseline justify-between gap-3">
+              <dt className="text-xs text-gray-500 dark:text-gray-400">{total.label}</dt>
+              <dd className={`text-card font-bold tabular-nums ${colour(value)}`}>{formatCurrency(value)}</dd>
+            </div>
+          );
+        })}
+      </dl>
+    );
+  };
+
+  // The arrows beside Spent and Remaining answer to the whole page's sign.
+  const totalSpentValue = rhythmTotals.reduce((sum, t) => sum.plus(t.spent), toDecimal(0)).toNumber();
+  const totalRemainingValue = rhythmTotals.reduce((sum, t) => sum.plus(t.remaining), toDecimal(0)).toNumber();
 
   // Check for enhanced budget alerts whenever budgets change
   useEffect(() => {
@@ -398,9 +455,7 @@ function BudgetView() {
               {/* No banknote. See the Investments summary cards — a picture of
                   money beside a money figure is the label twice. */}
               <p className="text-gray-600 dark:text-gray-400 text-body">Total Budgeted</p>
-              <p className="text-page font-bold text-gray-900 dark:text-white">
-                {isLoading ? <SkeletonText className="w-32 h-8" /> : totalBudgeted}
-              </p>
+              {isLoading ? <SkeletonText className="w-32 h-8" /> : renderTotal(total => total.budgeted)}
             </div>
           </div>
         </div>
@@ -409,9 +464,7 @@ function BudgetView() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-gray-600 dark:text-gray-400 text-body">Total Spent</p>
-              <p className="text-page font-bold text-gray-900 dark:text-white">
-                {isLoading ? <SkeletonText className="w-32 h-8" /> : totalSpent}
-              </p>
+              {isLoading ? <SkeletonText className="w-32 h-8" /> : renderTotal(total => total.spent)}
             </div>
             {/* Through the shared rule, not a copy of it: this was an
                 unconditional red falling arrow, so £0.00 spent wore a claim
@@ -428,13 +481,7 @@ function BudgetView() {
               <p className="text-gray-600 dark:text-gray-400 text-body">Total Remaining</p>
               {/* Neutral at zero: £0.00 remaining in green "reads as good news
                   on a page where nothing has been set up" (§2). */}
-              <p className={`text-page font-bold ${
-                totalRemainingValue === 0
-                  ? 'text-gray-900 dark:text-white'
-                  : totalRemainingValue > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-              }`}>
-                {isLoading ? <SkeletonText className="w-32 h-8" /> : totalRemaining}
-              </p>
+              {isLoading ? <SkeletonText className="w-32 h-8" /> : renderTotal(total => total.remaining, 'signed')}
             </div>
             {/* Sign-driven: headroom points up, overspend points down. */}
             <TrendArrow value={totalRemainingValue} size={24} />
@@ -468,8 +515,10 @@ function BudgetView() {
                 <p className="text-body text-gray-600 dark:text-gray-400">
                   {/* The budget's ACTUAL period — a weekly or quarterly budget
                       used to be captioned "Yearly" because anything that was
-                      not monthly fell through to the same branch. */}
-                  {budget.periodLabel} budget
+                      not monthly fell through to the same branch — AND the
+                      exact days it covers right now (owner, 5 Nov 2026: a card
+                      that said "Yearly" never said which year, or from when). */}
+                  {budget.periodLabel} · {describeBudgetWindow(budget.window)}
                   {budget.isActive === false && ' (Inactive)'}
                 </p>
               </div>
@@ -515,6 +564,17 @@ function BudgetView() {
             </div>
 
             <div className="space-y-3">
+              {/* A budget whose first day is still to come has no spend to
+                  draw and no percentage to claim: "0% used" would read as a
+                  budget nobody has touched, when it is one that has not begun.
+                  It says when it starts, and what it will allow. */}
+              {budget.window.notStarted ? (
+                <p className="text-body text-gray-700 dark:text-gray-200">
+                  {budget.pace.text} · {formatCurrency(budget.effectiveAmount)} for the{' '}
+                  {budget.periodLabel.toLowerCase() === 'yearly' ? 'year' : 'period'}
+                </p>
+              ) : (
+              <>
               <div className="flex justify-between text-body">
                 <span className="text-gray-600 dark:text-gray-400">Spent</span>
                 <span className="font-medium text-gray-900 dark:text-white">
@@ -550,6 +610,26 @@ function BudgetView() {
                     : `over budget by ${formatCurrency(Math.abs(budget.remaining))}`}
                 </span>
               </div>
+
+              {/* PACE: how much of the window has gone beside how much of the
+                  money has. Red only when spending runs AHEAD of the time —
+                  the one reading that needs attention; behind pace and on
+                  pace are findings, not alarms (the colour rule). A budget of
+                  nothing paces nothing, so it carries only the time gone. */}
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
+                <span>{budget.pace.text}</span>
+                {budget.effectiveAmount.greaterThan(0) && (
+                  <span className={budget.paceDifference.greaterThan(0) ? 'text-red-600 dark:text-red-400' : ''}>
+                    {budget.paceDifference.abs().lessThan(1)
+                      ? 'on pace'
+                      : budget.paceDifference.greaterThan(0)
+                        ? `${formatCurrency(budget.paceDifference)} over the pace`
+                        : `${formatCurrency(budget.paceDifference.abs())} under the pace`}
+                  </span>
+                )}
+              </div>
+              </>
+              )}
 
               {/* Named where the wrong figure is read, and by its consequence:
                   no rate is applied to another currency in this wave, so the

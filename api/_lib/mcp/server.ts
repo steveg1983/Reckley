@@ -42,6 +42,7 @@ import * as z from 'zod/v4';
 import type { Category, Transaction } from '../../../src/types/index.js';
 import { computeIncomeExpense } from '../../../src/utils/incomeExpense.js';
 import { evaluateBudgets } from '../../../src/utils/budgetEvaluation.js';
+import { getBudgetPeriodWindow } from '../../../src/utils/budgetPeriods.js';
 import { bucketByCategoryDirection } from '../../../src/utils/categoryNetting.js';
 import { expandSplitTransactions } from '../../../src/utils/transactionSplits.js';
 import { FALLBACK_BANK_DESCRIPTION, normalizePayee } from '../../../src/utils/payeeAutoCategorize.js';
@@ -1122,7 +1123,7 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
     'reckley_budget_status',
     {
       title: 'Budget status',
-      description: `Every active budget measured over its own period — the calendar month for a monthly budget, the week for a weekly one — exactly as the app's Budget page shows it: the allowance (with any rollover carried in), what has been spent, what is left or by how much it is over, and the days the period covers.`,
+      description: `Every active budget measured over its own period — the cycle counted from the budget's own start date (a monthly budget from the 1st is the calendar month; a yearly one runs twelve months from its start), the week for a weekly one — exactly as the app's Budget page shows it: the allowance (with any rollover carried in), what has been spent, what is left or by how much it is over, and the days the period covers.`,
       inputSchema: z.strictObject({
         response_format: responseFormat,
       }),
@@ -1137,10 +1138,15 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
           ? { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body }
           : { content: [{ type: 'text', text: 'No active budgets.' }] };
       }
-      // Budgets are measured over their own windows; the widest any of them
-      // can reach is the calendar year, so that is the range read.
+      // Budgets are measured over their own windows — since 5 Nov 2026 a
+      // repeating budget runs its cycle from its OWN start, so a yearly one
+      // can straddle two calendar years. The read covers the earliest start
+      // to the latest end among them, nothing wider and nothing narrower.
       const today = now();
-      const range = await port.transactionsBetween(`${today.getFullYear()}-01-01`, `${today.getFullYear()}-12-31`, AGGREGATE_ROW_CAP);
+      const windows = active.map(budget => getBudgetPeriodWindow(budget, today));
+      const earliest = windows.reduce((soFar, w) => (w.start < soFar ? w.start : soFar), windows[0].start);
+      const latest = windows.reduce((soFar, w) => (w.end > soFar ? w.end : soFar), windows[0].end);
+      const range = await port.transactionsBetween(localDay(earliest), localDay(latest), AGGREGATE_ROW_CAP);
       const currency = look.accounts.values().next().value?.currency ?? 'GBP';
       const evaluated = evaluateBudgets(active, {
         transactions: range.rows,
