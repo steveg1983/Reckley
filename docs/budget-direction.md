@@ -408,3 +408,11 @@ and `reckley_budget_status` leave finished and not‑yet‑started budgets out, 
 notification service raises nothing for either. **The wizard is untouched on
 purpose**: it writes repeating budgets from a chosen start, and an end date is a
 decision about one budget, made in its editor.
+
+**PR D (Key Budgets on the Dashboard, 7 Nov)** — the owner, after the wizard re‑run: the
+key accounts have a cog to choose the six on view; the budget card had none and showed the
+first three in list order. Now "Key Budgets" has the same cog: a picker grouped by category
+group, select all / clear all, a "No budgets are selected" state with the way back, and the
+choice in `dashboardKeyBudgets` — a portable preference whose ids a restore follows, like
+the accounts'. Nothing chosen = the first three, never written. Only budgets running today
+are listed, because only those are on the card. "View All Budgets" is always there.

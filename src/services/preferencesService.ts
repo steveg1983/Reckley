@@ -140,6 +140,7 @@ export const PORTABLE_PREFERENCE_KEYS: readonly string[] = [
   // Which accounts the owner put on his own front page, and which reports he
   // pinned beside them. Statements about HIS data, not about this screen.
   'dashboardKeyAccounts',
+  'dashboardKeyBudgets',
   'dashboardPinnedReports',
   ...periodPreferenceKeys('dashboardReports'),
   ...periodPreferenceKeys('dashboardReportsFlows'),

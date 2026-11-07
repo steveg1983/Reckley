@@ -685,6 +685,96 @@ describe('Budget Status', () => {
     expect(screen.getByTestId('budget-drill-total')).toHaveTextContent('380');
   });
 
+  /**
+   * KEY BUDGETS (owner, 7 Nov 2026): the cog the key accounts have. Nothing
+   * chosen = the first three, never written; a choice is a filter, in the
+   * stored order; "View All Budgets" is always there.
+   */
+  describe('the cog chooses which budgets the card shows', () => {
+    const budgetOn = (id: string, categoryId: string, amount: number): Record<string, unknown> => ({
+      id, categoryId, amount, period: 'monthly', isActive: true,
+      createdAt: new Date(2026, 0, 1), updatedAt: new Date(2026, 0, 1), spent: 0,
+    });
+
+    beforeEach(() => {
+      localStorage.removeItem('dashboardKeyBudgets');
+      mocks.app.categories = [
+        { id: 'grp-home', name: 'Home', type: 'expense', level: 'sub' },
+        { id: 'cat-food', name: 'Food Shopping', type: 'expense', level: 'detail', parentId: 'grp-home' },
+        { id: 'cat-fuel', name: 'Fuel', type: 'expense', level: 'detail' },
+        { id: 'cat-gifts', name: 'Gifts', type: 'expense', level: 'detail' },
+        { id: 'cat-phone', name: 'Phone', type: 'expense', level: 'detail' },
+      ] as never[];
+      mocks.app.budgets = [
+        budgetOn('b-food', 'cat-food', 500),
+        budgetOn('b-fuel', 'cat-fuel', 100),
+        budgetOn('b-gifts', 'cat-gifts', 200),
+        budgetOn('b-phone', 'cat-phone', 50),
+      ] as never[];
+    });
+
+    afterEach(() => {
+      localStorage.removeItem('dashboardKeyBudgets');
+    });
+
+    const rowNames = (): string[] =>
+      screen.getAllByTestId('budget-status-row').map(row => row.querySelector('.truncate')?.textContent ?? '');
+
+    it('shows the first three when nothing was ever chosen, and writes no choice', () => {
+      render(<ImprovedDashboard />);
+      expect(rowNames()).toEqual(['Home : Food Shopping', 'Fuel', 'Gifts']);
+      expect(screen.getByRole('heading', { level: 3, name: /Key Budgets/ })).toHaveTextContent('(3 of 4');
+      expect(localStorage.getItem('dashboardKeyBudgets')).toBeNull();
+      // The way to the rest is always there, whatever the count.
+      expect(screen.getByRole('button', { name: 'View All Budgets (4) →' })).toBeInTheDocument();
+    });
+
+    it('shows the chosen budgets in the stored order', () => {
+      localStorage.setItem('dashboardKeyBudgets', JSON.stringify(['b-phone', 'b-food']));
+      render(<ImprovedDashboard />);
+      expect(rowNames()).toEqual(['Phone', 'Home : Food Shopping']);
+      expect(screen.getByRole('heading', { level: 3, name: /Key Budgets/ })).toHaveTextContent('(2 of 4');
+    });
+
+    it('the cog opens a panel grouped by category group, and a press adds a budget to the card', () => {
+      render(<ImprovedDashboard />);
+      fireEvent.click(screen.getByLabelText('Customise displayed budgets'));
+
+      expect(screen.getByText('Select budgets to show on the dashboard:')).toBeInTheDocument();
+      expect(screen.getByText('Home')).toBeInTheDocument();
+      expect(screen.getByText('Other budgets')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /^Phone/, pressed: false }));
+
+      expect(rowNames()).toEqual(['Home : Food Shopping', 'Fuel', 'Gifts', 'Phone']);
+      expect(JSON.parse(localStorage.getItem('dashboardKeyBudgets') ?? '[]'))
+        .toEqual(['b-food', 'b-fuel', 'b-gifts', 'b-phone']);
+    });
+
+    it('clearing the choice says what it hides and offers the way back', () => {
+      render(<ImprovedDashboard />);
+      fireEvent.click(screen.getByLabelText('Customise displayed budgets'));
+      fireEvent.click(screen.getByRole('button', { name: 'Clear all budgets' }));
+
+      expect(screen.queryByTestId('budget-status-row')).not.toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { level: 3, name: 'No budgets are selected for the dashboard' })
+      ).toBeInTheDocument();
+      expect(localStorage.getItem('dashboardKeyBudgets')).toBe('[]');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show all budgets' }));
+      expect(screen.getAllByTestId('budget-status-row')).toHaveLength(4);
+    });
+
+    it('a chosen budget that is no longer running is skipped, and comes back if it does', () => {
+      localStorage.setItem('dashboardKeyBudgets', JSON.stringify(['b-gone', 'b-fuel']));
+      render(<ImprovedDashboard />);
+      expect(rowNames()).toEqual(['Fuel']);
+      // The choice is kept as stored — nothing is pruned on the owner's behalf.
+      expect(localStorage.getItem('dashboardKeyBudgets')).toBe('["b-gone","b-fuel"]');
+    });
+  });
+
   it('leaves a finished budget off the card — it has nothing to be doing (5 Nov 2026)', () => {
     mocks.app.budgets = [
       ...(mocks.app.budgets as object[]),

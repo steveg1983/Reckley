@@ -69,6 +69,7 @@ import {
 import { groupAccountsBySection } from '../../utils/accountGrouping';
 import { swapPositions, moveBySteps, previewStep } from '../../utils/reorderList';
 import { buildCategoryNameLookup } from '../../utils/categoryNames';
+import { compareText } from '../../utils/localeFormat';
 import { evaluateBudgets } from '../../utils/budgetEvaluation';
 import { foreignCurrencyAccountIds } from '../../utils/budgetSpending';
 import type { BudgetPeriodWindow } from '../../utils/budgetPeriods';
@@ -154,6 +155,9 @@ interface BudgetStatusRow {
   countedRowIds: ReadonlySet<string>;
 }
 
+/** How many budgets the card shows when the owner has never chosen any. */
+const DEFAULT_KEY_BUDGETS = 3;
+
 export function ImprovedDashboard() {
   // `customReports` comes from the context because the picker below lists them
   // INLINE in a modal body — there is no await to put a fetch in, and this used
@@ -184,6 +188,28 @@ export function ImprovedDashboard() {
   const location = useLocation();
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+  /**
+   * KEY BUDGETS (owner, 7 Nov 2026): the same cog the key accounts have.
+   * The card showed the first three budgets in list order and nothing could
+   * change that. Now the owner chooses which budgets sit on his front page;
+   * `null` means he never has, and the first three stand in — a default,
+   * never written, so a person who has not chosen is not recorded as having
+   * chosen three. The stored order is the display order, as it is for the
+   * accounts. A statement about HIS budgets, so it travels with the account
+   * (a portable preference, and its ids are followed through a restore).
+   */
+  const [showBudgetSettings, setShowBudgetSettings] = useState(false);
+  const [selectedBudgetIds, setSelectedBudgetIds] = useState<string[] | null>(() => {
+    try {
+      const stored = JSON.parse(preferences.getItem('dashboardKeyBudgets') ?? 'null');
+      if (Array.isArray(stored)) return stored.filter((id): id is string => typeof id === 'string');
+    } catch { /* fall through to the default */ }
+    return null;
+  });
+  const persistBudgetSelection = useCallback((ids: string[]) => {
+    preferences.setItem('dashboardKeyBudgets', JSON.stringify(ids));
+    setSelectedBudgetIds(ids);
+  }, []);
   const [breakdownType, setBreakdownType] = useState<'income' | 'expense' | null>(null);
   // A row in the breakdown list opens the full editor — check details, fix a
   // category — and the list re-derives live, so a re-categorised transaction
@@ -426,22 +452,81 @@ export function ImprovedDashboard() {
       countedRowIds,
     }));
 
-    const totalBudgeted = budgetStatus.reduce((sum, b) => sum.plus(toDecimal(b.amount)), toDecimal(0)).toNumber();
-    const totalSpentOnBudgets = budgetStatus.reduce((sum, b) => sum.plus(toDecimal(b.spent)), toDecimal(0)).toNumber();
-    const overallBudgetPercent = totalBudgeted > 0
-      ? toDecimal(totalSpentOnBudgets).dividedBy(toDecimal(totalBudgeted)).times(100).toNumber()
-      : 0;
-    
     return {
       netWorth,
       totalAssets,
       totalLiabilities,
       budgetStatus,
-      totalBudgeted,
-      totalSpentOnBudgets,
-      overallBudgetPercent
     };
   }, [accounts, accountBalanceMap, transactions, transactionSplits, budgets, categories, displayCurrency, valuation, valuationDayKey]);
+
+  /**
+   * The budgets the card shows, in the stored order — or the first three when
+   * nothing was ever chosen. An id that names no running budget (deleted,
+   * finished, not yet started) is simply skipped: the choice outlives the
+   * budget, and comes back if the budget does.
+   */
+  const displayedBudgets = useMemo(() => {
+    const running = metrics.budgetStatus;
+    if (selectedBudgetIds === null) return running.slice(0, DEFAULT_KEY_BUDGETS);
+    const byId = new Map(running.map(b => [b.id, b]));
+    return selectedBudgetIds
+      .map(id => byId.get(id))
+      .filter((b): b is typeof running[number] => b !== undefined);
+  }, [metrics.budgetStatus, selectedBudgetIds]);
+
+  // "% used" is asked of the budgets ON THE CARD — the question the card
+  // answers — not of every budget the page is not showing.
+  const displayedBudgetPercent = useMemo(() => {
+    const budgeted = displayedBudgets.reduce((sum, b) => sum.plus(toDecimal(b.amount)), toDecimal(0));
+    if (!budgeted.greaterThan(0)) return 0;
+    const spent = displayedBudgets.reduce((sum, b) => sum.plus(toDecimal(b.spent)), toDecimal(0));
+    return spent.dividedBy(budgeted).times(100).toNumber();
+  }, [displayedBudgets]);
+
+  /**
+   * The picker lists every running budget under its category's GROUP, A–Z,
+   * the way the Budget page orders its cards; a budget whose category has no
+   * group sits last, under its own heading, rather than first.
+   */
+  const budgetSections = useMemo(() => {
+    const running = metrics.budgetStatus;
+    const groupOf = (categoryId: string): string => {
+      const category = categories.find(c => c.id === categoryId);
+      if (!category?.parentId) return '';
+      return categories.find(c => c.id === category.parentId)?.name ?? '';
+    };
+    const groups = new Map<string, typeof running>();
+    for (const budget of running) {
+      const name = groupOf(budget.categoryId);
+      groups.set(name, [...(groups.get(name) ?? []), budget]);
+    }
+    // Under its group's heading a budget is named by its LEAF — "Food
+    // Shopping", not "Home : Food Shopping" — the path the card shows would
+    // repeat the heading on every line.
+    const leafOf = (budget: typeof running[number]): string =>
+      categories.find(c => c.id === budget.categoryId)?.name ?? budget.categoryName;
+    return [...groups.entries()]
+      .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : compareText(a, b)))
+      .map(([name, rows]) => ({
+        title: name || 'Other budgets',
+        budgets: rows
+          .map(budget => ({ id: budget.id, label: leafOf(budget), spent: budget.spent, amount: budget.amount }))
+          .sort((a, b) => compareText(a.label, b.label)),
+      }));
+  }, [metrics.budgetStatus, categories]);
+
+  const toggleBudgetSelection = (budgetId: string): void => {
+    const current = selectedBudgetIds ?? displayedBudgets.map(b => b.id);
+    persistBudgetSelection(
+      current.includes(budgetId) ? current.filter(id => id !== budgetId) : [...current, budgetId]
+    );
+  };
+  const selectAllBudgets = useCallback(
+    () => persistBudgetSelection(budgetSections.flatMap(section => section.budgets.map(b => b.id))),
+    [budgetSections, persistBudgetSelection]
+  );
+  const clearAllBudgets = useCallback(() => persistBudgetSelection([]), [persistBudgetSelection]);
 
   const openBudgetDrill = useCallback((status: BudgetStatusRow): void => {
     const rows = expandSplitTransactions(transactions, transactionSplits)
@@ -1290,23 +1375,128 @@ export function ImprovedDashboard() {
         <ReportDrillModal target={budgetDrill} onClose={() => setBudgetDrill(null)} categories={categories} />
       )}
 
-      {/* Budget Status Section - each budget over its own period, click for the rows */}
+      {/* Key Budgets — the budgets the owner chose, each over its own period,
+          click for the rows; the cog chooses them, as it does for the key
+          accounts below (owner, 7 Nov 2026). */}
       {metrics.budgetStatus.length > 0 && (
-        <section 
+        <section
           aria-labelledby="budget-status-heading"
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6" 
+          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 p-6"
           data-testid="budget-status"
         >
-          <h3 id="budget-status-heading" className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            <PieChartIcon size={24} className="text-gray-500" />
-            Budget Status
-            <span className="text-sm font-normal text-gray-500 dark:text-gray-400">
-              ({formatDecimal(metrics.overallBudgetPercent, 0)}% used)
-            </span>
-          </h3>
-          
+          <div className="flex items-center justify-between mb-4">
+            <h3 id="budget-status-heading" className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+              <PieChartIcon size={24} className="text-gray-500" />
+              Key Budgets
+              <span className="text-sm font-normal text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                ({displayedBudgets.length} of {metrics.budgetStatus.length}
+                {displayedBudgets.length > 0 && ` · ${formatDecimal(displayedBudgetPercent, 0)}% used`})
+              </span>
+            </h3>
+            <button
+              onClick={() => setShowBudgetSettings(!showBudgetSettings)}
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              aria-label="Customise displayed budgets"
+              aria-expanded={showBudgetSettings}
+            >
+              <SettingsIcon size={20} className="text-gray-500" />
+            </button>
+          </div>
+
+          {/* Budget Selection Panel — the key accounts' panel, for budgets.
+              Only budgets running today are listed, because only those are
+              on the card: a finished or future one has nothing to show. */}
+          {showBudgetSettings && (
+            <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Select budgets to show on the dashboard:
+                </p>
+                <button
+                  onClick={() => setShowBudgetSettings(false)}
+                  className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
+                  aria-label="Close budget settings"
+                >
+                  <XIcon size={16} className="text-gray-500" />
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 mb-3">
+                <button
+                  type="button"
+                  onClick={selectAllBudgets}
+                  className="px-4 py-2 min-h-[44px] sm:min-h-0 sm:py-1.5 text-sm font-medium rounded-lg bg-primary-action text-on-primary-action hover:bg-primary-action-hover transition-colors"
+                >
+                  Select all budgets
+                </button>
+                <button
+                  type="button"
+                  onClick={clearAllBudgets}
+                  className="px-4 py-2 min-h-[44px] sm:min-h-0 sm:py-1.5 text-sm font-medium rounded-lg bg-primary-action text-on-primary-action hover:bg-primary-action-hover transition-colors"
+                >
+                  Clear all budgets
+                </button>
+              </div>
+              <div className="space-y-3">
+                {budgetSections.map(section => (
+                  <div key={section.title}>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      {section.title}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      {section.budgets.map(budget => {
+                        const isSelected = displayedBudgets.some(b => b.id === budget.id);
+                        return (
+                          <button
+                            key={budget.id}
+                            type="button"
+                            onClick={() => toggleBudgetSelection(budget.id)}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors ${
+                              isSelected
+                                ? 'bg-primary/10 dark:bg-gray-600 border border-primary'
+                                : 'bg-white dark:bg-gray-600 border border-gray-200 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-550'
+                            }`}
+                            aria-pressed={isSelected ? 'true' : 'false'}
+                          >
+                            <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${
+                              isSelected
+                                ? 'bg-[#1a2332] text-white'
+                                : 'border border-gray-300 dark:border-gray-400'
+                            }`}>
+                              {isSelected && <CheckIcon size={12} />}
+                            </div>
+                            <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                              {budget.label}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto whitespace-nowrap">
+                              {formatCurrencyWithSymbol(budget.spent)} / {formatCurrencyWithSymbol(budget.amount)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-3">
-            {metrics.budgetStatus.slice(0, 3).map(budget => (
+            {displayedBudgets.length === 0 && (
+              /* A SELECTION IS A FILTER: the budgets exist, none is chosen
+                 for this card — say how many are held back and offer the
+                 one control that shows them (the accounts' rule, below). */
+              <div role="status" aria-live="polite">
+                <FilteredEmptyState
+                  title="No budgets are selected for the dashboard"
+                  hiddenCount={metrics.budgetStatus.length}
+                  scope="of your budgets"
+                  filters={['the dashboard’s budget selection']}
+                  onClear={selectAllBudgets}
+                  clearLabel="Show all budgets"
+                />
+              </div>
+            )}
+            {displayedBudgets.map(budget => (
               /* The whole row is the button: name, period, figures and bar
                  together are one claim, and the click asks for its evidence.
                  Spans inside, because a button holds phrasing content only. */
@@ -1362,18 +1552,19 @@ export function ImprovedDashboard() {
               </button>
             ))}
 
-            {metrics.budgetStatus.length > 3 && (
-              <button
-                onClick={() => navigate(preserveDemoParam('/budget', location.search))}
-                // It takes you to another screen, and in-app navigation has had
-                // its own answer for months: the brand ink, which index.css
-                // gives a dark counterpart (stock-blue ruling, 28 Aug 2026).
-                // The hover ground carries the feedback and is a neutral.
-                className="w-full justify-center mt-2 py-2 text-primary hover:text-secondary text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                View All Budgets ({metrics.budgetStatus.length}) →
-              </button>
-            )}
+            {/* Always offered (owner, 7 Nov 2026): the card is a chosen few,
+                and the page with all of them is one press away whatever the
+                choice. */}
+            <button
+              onClick={() => navigate(preserveDemoParam('/budget', location.search))}
+              // It takes you to another screen, and in-app navigation has had
+              // its own answer for months: the brand ink, which index.css
+              // gives a dark counterpart (stock-blue ruling, 28 Aug 2026).
+              // The hover ground carries the feedback and is a neutral.
+              className="w-full justify-center mt-2 py-2 text-primary hover:text-secondary text-sm hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              View All Budgets ({metrics.budgetStatus.length}) →
+            </button>
           </div>
         </section>
       )}
