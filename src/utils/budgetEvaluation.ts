@@ -151,12 +151,73 @@ function keptUnder(mode: BudgetRolloverMode, remainder: DecimalInstance): Decima
   }
 }
 
+/** One completed cycle of a budget, as the history shows it (7 Nov 2026, the owner's "7"). */
+export interface BudgetCycleFigures {
+  /** The cycle's days. */
+  window: BudgetPeriodWindow;
+  /** What the cycle before handed it, SIGNED, under the mode; zero in the first cycle. */
+  carriedIn: DecimalInstance;
+  /** The plan plus the carry. */
+  allowance: DecimalInstance;
+  /** Net spend in the cycle. */
+  spent: DecimalInstance;
+  /** Allowance less spend, SIGNED. */
+  remaining: DecimalInstance;
+  /** What it handed to the next cycle, SIGNED, under the mode. */
+  carriedOut: DecimalInstance;
+}
+
 /**
- * The carry into `window`, and the cycle it comes out of (see the header).
+ * Every cycle before `window`, oldest first, each with its figures — the
+ * walk the carry comes out of, and what the history shows (see the header).
  *
  * The rows of every earlier cycle are taken in ONE pass over the prepared
  * set, so each cycle's own sum walks only the budget's rows; the cycles are
  * then summed oldest first, each handing what it kept to the next.
+ */
+function cyclesBefore(
+  budget: Budget,
+  categoryId: string,
+  window: BudgetPeriodWindow,
+  mode: BudgetRolloverMode,
+  prepared: DatedDecimalTransaction[],
+  filter: BudgetSpendingFilter
+): BudgetCycleFigures[] {
+  const windows: BudgetPeriodWindow[] = [];
+  for (
+    let cycle = previousBudgetWindow(budget, window);
+    cycle && windows.length < MAX_CARRY_CYCLES;
+    cycle = previousBudgetWindow(budget, cycle)
+  ) {
+    windows.push(cycle);
+  }
+  if (windows.length === 0) return [];
+  windows.reverse();
+
+  const earlier = calculateBudgetSpendingBreakdown(
+    { categoryId },
+    prepared,
+    windows[0].start,
+    windows[windows.length - 1].end,
+    filter
+  ).counted;
+  const plan = toDecimal(budget.amount);
+  let carry = toDecimal(0);
+  return windows.map(cycle => {
+    const { spent } = calculateBudgetSpendingBreakdown({ categoryId }, earlier, cycle.start, cycle.end, {
+      categoryIds: filter.categoryIds,
+    });
+    const carriedIn = carry;
+    const allowance = plan.plus(carriedIn);
+    const remaining = allowance.minus(spent);
+    carry = keptUnder(mode, remaining);
+    return { window: cycle, carriedIn, allowance, spent, remaining, carriedOut: carry };
+  });
+}
+
+/**
+ * The carry into `window`, and the cycle it comes out of (see the header).
+ * Under 'none' nothing is carried, so the walk is not made.
  */
 function carryInto(
   budget: Budget,
@@ -168,33 +229,29 @@ function carryInto(
   const mode = normaliseRolloverMode(budget.rolloverMode);
   const carriedFrom = previousBudgetWindow(budget, window);
   if (mode === 'none' || !carriedFrom) return { mode, carriedIn: toDecimal(0), carriedFrom };
+  const cycles = cyclesBefore(budget, categoryId, window, mode, prepared, filter);
+  const last = cycles[cycles.length - 1];
+  return { mode, carriedIn: last ? last.carriedOut : toDecimal(0), carriedFrom };
+}
 
-  const cycles: BudgetPeriodWindow[] = [];
-  for (
-    let cycle: BudgetPeriodWindow | null = carriedFrom;
-    cycle && cycles.length < MAX_CARRY_CYCLES;
-    cycle = previousBudgetWindow(budget, cycle)
-  ) {
-    cycles.push(cycle);
-  }
-  cycles.reverse();
-
-  const earlier = calculateBudgetSpendingBreakdown(
-    { categoryId },
-    prepared,
-    cycles[0].start,
-    carriedFrom.end,
-    filter
-  ).counted;
-  const plan = toDecimal(budget.amount);
-  let carry = toDecimal(0);
-  for (const cycle of cycles) {
-    const { spent } = calculateBudgetSpendingBreakdown({ categoryId }, earlier, cycle.start, cycle.end, {
-      categoryIds: filter.categoryIds,
-    });
-    carry = keptUnder(mode, plan.plus(carry).minus(spent));
-  }
-  return { mode, carriedIn: carry, carriedFrom };
+/**
+ * ONE budget's completed cycles, oldest first, each with its figures — "how
+ * has this budget run" (the owner's "7", 7 Nov 2026) — plus the one being
+ * measured now. Called when a history is opened, not for every card: the
+ * walk under 'none' is a cost the card itself never pays.
+ */
+export function evaluateBudgetHistory(
+  budget: Budget,
+  input: EvaluateBudgetsInput
+): { current: EvaluatedBudget; past: BudgetCycleFigures[] } {
+  const [current] = evaluateBudgets([budget], input);
+  const prepared = prepareBudgetTransactions(input.transactions, input.transactionSplits ?? []);
+  const categoryIds = collectBudgetCategoryIds(current.categoryId, buildCategoryChildIndex(input.categories));
+  const past = cyclesBefore(budget, current.categoryId, current.window, current.rolloverMode, prepared, {
+    categoryIds: categoryIds.size > 1 ? categoryIds : undefined,
+    excludeAccountIds: input.foreignAccountIds,
+  });
+  return { current, past };
 }
 
 /**
