@@ -4,8 +4,9 @@ import { Modal, ModalBody, ModalFooter } from './common/Modal';
 import MoneyInput from './common/MoneyInput';
 import { useModalForm } from '../hooks/useModalForm';
 import { parseMoneyInput } from '../utils/decimal';
-import { getBudgetPeriodWindow, resolveBudgetAnchor, type BudgetRepeat } from '../utils/budgetPeriods';
+import { getBudgetPeriodWindow, type BudgetRepeat } from '../utils/budgetPeriods';
 import { describeBudgetDay, describeBudgetWindow } from '../utils/budgetPace';
+import { budgetSetDates, describeSetDay } from '../utils/budgetWizardPlan';
 import { compareText } from '../utils/localeFormat';
 import CategorySelector from './CategorySelector';
 import type { Budget, BudgetPaceShape, BudgetRepeatUnit, BudgetRolloverMode, Category } from '../types';
@@ -14,17 +15,16 @@ const isoDay = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /**
- * The day a budget's cycles count from, as this form first shows it.
- *
- * A new budget starts on the 1st of this month (the owner's default, 5 Nov
- * 2026). An existing one shows its anchor — or, for a legacy row that still
- * keeps the calendar, the first day of the calendar period it is being
- * measured over right now, which is the truth of where it runs from and the
- * day a save would make explicit. See utils/budgetPeriods.
+ * ONE FROM DATE AND ONE TO DATE (owner, 7 Nov 2026 evening): a repeating
+ * budget's dates are the SET's, read off the other budgets and written on
+ * every save, so a card cannot drift to a year of its own — the wizard's
+ * "Run these budgets from" is where they change. This form shows them and
+ * asks for dates only on a one-off, which is nothing but its two days. See
+ * utils/budgetWizardPlan, `budgetSetDates`.
  */
-function seededStart(budget: Budget | undefined, now: Date): string {
-  if (!budget) return isoDay(new Date(now.getFullYear(), now.getMonth(), 1));
-  return resolveBudgetAnchor(budget) ?? isoDay(getBudgetPeriodWindow(budget, now).start);
+function seededOneOffStart(budget: Budget | undefined, now: Date): string {
+  if (budget?.startDate) return isoDay(getBudgetPeriodWindow(budget, now).start);
+  return isoDay(new Date(now.getFullYear(), now.getMonth(), 1));
 }
 
 interface BudgetModalProps {
@@ -244,7 +244,9 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
     [budget?.categoryId, resolveCategoryId]
   );
   const openedAt = useMemo(() => new Date(), []);
-  const seededStartDate = useMemo(() => seededStart(budget, openedAt), [budget, openedAt]);
+  /** The dates every repeating budget shares — what this form shows, and writes, for one. */
+  const setDates = useMemo(() => budgetSetDates(budgets, openedAt), [budgets, openedAt]);
+  const seededStartDate = useMemo(() => seededOneOffStart(budget, openedAt), [budget, openedAt]);
 
   const { formData, updateField, handleSubmit, setFormData, errors, isSubmitting } = useModalForm<FormData>(
     {
@@ -284,12 +286,12 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
           isActive: data.isActive,
           createdAt: budget?.createdAt || now,
           updatedAt: now,
-          // A weekly budget has no anchor to write; every other period's
-          // cycles count from this day.
-          ...(data.period === 'weekly' ? {} : { startDate: data.startDate }),
-          // The day it stops, or null: an end date cleared here must clear the
-          // stored one, and `undefined` would leave it in place.
-          endDate: data.endDate || null
+          // The SET's dates on a repeating budget — written on every save,
+          // which is what heals a drifted row — and its own two days on a
+          // one-off. A weekly budget has no anchor to write, only the end.
+          // null, not undefined: an end cleared must clear the stored one.
+          ...(data.period === 'weekly' ? {} : { startDate: data.period === 'custom' ? data.startDate : setDates.startDate }),
+          endDate: data.period === 'custom' ? data.endDate || null : setDates.endDate
         };
 
         // Awaited: a limit that failed to save must keep the modal open with
@@ -374,7 +376,7 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
       setDatesError('A one-off budget needs the day it starts and the day it ends.');
       return;
     }
-    if (formData.period !== 'weekly' && formData.endDate && formData.endDate < formData.startDate) {
+    if (formData.period === 'custom' && formData.endDate && formData.endDate < formData.startDate) {
       e.preventDefault();
       setDatesError('Ends is before Starts.');
       return;
@@ -402,14 +404,17 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
     }
   }, [budget, setFormData, seededCategoryId, seededStartDate]);
 
+  // The days the sentence describes: a one-off's own, a repeating budget's the set's.
+  const effectiveStart = formData.period === 'custom' ? formData.startDate : setDates.startDate;
+  const effectiveEnd = formData.period === 'custom' ? formData.endDate : setDates.endDate ?? '';
   const choice = useMemo(
     () => describeChoice(
       formData.period,
-      formData.startDate,
-      formData.endDate,
+      effectiveStart,
+      effectiveEnd,
       repeatOf(formData.period, formData.repeatCount, formData.repeatUnit)
     ),
-    [formData.period, formData.startDate, formData.endDate, formData.repeatCount, formData.repeatUnit]
+    [formData.period, effectiveStart, effectiveEnd, formData.repeatCount, formData.repeatUnit]
   );
 
 
@@ -528,11 +533,27 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
             )}
           </div>
 
-          {/* STARTS — the day the cycles count from (owner, 5 Nov 2026). A
-              yearly budget from 6 April is a tax year; a monthly one from the
-              15th runs 15th to 14th. Weekly has no anchor, so no field. A
-              one-off's Starts is simply its first day. */}
-          {formData.period !== 'weekly' && (
+          {/* THE SET'S DATES (owner, 7 Nov 2026: "one from and one to date").
+              A repeating budget runs with every other one, from the day the
+              wizard chose and until the day it chose, and this form only
+              says so — the single place to change them is "Set up budgets".
+              A weekly budget shares the end alone. */}
+          {formData.period !== 'custom' && (
+            <p className="text-xs text-gray-700 dark:text-gray-200" data-testid="budget-set-dates">
+              {formData.period === 'weekly'
+                ? (setDates.endDate
+                    ? `Runs with your other budgets until ${describeSetDay(setDates.endDate)}.`
+                    : 'Runs with your other budgets, week by week.')
+                : `Runs with your other budgets from ${describeSetDay(setDates.startDate)}${
+                    setDates.endDate ? ` until ${describeSetDay(setDates.endDate)}` : ''
+                  }.`}{' '}
+              To change that for all of them, use Set up budgets.
+            </p>
+          )}
+
+          {/* STARTS — a one-off's first day (owner, 5 Nov 2026). The only
+              period with a day of its own: a holiday is not the budget year. */}
+          {formData.period === 'custom' && (
             <div>
               <label htmlFor="budget-start" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Starts
@@ -548,15 +569,6 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
                 }}
                 className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
               />
-              {formData.period !== 'custom' && (
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {formData.period === 'monthly'
-                    ? 'A budget from the 15th runs 15th to 14th.'
-                    : formData.period === 'every'
-                      ? 'The intervals count from this day.'
-                      : 'A budget from 6 April runs with the tax year.'}
-                </p>
-              )}
             </div>
           )}
 
@@ -586,41 +598,40 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
             </p>
           </div>
 
-          {/* ENDS — the day the budget stops (owner, 5 Nov 2026: end dates and
-              one-off budgets). Optional for a repeating period: blank means it
-              keeps running, and every period honours a stated one (see
-              utils/budgetPeriods). Required for a one-off, which is nothing
-              but its two days. */}
-          <div>
-            <label htmlFor="budget-end" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Ends
-            </label>
-            {/* No native `required` or `min`: the browser's bubble would say
-                "fill out this field" where the form can say what a one-off
-                needs, and "must be on or after" where it can name the two
-                fields. The checks in onFormSubmit are the whole guard. */}
-            <input
-              id="budget-end"
-              type="date"
-              value={formData.endDate}
-              onChange={(e) => {
-                setDatesError('');
-                updateField('endDate', e.target.value);
-              }}
-              className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
-            />
-            {datesError ? (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
-                {datesError}
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {formData.period === 'custom'
-                  ? 'A one-off budget runs once, from Starts to Ends, and is then finished.'
-                  : 'Optional — leave blank to keep the budget running.'}
-              </p>
-            )}
-          </div>
+          {/* ENDS — a one-off's last day (owner, 5 Nov 2026: end dates and
+              one-off budgets). Required: a one-off is nothing but its two
+              days. A repeating budget's end is the set's (7 Nov 2026). */}
+          {formData.period === 'custom' && (
+            <div>
+              <label htmlFor="budget-end" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Ends
+              </label>
+              {/* No native `required` or `min`: the browser's bubble would say
+                  "fill out this field" where the form can say what a one-off
+                  needs, and "must be on or after" where it can name the two
+                  fields. The checks in onFormSubmit are the whole guard. */}
+              <input
+                id="budget-end"
+                type="date"
+                value={formData.endDate}
+                onChange={(e) => {
+                  setDatesError('');
+                  updateField('endDate', e.target.value);
+                }}
+                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
+              />
+              {!datesError && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  A one-off budget runs once, from Starts to Ends, and is then finished.
+                </p>
+              )}
+            </div>
+          )}
+          {datesError && (
+            <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+              {datesError}
+            </p>
+          )}
 
           {/* What the days add up to, said once the form can say it. */}
           {choice && (

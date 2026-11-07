@@ -16,6 +16,7 @@ import {
   amountInMode,
   budgetHistoryWindow,
   budgetPeriodSuffix,
+  budgetSetDates,
   describeAnchor,
   describePaidOnce,
   runFromDate,
@@ -799,7 +800,7 @@ describe('planBudgetWrites — the chosen start', () => {
     expect(plan.startDate).toBe('2026-11-01');
   });
 
-  it('offers to move each budget left alone that runs from another day, naming where it runs from', () => {
+  it('moves each budget left alone that runs from another day, naming where it runs from', () => {
     const rows = rowsFor([
       fromJanuary({ id: 'b-1', categoryId: 'det-shop', amount: 120 }),
       // No start ever chosen: a legacy row that keeps the calendar month.
@@ -807,7 +808,7 @@ describe('planBudgetWrites — the chosen start', () => {
     ]);
     const plan = planBudgetWrites(rows, {}, 'monthly', { startDate: '2026-11-01' });
     expect(plan.upserts).toHaveLength(0);
-    expect(plan.redatable.map(r => [r.budgetId, r.categoryName, r.from]).sort()).toEqual([
+    expect(plan.redated.map(r => [r.budgetId, r.categoryName, r.from]).sort()).toEqual([
       ['b-1', 'Food Shopping', '1 Jan 2026'],
       ['b-2', 'Dining Out', 'the calendar month'],
     ]);
@@ -818,35 +819,104 @@ describe('planBudgetWrites — the chosen start', () => {
     expect(describeAnchor({ anchor: '2027-04-06', period: 'yearly' })).toBe('6 Apr 2027');
   });
 
-  it('does not offer one that already runs from the chosen day', () => {
+  it('leaves one that already runs from the chosen day, with the same end, alone', () => {
     const rows = rowsFor([fromJanuary({ id: 'b-1', categoryId: 'det-shop', amount: 120, startDate: '2026-11-01' })]);
     const plan = planBudgetWrites(rows, {}, 'monthly', { startDate: '2026-11-01' });
-    expect(plan.redatable).toEqual([]);
+    expect(plan.redated).toEqual([]);
   });
 
-  it('re-typing the stored figure keeps the row out of the writes but in the offer', () => {
+  it('re-typing the stored figure keeps the row out of the writes but still moves it', () => {
     const rows = rowsFor([budget({ id: 'b-1', categoryId: 'det-shop', amount: 120 })]);
     const plan = planBudgetWrites(rows, typedIn('monthly', { 'det-shop': '120' }), 'monthly', { startDate: '2026-11-01' });
     expect(plan.upserts).toHaveLength(0);
-    expect(plan.redatable.map(r => r.budgetId)).toEqual(['b-1']);
+    expect(plan.redated.map(r => r.budgetId)).toEqual(['b-1']);
   });
 
-  it('a removal is not offered a re-date, and a changed figure is dated in its own write', () => {
+  it('a removal is not re-dated, and a changed figure is dated in its own write', () => {
     const rows = rowsFor([
       budget({ id: 'b-1', categoryId: 'det-shop', amount: 120 }),
       budget({ id: 'b-2', categoryId: 'det-dining', amount: 60 }),
     ]);
     const plan = planBudgetWrites(rows, typedIn('monthly', { 'det-shop': '', 'det-dining': '65' }), 'monthly', { startDate: '2026-11-01' });
     expect(plan.removals.map(r => r.budgetId)).toEqual(['b-1']);
-    expect(plan.upserts.map(u => [u.budgetId, u.startDate])).toEqual([['b-2', '2026-11-01']]);
-    expect(plan.redatable).toEqual([]);
+    expect(plan.upserts.map(u => [u.budgetId, u.startDate, u.endDate])).toEqual([['b-2', '2026-11-01', null]]);
+    expect(plan.redated).toEqual([]);
   });
 
-  it('with no day chosen there is nothing to offer and nothing is dated', () => {
+  it('with no day chosen nothing is moved and nothing is dated', () => {
     const rows = rowsFor([budget({ id: 'b-1', categoryId: 'det-shop', amount: 120 })]);
     const plan = planBudgetWrites(rows, typedIn('monthly', { 'det-dining': '50' }), 'monthly');
     expect(plan.startDate).toBeNull();
-    expect(plan.redatable).toEqual([]);
+    expect(plan.redated).toEqual([]);
     expect(plan.upserts[0].startDate).toBeUndefined();
+  });
+
+  /**
+   * ONE FROM DATE AND ONE TO DATE (owner, 7 Nov 2026 evening): the dates
+   * belong to the set. An "until" goes on every row with the start; a
+   * budget whose end differs is moved for that alone; a one-off keeps its
+   * own days; a weekly budget shares the end only.
+   */
+  it('an until goes on every row written, and a differing end alone moves a budget', () => {
+    const rows = rowsFor([
+      fromJanuary({ id: 'b-1', categoryId: 'det-shop', amount: 120, startDate: '2026-11-01' }),
+      fromJanuary({ id: 'b-2', categoryId: 'det-dining', amount: 60, startDate: '2026-11-01', endDate: '2027-06-30' }),
+    ]);
+    const plan = planBudgetWrites(rows, typedIn('monthly', { 'det-energy': '80' }), 'monthly', { startDate: '2026-11-01', endDate: '2027-10-31' });
+    expect(plan.endDate).toBe('2027-10-31');
+    expect(plan.upserts.map(u => [u.categoryId, u.startDate, u.endDate])).toEqual([['det-energy', '2026-11-01', '2027-10-31']]);
+    expect(plan.redated.map(r => r.budgetId).sort()).toEqual(['b-1', 'b-2']);
+  });
+
+  it('a one-off keeps its own days; a weekly budget is moved for its end alone', () => {
+    const rows = rowsFor([
+      budget({ id: 'b-once', categoryId: 'det-shop', amount: 300, period: 'custom', startDate: '2026-12-01', endDate: '2027-01-31', createdAt: new Date(2026, 10, 7) }),
+      budget({ id: 'b-week', categoryId: 'det-dining', amount: 40, period: 'weekly', startDate: '2026-11-07', createdAt: new Date(2026, 10, 7) }),
+    ]);
+    const kept = planBudgetWrites(rows, {}, 'monthly', { startDate: '2026-11-01' });
+    expect(kept.redated).toEqual([]);
+    const ended = planBudgetWrites(rows, {}, 'monthly', { startDate: '2026-11-01', endDate: '2027-10-31' });
+    expect(ended.redated.map(r => r.budgetId)).toEqual(['b-week']);
+  });
+});
+
+describe('budgetSetDates — the dates every repeating budget shares', () => {
+  const at = (iso: string, over: Partial<Budget> & { id: string; categoryId: string }): Budget =>
+    budget({ startDate: iso, createdAt: new Date(2026, 10, 7), updatedAt: new Date(2026, 10, 7), ...over });
+
+  it('with no budgets, the 1st of this month and no end', () => {
+    const now = new Date(2026, 10, 7);
+    expect(budgetSetDates([], now)).toEqual({ startDate: '2026-11-01', endDate: null });
+  });
+
+  it('reads the start most budgets run from and the end most have, a legacy row having no say', () => {
+    const set = budgetSetDates([
+      at('2026-11-01', { id: 'a', categoryId: 'det-shop', endDate: '2027-10-31' }),
+      at('2026-11-01', { id: 'b', categoryId: 'det-dining', endDate: '2027-10-31' }),
+      at('2026-12-01', { id: 'c', categoryId: 'det-energy', endDate: '2027-10-31' }),
+      // Written before the model, start = creation day: keeps the calendar, votes for nothing.
+      budget({ id: 'd', categoryId: 'det-quiet', startDate: '2026-08-20', createdAt: new Date('2026-08-20T09:00:00.000Z') }),
+    ], new Date(2026, 10, 7));
+    expect(set).toEqual({ startDate: '2026-11-01', endDate: '2027-10-31' });
+  });
+
+  it('a one-off and a paused budget have no say; a weekly one votes on the end alone', () => {
+    const set = budgetSetDates([
+      at('2026-12-01', { id: 'once', categoryId: 'det-shop', period: 'custom', endDate: '2027-01-31' }),
+      at('2026-12-01', { id: 'paused', categoryId: 'det-dining', isActive: false }),
+      at('2026-11-07', { id: 'week', categoryId: 'det-energy', period: 'weekly', endDate: '2027-06-30' }),
+      at('2026-11-01', { id: 'month', categoryId: 'det-quiet' }),
+    ], new Date(2026, 10, 7));
+    expect(set.startDate).toBe('2026-11-01');
+    // One vote each for an end and for none: the most recently edited wins the tie.
+    expect(['2027-06-30', null]).toContain(set.endDate);
+  });
+
+  it('the most recently edited budget breaks a tie', () => {
+    const set = budgetSetDates([
+      at('2026-11-01', { id: 'old', categoryId: 'det-shop', updatedAt: new Date(2026, 10, 1) }),
+      at('2026-12-01', { id: 'new', categoryId: 'det-dining', updatedAt: new Date(2026, 10, 7) }),
+    ], new Date(2026, 10, 7));
+    expect(set.startDate).toBe('2026-12-01');
   });
 });

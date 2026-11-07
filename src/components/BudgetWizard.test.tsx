@@ -950,7 +950,7 @@ describe('what it writes', () => {
     reviewAndSave();
 
     await waitFor(() => expect(updateBudget).toHaveBeenCalledTimes(1));
-    expect(updateBudget).toHaveBeenCalledWith('b-1', { amount: 95, period: 'monthly', startDate: firstOfThisMonth() });
+    expect(updateBudget).toHaveBeenCalledWith('b-1', { amount: 95, period: 'monthly', startDate: firstOfThisMonth(), endDate: null });
     expect(addBudget).not.toHaveBeenCalled();
   });
 
@@ -1051,48 +1051,59 @@ describe('step 3 — run these budgets from', () => {
     expect(addBudget).toHaveBeenCalledWith(expect.objectContaining({ startDate: '2027-07-15' }));
   });
 
-  it('leaves the budgets it is not changing where they run from, unless told to move them', async () => {
+  /**
+   * ONE FROM DATE AND ONE TO DATE (owner, 7 Nov 2026 evening): the dates
+   * belong to the set. The budgets this save is not changing MOVE to them —
+   * said with a count and where they run from today, never offered — and
+   * an "until" goes on every row.
+   */
+  it('moves the budgets it is not changing to the chosen start, amounts untouched, and says so', async () => {
     renderWizard([budgetOf({ id: 'b-1', categoryId: 'det-dining', amount: 60 })]);
     chooseMonthly();
     fireEvent.change(boxFor('Food Shopping'), { target: { value: '90' } });
     review();
 
-    const offer = screen.getByRole('checkbox', { name: /Also move the 1 budget I'm not changing/ });
-    expect(offer).not.toBeChecked();
-    // Where it runs from today is named, so the move is checkable.
-    expect(offer).toHaveAccessibleName(expect.stringContaining('It runs from the calendar month today'));
-    save();
-
-    await waitFor(() => expect(addBudget).toHaveBeenCalledTimes(1));
-    expect(updateBudget).not.toHaveBeenCalled();
-  });
-
-  it('…and moves them, amounts untouched, once the offer is taken', async () => {
-    renderWizard([budgetOf({ id: 'b-1', categoryId: 'det-dining', amount: 60 })]);
-    chooseMonthly();
-    fireEvent.change(boxFor('Food Shopping'), { target: { value: '90' } });
-    review();
-    fireEvent.click(screen.getByRole('checkbox', { name: /Also move the 1 budget/ }));
-
+    expect(screen.queryByRole('checkbox', { name: /Also move/ })).not.toBeInTheDocument();
+    expect(screen.getByTestId('redate-notice')).toHaveTextContent(
+      'The 1 budget not being changed moves to these dates too — it runs from the calendar month today; the amounts stay as they are.'
+    );
     const row = screen.getByText('Budgets to re-date').closest('div') as HTMLElement;
     expect(within(row).getByText('1')).toBeInTheDocument();
     save();
 
-    await waitFor(() => expect(updateBudget).toHaveBeenCalledWith('b-1', { startDate: firstOfThisMonth() }));
+    await waitFor(() => expect(updateBudget).toHaveBeenCalledWith('b-1', { startDate: firstOfThisMonth(), endDate: null }));
+    expect(addBudget).toHaveBeenCalledWith(expect.objectContaining({ startDate: firstOfThisMonth(), endDate: null }));
     expect(toast.showSuccess).toHaveBeenCalledWith('2 budgets saved.', 'Budgets updated');
   });
 
-  it('re-dating alone is a save: nothing typed, the offer taken', async () => {
+  it('re-dating alone is a save: nothing typed, a budget that runs from another day', async () => {
     renderWizard([budgetOf({ id: 'b-1', categoryId: 'det-dining', amount: 60 })]);
     chooseMonthly();
     review();
 
-    expect(screen.getByRole('button', { name: 'Save budgets' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('checkbox', { name: /Also move the 1 budget/ }));
     expect(screen.getByRole('button', { name: 'Save budgets' })).toBeEnabled();
     save();
 
-    await waitFor(() => expect(updateBudget).toHaveBeenCalledWith('b-1', { startDate: firstOfThisMonth() }));
+    await waitFor(() => expect(updateBudget).toHaveBeenCalledWith('b-1', { startDate: firstOfThisMonth(), endDate: null }));
     expect(addBudget).not.toHaveBeenCalled();
+  });
+
+  it('an until goes on every row, and one before the start will not save', async () => {
+    renderWizard([budgetOf({ id: 'b-1', categoryId: 'det-dining', amount: 60, startDate: firstOfThisMonth(), createdAt: new Date() })]);
+    chooseMonthly();
+    fireEvent.change(boxFor('Food Shopping'), { target: { value: '90' } });
+    review();
+
+    fireEvent.change(screen.getByLabelText('The day the budgets stop'), { target: { value: '2020-01-01' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('Until is before the day the budgets run from.');
+    expect(screen.getByRole('button', { name: 'Save budgets' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('The day the budgets stop'), { target: { value: '2099-12-31' } });
+    expect(screen.getByRole('button', { name: 'Save budgets' })).toBeEnabled();
+    save();
+
+    await waitFor(() => expect(addBudget).toHaveBeenCalledWith(expect.objectContaining({ startDate: firstOfThisMonth(), endDate: '2099-12-31' })));
+    // The dining budget already ran from the chosen day; the new end alone moves it.
+    expect(updateBudget).toHaveBeenCalledWith('b-1', { startDate: firstOfThisMonth(), endDate: '2099-12-31' });
   });
 });
