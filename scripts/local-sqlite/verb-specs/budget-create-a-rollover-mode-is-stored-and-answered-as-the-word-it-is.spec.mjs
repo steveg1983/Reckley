@@ -45,7 +45,7 @@ export default {
 
   state: [
     budgetsOwnedBy(USER, '1'),
-    budgetShape(NEW, 'Groceries:400.00:monthly:c0000000-0000-0000-0000-000000000003:2026-11-01:-:0.00:both:80.00:active:-'),
+    budgetShape(NEW, 'Groceries:400.00:monthly:c0000000-0000-0000-0000-000000000003:2026-11-01:-:0.00:both:even:80.00:active:-'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

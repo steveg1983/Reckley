@@ -54,7 +54,7 @@ import { storageAdapter, STORAGE_KEYS } from '../storageAdapter';
 import { createScopedLogger } from '../../loggers/scopedLogger';
 import { getDefaultCategories } from '../../data/defaultCategories';
 import { parseReportComponents, parseReportFilters } from '../reports/document';
-import { normaliseRolloverMode } from '../../utils/budgetPeriods';
+import { normalisePaceShape, normaliseRolloverMode } from '../../utils/budgetPeriods';
 import type {
   ForecastAdjustment,
   Budget,
@@ -97,6 +97,7 @@ const budgetFromDb = (row: Row): Budget => ({
   endDate: str(row.end_date),
   // The mode is one of four by CHECK; the carry itself is derived, never a column.
   rolloverMode: normaliseRolloverMode(row.rollover_mode),
+  paceShape: normalisePaceShape(row.pace_shape),
   alertThreshold: typeof row.alert_threshold === 'number' ? row.alert_threshold : undefined,
   notes: str(row.notes)
 });
@@ -117,6 +118,7 @@ const budgetToDb = (b: Partial<Budget>, userId?: string): Row => {
   if (b.startDate !== undefined) row.start_date = b.startDate;
   if (b.endDate !== undefined) row.end_date = b.endDate;
   if (b.rolloverMode !== undefined) row.rollover_mode = b.rolloverMode;
+  if (b.paceShape !== undefined) row.pace_shape = b.paceShape;
   if (b.alertThreshold !== undefined) row.alert_threshold = b.alertThreshold;
   if (b.notes !== undefined) row.notes = b.notes;
   return row;

@@ -464,6 +464,7 @@ const ENTITIES = {
     { column: 'end_date', field: 'endDate', kind: 'dayText' },
     { column: 'spent_minor', field: 'spent', kind: 'money' },
     { column: 'rollover_mode', field: 'rolloverMode', kind: 'text' },
+    { column: 'pace_shape', field: 'paceShape', kind: 'text' },
     { column: 'alert_threshold_bp', field: 'alertThreshold', kind: 'percent' },
     { column: 'is_active', field: 'isActive', kind: 'bool' },
     { column: 'notes', field: 'notes', kind: 'text' },
@@ -896,6 +897,7 @@ export function readBack(file: string): PortStoreState {
         startDate: typeof value.startDate === 'string' ? value.startDate : undefined,
         endDate: typeof value.endDate === 'string' ? value.endDate : undefined,
         rolloverMode: rolloverModeOf(value.rolloverMode),
+        paceShape: value.paceShape === 'once' ? 'once' : 'even',
         alertThreshold:
           typeof value.alertThreshold === 'number' ? value.alertThreshold : undefined,
         notes: typeof value.notes === 'string' ? value.notes : undefined

@@ -107,6 +107,38 @@ export interface CategorySpend {
   monthly: DecimalInstance;
   /** How many rows made it up — evidence the figure is not one freak charge. */
   rows: number;
+  /**
+   * The month (YYYY-MM) that held nearly all of it, when one did — the
+   * evidence a budget is PAID IN ONE GO (owner, 7 Nov 2026): insurance, car
+   * tax, a season ticket. Null when the spending was spread, or the window
+   * is too short to tell. See `paidOnceIn`.
+   */
+  paidOnce: string | null;
+}
+
+/** The share of a window's spending one month must hold to read as "paid once". */
+export const PAID_ONCE_SHARE = 0.8;
+/** The fewest months a window needs before one month holding the lot means anything. */
+export const PAID_ONCE_MIN_MONTHS = 6;
+
+/**
+ * The month that held at least `PAID_ONCE_SHARE` of a category's spending,
+ * or null. A six-month window at least: in a shorter one a single bill is
+ * most of what there is, and the rule would call every category a lump.
+ * Refunds net within their month; a month that netted below zero holds none.
+ */
+export function paidOnceIn(
+  byMonth: ReadonlyMap<string, DecimalInstance>,
+  total: DecimalInstance,
+  months: number
+): string | null {
+  if (months < PAID_ONCE_MIN_MONTHS || !total.greaterThan(0)) return null;
+  const floor = total.times(PAID_ONCE_SHARE);
+  let peak: { month: string; amount: DecimalInstance } | null = null;
+  for (const [month, amount] of byMonth) {
+    if (peak === null || amount.greaterThan(peak.amount)) peak = { month, amount };
+  }
+  return peak !== null && peak.amount.greaterThanOrEqualTo(floor) ? peak.month : null;
 }
 
 export interface CategorySpendSummary {
@@ -223,7 +255,7 @@ export function summariseCategorySpend(
   const window = spendWindow(options.kind ?? 'full-months', options.now ?? new Date(), options.custom);
   const kinds = buildCategoryKindLookup(categories);
 
-  const totals = new Map<string, { total: DecimalInstance; rows: number }>();
+  const totals = new Map<string, { total: DecimalInstance; rows: number; byMonth: Map<string, DecimalInstance> }>();
   let unfiled = ZERO;
   let unfiledRows = 0;
 
@@ -253,12 +285,14 @@ export function summariseCategorySpend(
     // Expenses are stored negative, so negating yields positive spending —
     // and a positive-amount refund correctly SUBTRACTS.
     const contribution = toDecimal(row.amount).negated();
-    const current = totals.get(categoryId) ?? { total: ZERO, rows: 0 };
-    totals.set(categoryId, { total: current.total.plus(contribution), rows: current.rows + 1 });
+    const current = totals.get(categoryId) ?? { total: ZERO, rows: 0, byMonth: new Map<string, DecimalInstance>() };
+    const month = day.slice(0, 7);
+    current.byMonth.set(month, (current.byMonth.get(month) ?? ZERO).plus(contribution));
+    totals.set(categoryId, { total: current.total.plus(contribution), rows: current.rows + 1, byMonth: current.byMonth });
   }
 
   const byCategory = new Map<string, CategorySpend>();
-  for (const [categoryId, { total, rows }] of totals) {
+  for (const [categoryId, { total, rows, byMonth }] of totals) {
     // Netted below zero means refunds outweighed spending: the window cost
     // nothing, and no budget follows from it.
     const cost = total.isNegative() ? ZERO : total;
@@ -273,6 +307,7 @@ export function summariseCategorySpend(
       annual,
       monthly: cost.dividedBy(window.months),
       rows,
+      paidOnce: paidOnceIn(byMonth, cost, window.months),
     });
   }
 

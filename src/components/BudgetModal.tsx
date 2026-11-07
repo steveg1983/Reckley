@@ -7,7 +7,7 @@ import { parseMoneyInput } from '../utils/decimal';
 import { getBudgetPeriodWindow, resolveBudgetAnchor, type BudgetRepeat } from '../utils/budgetPeriods';
 import { describeBudgetDay, describeBudgetWindow } from '../utils/budgetPace';
 import CategorySelector from './CategorySelector';
-import type { Budget, BudgetRepeatUnit, BudgetRolloverMode, Category } from '../types';
+import type { Budget, BudgetPaceShape, BudgetRepeatUnit, BudgetRolloverMode, Category } from '../types';
 
 const isoDay = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -55,7 +55,24 @@ interface FormData {
   repeatUnit: BudgetRepeatUnit;
   /** What the end of each period does with the gap. Not asked for a one-off, which has no next period. */
   rolloverMode: BudgetRolloverMode;
+  /** How the money lands over the period: spread across it, or in one go. */
+  paceShape: BudgetPaceShape;
   isActive: boolean;
+}
+
+/**
+ * The pace shapes (owner, 7 Nov 2026: a per-budget option, proposed by the
+ * wizard from the category's own history). "In one go" is what stops a
+ * yearly insurance budget reading "£x behind the pace" for eleven months.
+ */
+const PACE_OPTIONS: ReadonlyArray<{ value: BudgetPaceShape; label: string }> = [
+  { value: 'even', label: 'Spread across the period' },
+  { value: 'once', label: 'In one go' }
+];
+
+/** A <select> value narrowed to a real shape — no cast, no unlisted value. */
+function toPaceShape(value: string): BudgetPaceShape {
+  return PACE_OPTIONS.find(option => option.value === value)?.value ?? 'even';
 }
 
 /**
@@ -231,6 +248,7 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
       repeatCount: budget?.repeatCount ? String(budget.repeatCount) : '',
       repeatUnit: budget?.repeatUnit ?? 'month',
       rolloverMode: budget?.rolloverMode ?? 'none',
+      paceShape: budget?.paceShape ?? 'even',
       isActive: budget?.isActive !== false
     },
     {
@@ -248,6 +266,7 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
           // A one-off has no next period to carry into, so it is written as
           // starting afresh whatever the select last showed.
           rolloverMode: data.period === 'custom' ? 'none' : data.rolloverMode,
+          paceShape: data.paceShape,
           isActive: data.isActive,
           createdAt: budget?.createdAt || now,
           updatedAt: now,
@@ -343,6 +362,7 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
         repeatCount: budget.repeatCount ? String(budget.repeatCount) : '',
         repeatUnit: budget.repeatUnit ?? 'month',
         rolloverMode: budget.rolloverMode ?? 'none',
+        paceShape: budget.paceShape ?? 'even',
         isActive: budget.isActive !== false
       });
     }
@@ -505,6 +525,32 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
               )}
             </div>
           )}
+
+          {/* PAID — how the money lands over the period (owner, 7 Nov 2026:
+              a per-budget option). The wizard proposes "In one go" where a
+              category's history shows a lump; here it can be changed. With
+              it, the card says "not yet paid" until the payment lands, and
+              never "behind the pace". */}
+          <div>
+            <label htmlFor="budget-pace" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Paid
+            </label>
+            <select
+              id="budget-pace"
+              value={formData.paceShape}
+              onChange={(e) => updateField('paceShape', toPaceShape(e.target.value))}
+              className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
+            >
+              {PACE_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {formData.paceShape === 'once'
+                ? 'A bill paid once a period — insurance, car tax. The card says "not yet paid" until it lands, never "behind".'
+                : 'Spending that happens through the period, measured against how much of it has gone.'}
+            </p>
+          </div>
 
           {/* ENDS — the day the budget stops (owner, 5 Nov 2026: end dates and
               one-off budgets). Optional for a repeating period: blank means it

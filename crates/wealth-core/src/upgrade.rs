@@ -59,6 +59,9 @@
 //!   surplus, which is the one thing the old fold carried by default; the
 //!   stored amount is let go, because the app derives the carry now
 //!   (`utils/budgetEvaluation`) and the stored figure was already stale.
+//! * **2 → 3** (7 Nov 2026, again): `pace_shape` with `budgets_pace_check` —
+//!   the owner's "pace shape". A column the old table lacks, left to its
+//!   default by the introspecting copy; nothing is translated.
 
 use rusqlite::Connection;
 
@@ -66,7 +69,7 @@ use crate::error::{CoreError, CoreResult};
 
 /// The version `schema.sql` stamps into a file it makes, and the one this
 /// build upgrades to. Raised in the same commit as the change it names.
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 /// The columns whose meaning moved between versions: the new column, the old
 /// one it is read from, and the expression that reads it. Today the one such
@@ -492,6 +495,45 @@ mod tests {
             )
             .unwrap();
         assert_eq!((count, unit.as_deref(), mode.as_str()), (Some(3), Some("week"), "both"));
+    }
+
+    #[test]
+    fn a_version_two_file_gains_the_pace_shape_at_its_default_and_keeps_its_mode() {
+        // Version 2 is the current shape less `pace_shape`: made here by
+        // stamping a current file low and dropping the column (which no CHECK
+        // but its own names, so SQLite allows it). The copy leaves the new
+        // column to its default and copies everything else by name.
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("v2.db");
+        let connection = Connection::open(&path).unwrap();
+        crate::db::configure(&connection).unwrap();
+        crate::apply_schema(&connection).unwrap();
+        connection
+            .execute_batch(&format!(
+                "INSERT INTO users (id, email) VALUES ('{OWNER}', 'device@local');
+                 INSERT INTO budgets (id, user_id, name, amount_minor, period, start_date, rollover_mode)
+                   VALUES ('b-7', '{OWNER}', 'Insurance', 100, 'yearly', '2026-04-06', 'surplus');
+                 ALTER TABLE budgets DROP COLUMN pace_shape;
+                 PRAGMA user_version = 2;"
+            ))
+            .unwrap();
+        drop(connection);
+
+        let mut connection = crate::db::open(&path).unwrap();
+        assert_eq!(file_version(&connection).unwrap(), 2);
+        assert!(!columns_of(&connection, "budgets").iter().any(|c| c == "pace_shape"));
+        assert_eq!(upgrade_schema(&mut connection).unwrap(), SCHEMA_VERSION);
+
+        let (mode, shape): (String, String) = connection
+            .query_row("SELECT rollover_mode, pace_shape FROM budgets WHERE id = 'b-7'", [], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap();
+        assert_eq!((mode.as_str(), shape.as_str()), ("surplus", "even"));
+        let refused = connection.execute(
+            "INSERT INTO budgets (id, user_id, name, amount_minor, period, start_date, pace_shape)
+             VALUES ('b-8', ?1, 'Lumpy', 100, 'monthly', '2026-11-01', 'lump')",
+            [OWNER],
+        );
+        assert!(refused.unwrap_err().to_string().contains("budgets_pace_check"));
     }
 
     #[test]

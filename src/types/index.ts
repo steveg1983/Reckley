@@ -509,6 +509,14 @@ export type BudgetRepeatUnit = 'week' | 'month';
  */
 export type BudgetRolloverMode = 'none' | 'surplus' | 'overspend' | 'both';
 
+/**
+ * How a budget's money lands over its period (owner, 7 Nov 2026: "give the
+ * user the option"): spread across it, or paid in one go — insurance, car
+ * tax, a season ticket — which the pace reads as "not yet paid" rather than
+ * "£x behind", and as paid once the payment lands.
+ */
+export type BudgetPaceShape = 'even' | 'once';
+
 export interface Budget {
   id: string;
   categoryId: string;  // Changed from 'category' to match service implementation
@@ -541,6 +549,8 @@ export interface Budget {
    * cycles before the one being measured, so it follows the ledger.
    */
   rolloverMode?: BudgetRolloverMode;
+  /** The pace shape (`budgets.pace_shape`): absent reads as 'even'. See utils/budgetPace. */
+  paceShape?: BudgetPaceShape;
   alertThreshold?: number;
   notes?: string;
 }

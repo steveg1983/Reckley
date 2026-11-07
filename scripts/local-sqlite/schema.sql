@@ -1357,6 +1357,12 @@ CREATE TABLE budgets (
   -- file made before this is SCHEMA VERSION 1 or 0 and is rebuilt on open.
   rollover_mode TEXT NOT NULL DEFAULT 'none'
     CONSTRAINT budgets_rollover_check CHECK (rollover_mode IN ('none','surplus','overspend','both')),
+  -- PACE SHAPE (7 Nov 2026, cloud 20261107213000): how the money lands over
+  -- the period — spread across it, or paid in one go, which the pace reads as
+  -- "not yet paid" rather than "behind". SCHEMA VERSION 3; a file made
+  -- before gains the column on open, at its default.
+  pace_shape TEXT NOT NULL DEFAULT 'even'
+    CONSTRAINT budgets_pace_check CHECK (pace_shape IN ('even','once')),
 
   -- NOT MONEY. numeric(5,2) in the cloud, default 80, meaning 80%.
   -- Stored as basis-points-of-a-percent (1e2), so 80.00% = 8000.
@@ -2284,7 +2290,8 @@ CREATE VIEW v_integrity_ok AS
 --   1  budgets.repeat_count / repeat_unit and the two CHECKs they come with
 --   2  budgets.rollover_mode in place of rollover / rollover_amount_minor,
 --      with budgets_rollover_check (same day)
+--   3  budgets.pace_shape with budgets_pace_check (same day again)
 --
 -- Raise it in the SAME commit as the change it names, with the upgrade step
 -- beside it in the crate.
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;

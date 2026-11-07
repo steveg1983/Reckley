@@ -469,6 +469,44 @@ describe('BudgetModal', () => {
       });
     });
 
+    /**
+     * PAID (owner, 7 Nov 2026): how the money lands over the period, a
+     * per-budget option the wizard proposes and this editor can change.
+     */
+    describe('Paid — spread across the period, or in one go', () => {
+      it('is spread unless told otherwise, and writes the shape', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        expect(screen.getByLabelText('Paid')).toHaveValue('even');
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ paceShape: 'even' });
+      });
+
+      it('in one go says what that means, and writes it', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        fireEvent.change(screen.getByLabelText('Paid'), { target: { value: 'once' } });
+        expect(screen.getByText(/A bill paid once a period/)).toBeInTheDocument();
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ paceShape: 'once' });
+      });
+
+      it('a budget paid in one go shows its shape', () => {
+        const lump = {
+          id: 'b-1',
+          categoryId: 'det-groceries',
+          amount: 480,
+          period: 'yearly',
+          paceShape: 'once',
+          isActive: true,
+          spent: 0,
+          startDate: '2026-04-06',
+          createdAt: new Date('2026-11-07T10:00:00.000Z'),
+          updatedAt: new Date('2026-11-07T10:00:00.000Z'),
+        } satisfies Budget;
+        renderWithProviders(<BudgetModal {...defaultProps} budget={lump} />);
+        expect(screen.getByLabelText('Paid')).toHaveValue('once');
+      });
+    });
+
     describe('Every… — an interval of the user’s own', () => {
       it('asks how many and of what, names the first interval, and writes the pair', () => {
         renderWithProviders(<BudgetModal {...defaultProps} />);

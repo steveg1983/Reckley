@@ -9,6 +9,7 @@ import {
   budgetHistoryWindow,
   buildWizardRows,
   clampCustomWindow,
+  describePaidOnce,
   groupWizardRows,
   planBudgetWrites,
   runFromDate,
@@ -407,6 +408,8 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
             createdAt: new Date(),
             updatedAt: new Date(),
             ...dated,
+            // The proposal from the evidence — only ever on a NEW budget.
+            ...(upsert.paceShape !== undefined ? { paceShape: upsert.paceShape } : {}),
           });
         }
         written += 1;
@@ -506,6 +509,16 @@ export default function BudgetWizard({ isOpen, onClose }: Props): React.JSX.Elem
               <span className="block text-xs text-gray-500 dark:text-gray-400">
                 {formatCurrency(row.monthly)} a month
               </span>
+              {/* PAID IN ONE GO (owner, 7 Nov 2026): the window's own
+                  evidence that this category is a lump — insurance, car
+                  tax — said here, and written as the budget's pace shape
+                  when the row becomes a new budget. No flag on a row, no
+                  tidy-up screen; the editor can change it. */}
+              {row.paidOnce !== null && (
+                <span className="block text-xs text-gray-500 dark:text-gray-400" data-testid="paid-once">
+                  {describePaidOnce(row.paidOnce)}
+                </span>
+              )}
             </>
           )}
         </td>

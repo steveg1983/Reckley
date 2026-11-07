@@ -4,6 +4,7 @@ import {
   getBudgetPeriodLabel,
   getBudgetPeriodWindow,
   normaliseBudgetPeriod,
+  normalisePaceShape,
   normaliseRolloverMode,
   previousBudgetWindow,
   resolveBudgetAnchor,
@@ -469,6 +470,15 @@ describe('getBudgetPeriodWindow — an end date is honoured by every period', ()
       expect(stamp(window.start)).toBe('2026-12-01 00:00:00.000');
       expect(stamp(window.end)).toBe('2027-01-31 23:59:59.999');
     });
+  });
+});
+
+describe('normalisePaceShape', () => {
+  it('reads once, and anything else as even', () => {
+    expect(normalisePaceShape('once')).toBe('once');
+    expect(normalisePaceShape('even')).toBe('even');
+    expect(normalisePaceShape(undefined)).toBe('even');
+    expect(normalisePaceShape('lump')).toBe('even');
   });
 });
 

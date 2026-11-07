@@ -44,7 +44,7 @@ export default {
   },
 
   state: [
-    budgetShape(EXISTING_BUDGET, 'Food:0.30:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:none:80.00:active:tighter'),
+    budgetShape(EXISTING_BUDGET, 'Food:0.30:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:none:even:80.00:active:tighter'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };
