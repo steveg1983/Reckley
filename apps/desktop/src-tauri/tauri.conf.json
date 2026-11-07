@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Reckley",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "identifier": "com.wealthtracker.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -26,7 +26,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDkzOThDRTdCNDJDNUIxRUYKUldUdnNjVkNlODZZa3puOENNV1hwV1FXUTQ0dUdyYkFHMXBodHdSamVWRXFXelc3ZkRURCtWZW8K",
       "endpoints": [
-        "https://github.com/steveg1983/wealthtracker-pro/releases/latest/download/latest.json"
+        "https://github.com/steveg1983/reckley/releases/latest/download/latest.json"
       ]
     }
   },
