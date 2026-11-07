@@ -16,13 +16,31 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 
 const REPO = path.resolve(__dirname, '..', '..');
+
+/**
+ * The version the Settings card says (7 Nov 2026), read from the one field the
+ * native About box, the updater's comparison and the release tag all read,
+ * rather than from a copy of it. Refuses to build without one: a card that
+ * silently dropped its version would look exactly like a build with no stamp.
+ * See src/lib/appRelease.ts.
+ */
+const TAURI_VERSION: unknown = JSON.parse(
+  readFileSync(path.join(__dirname, 'src-tauri', 'tauri.conf.json'), 'utf8')
+).version;
+if (typeof TAURI_VERSION !== 'string' || TAURI_VERSION === '') {
+  throw new Error('apps/desktop/vite.config.ts: src-tauri/tauri.conf.json has no "version" to stamp');
+}
 
 export default defineConfig({
   root: path.join(REPO, 'src', 'desktop'),
   base: './',
   plugins: [react()],
+  define: {
+    __RECKLEY_RELEASE__: JSON.stringify({ kind: 'version', value: TAURI_VERSION })
+  },
   resolve: {
     alias: {
       // THE EDITION SEAM, pointed at the engine a FILE provides. The web build

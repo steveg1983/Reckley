@@ -36,6 +36,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DesktopApp } from '../DesktopApp';
@@ -461,6 +463,20 @@ describe('the desktop window, with a ledger open', () => {
     // rather than a disabled button or an apology.
     expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
     expect(screen.queryByText(/Signed in/i)).toBeNull();
+  });
+
+  it('says on SETTINGS the version tauri.conf.json names — the number the About box shows', async () => {
+    // It said "Version 1.0" until 7 Nov 2026, as literal text, beside a native
+    // About box saying 0.1.6. This run borrows the renderer build's own
+    // `define` (vitest.desktop.config.ts), so the number asserted is the one the
+    // shipped window is stamped with, not one this test restated.
+    const { version } = JSON.parse(
+      readFileSync(path.resolve(process.cwd(), 'apps/desktop/src-tauri/tauri.conf.json'), 'utf8')
+    ) as { version: string };
+    await openTheLedger('#/settings');
+
+    expect(await screen.findByText(`Version ${version}`, {}, PAGE)).toBeInTheDocument();
+    expect(screen.queryByText('Version 1.0')).toBeNull();
   });
 
   it('renders EXPORT with CSV and PDF, and no Excel anywhere on it', async () => {
