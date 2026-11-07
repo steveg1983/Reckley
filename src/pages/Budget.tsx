@@ -11,6 +11,7 @@ import TrendArrow from '../components/TrendArrow';
 import { EditIcon, DeleteIcon } from '../components/icons';
 import { IconButton } from '../components/icons/IconButton';
 import BudgetModal from '../components/BudgetModal';
+import BudgetCycleHistory from '../components/BudgetCycleHistory';
 import SpendingAlerts from '../components/SpendingAlerts';
 import type { Budget } from '../types';
 import PageWrapper from '../components/PageWrapper';
@@ -82,6 +83,19 @@ function BudgetView() {
       const next = new Set(previous);
       if (next.has(key)) next.delete(key);
       else next.add(key);
+      return next;
+    });
+  /**
+   * Which cards have their history open (owner, 7 Nov 2026: "how this budget
+   * did in each past cycle"). Per card, mounted only when opened — the walk
+   * over the cycles is a cost the page pays only for the card that asks.
+   */
+  const [openHistories, setOpenHistories] = useState<Set<string>>(new Set());
+  const toggleHistory = (id: string): void =>
+    setOpenHistories(previous => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   const [isLoading, setIsLoading] = useState(true);
@@ -683,6 +697,30 @@ function BudgetView() {
                 <p className="text-dense text-gray-500 dark:text-gray-400">
                   Spending on accounts in another currency is left out, so you have spent more than this.
                 </p>
+              )}
+
+              {/* PAST PERIODS (owner, 7 Nov 2026: "how this budget did in
+                  each past cycle"). Offered only once there IS a past — a
+                  budget in its first cycle has nothing to show and the
+                  control would be furniture; `carriedFrom` is the one
+                  evaluation's own answer to whether a cycle came before. */}
+              {budget.carriedFrom && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => toggleHistory(budget.id)}
+                    aria-expanded={openHistories.has(budget.id)}
+                    className="flex items-center gap-1 text-dense text-gray-700 dark:text-gray-200 min-h-[44px]"
+                  >
+                    {openHistories.has(budget.id)
+                      ? <ChevronDownIcon size={14} className="text-gray-400 shrink-0" />
+                      : <ChevronRightIcon size={14} className="text-gray-400 shrink-0" />}
+                    Past periods
+                  </button>
+                  {openHistories.has(budget.id) && (
+                    <BudgetCycleHistory budget={budget} evaluatedAt={evaluatedAt} />
+                  )}
+                </div>
               )}
             </div>
           </div>

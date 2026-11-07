@@ -345,7 +345,8 @@ not. Seven suggestions were drawn from it; the owner answered each the same day.
 6. **Income budgets — no.** "Budgets concentrate on people spending. The forecast is
    their Personal P&L." Income is the forecast's (1).
 7. **Per‑category cycle history** — how this budget did in each past cycle, on the
-   budget's own page. **Agreed.**
+   budget's own page. **Agreed — built as PR G (§8), on the card itself: a budget has no
+   page of its own, and a fold under the card is where the question is asked.**
 
 **Order after the custom guide window (§6, 4):** 5, then 4, then 3, then 7 — each
 shippable alone; 5 first because the model already does the work and it is the
@@ -479,6 +480,19 @@ than by a per‑version list, so a file is brought from whatever it is to the cu
 in one rebuild, and a current file merely stamped low (which the desktop shell's own test
 makes) loses nothing. Proven against the real version‑0 and version‑1 DDL. The renderer
 went DOWN 13.7 KiB and the ratchet followed it. Owed from this item: where a surplus goes.
+
+**PR G (past periods, 7 Nov)** — the second round's 7, "how this budget did in each past
+cycle". A **Past periods** fold on each card, offered only once a cycle has completed (the
+evaluation's `carriedFrom` is the answer; a first cycle has nothing to show and the control
+would be furniture), mounted only when opened. One table: the cycle's days, what it was
+allowed (the plan plus any carry), what it spent, what was left or gone over, and — only
+when the budget carries — what it handed on; newest first, twelve at a time with "Show N
+earlier periods". The figures are the evaluation's own: `evaluateBudgetHistory` in
+`utils/budgetEvaluation` returns every completed cycle from the same walk the carry comes
+out of (`cyclesBefore`, oldest first, each handing what it kept to the next), which is why
+this shipped AFTER the rollover modes — the history shows the carries. Colour follows the
+card: an overspent cycle in its red, a cycle with something left in its green; a carry is
+a figure and stays neutral. No schema change on either engine.
 
 **PR H (paid in one go, 7 Nov)** — the second round's 2, by the owner's word the same
 evening: a per‑budget option. One word on the row, `pace_shape`: **even** (spread across the

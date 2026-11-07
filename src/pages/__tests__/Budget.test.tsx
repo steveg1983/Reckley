@@ -270,6 +270,12 @@ describe('Budget page — what a card says has been spent', () => {
       expect(screen.getByText('£1,800.00')).toBeInTheDocument();
       expect(screen.getAllByText('Yearly budgets').length).toBe(3);
     });
+
+    it('a budget in its first period offers no past periods — there are none', () => {
+      renderBudget();
+      expect(within(card('Groceries')).queryByRole('button', { name: 'Past periods' })).not.toBeInTheDocument();
+      expect(within(card('Household')).queryByRole('button', { name: 'Past periods' })).not.toBeInTheDocument();
+    });
   });
 
   describe('a page holding two rhythms', () => {
@@ -593,6 +599,68 @@ describe('Budget page — a budget that carries what the last period left', () =
     const household = within(card('Household'));
     expect(household.getByText('£40.00 of £200.00')).toBeInTheDocument();
     expect(household.queryByTestId('budget-carry')).not.toBeInTheDocument();
+  });
+
+  /**
+   * PAST PERIODS (owner, 7 Nov 2026: "how this budget did in each past
+   * cycle"). A fold on the card, mounted only when opened; the carries a
+   * budget hands on are a column of their own, present only when it carries.
+   */
+  it('opens the past periods, each with what it was allowed, spent and left — and what it handed on', () => {
+    renderBudget();
+    const groceries = within(card('Groceries'));
+    const fold = groceries.getByRole('button', { name: 'Past periods' });
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+    expect(groceries.queryByTestId('budget-history')).not.toBeInTheDocument();
+
+    fireEvent.click(fold);
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+    const rows = groceries.getAllByTestId('budget-history-row');
+    expect(rows).toHaveLength(1);
+    const lastMonthRow = within(rows[0]);
+    expect(lastMonthRow.getByText('£200.00')).toBeInTheDocument();
+    expect(lastMonthRow.getByText('£150.00')).toBeInTheDocument();
+    expect(lastMonthRow.getAllByText('£50.00')).toHaveLength(2); // left, and carried on
+    expect(groceries.getByRole('columnheader', { name: 'Carried on' })).toBeInTheDocument();
+  });
+
+  it('a budget that starts afresh lists its past periods with no carry column', () => {
+    renderBudget();
+    const household = within(card('Household'));
+    fireEvent.click(household.getByRole('button', { name: 'Past periods' }));
+    expect(household.getAllByTestId('budget-history-row')).toHaveLength(1);
+    expect(household.queryByRole('columnheader', { name: 'Carried on' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Budget page — a past period that went over reads as the card would', () => {
+  const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const iso = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const lastMonth = new Date(`${iso(firstOfLastMonth).slice(0, 8)}10`);
+
+  beforeEach(() => {
+    __setAppContextValue({
+      accounts: ACCOUNTS,
+      categories: CATEGORIES,
+      transactions: [txn({ id: 'then', amount: -260, date: lastMonth }), txn({ id: 'now', amount: -40 })],
+      transactionSplits: [],
+      budgets: [
+        budget({ id: 'bud-groceries', categoryId: 'det-groceries', amount: 200, startDate: iso(firstOfLastMonth), createdAt: now, updatedAt: now })
+      ]
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    __resetAppContextValue();
+  });
+
+  it('says by how much', () => {
+    renderBudget();
+    const groceries = within(card('Groceries'));
+    fireEvent.click(groceries.getByRole('button', { name: 'Past periods' }));
+    expect(within(groceries.getAllByTestId('budget-history-row')[0]).getByText('over by £60.00')).toBeInTheDocument();
   });
 });
 

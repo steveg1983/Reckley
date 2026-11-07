@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { evaluateBudgets, buildBudgetCategoryResolver } from './budgetEvaluation';
+import { evaluateBudgets, evaluateBudgetHistory, buildBudgetCategoryResolver } from './budgetEvaluation';
 import { expandSplitTransactions } from './transactionSplits';
 import type { Budget, Category, Transaction, TransactionSplit } from '../types';
 
@@ -259,6 +259,51 @@ describe('evaluateBudgets — a carry from the cycles before, under the budget�
     expect(result.carriedIn.toNumber()).toBe(1000);
     expect(result.carriedFrom?.start).toEqual(new Date(2025, 9, 1, 0, 0, 0, 0));
     expect(result.effectiveAmount.toNumber()).toBe(7000);
+  });
+
+  /**
+   * THE HISTORY (the owner's "7", 7 Nov 2026): every completed cycle with its
+   * figures, the same walk the carry comes out of — so the carries show.
+   */
+  describe('evaluateBudgetHistory — how the budget ran, cycle by cycle', () => {
+    it('lists the completed cycles oldest first, each with what it was allowed, spent, left and handed on', () => {
+      const both = budget({ id: 'b', categoryId: 'cat-groceries', amount: 500, rolloverMode: 'both', ...fromAugust });
+      const transactions = [august(-400), september(-650), thisMonth];
+
+      const { current, past } = evaluateBudgetHistory(both, { transactions, categories, now: NOW });
+
+      expect(past.map(cycle => cycle.window.start)).toEqual([new Date(2026, 7, 1, 0, 0, 0, 0), new Date(2026, 8, 1, 0, 0, 0, 0)]);
+      expect(past.map(cycle => [cycle.carriedIn.toNumber(), cycle.allowance.toNumber(), cycle.spent.toNumber(), cycle.remaining.toNumber(), cycle.carriedOut.toNumber()]))
+        .toEqual([[0, 500, 400, 100, 100], [100, 600, 650, -50, -50]]);
+      // The current cycle is the card's own evaluation, carrying what the last cycle handed on.
+      expect(current.carriedIn.toNumber()).toBe(-50);
+      expect(current.spent.toNumber()).toBe(100);
+    });
+
+    it('under none the history still runs, with nothing carried between cycles', () => {
+      const plain = budget({ id: 'b', categoryId: 'cat-groceries', amount: 500, ...fromAugust });
+      const { past } = evaluateBudgetHistory(plain, { transactions: [august(-400), september(-650), thisMonth], categories, now: NOW });
+      expect(past.map(cycle => [cycle.allowance.toNumber(), cycle.remaining.toNumber(), cycle.carriedOut.toNumber()]))
+        .toEqual([[500, 100, 0], [500, -150, 0]]);
+    });
+
+    it('a first cycle has no past', () => {
+      const fresh = budget({ id: 'b', categoryId: 'cat-groceries', amount: 500, startDate: '2026-10-01', createdAt: new Date(2026, 10, 7) });
+      expect(evaluateBudgetHistory(fresh, { transactions: [september(-300), thisMonth], categories, now: NOW }).past).toEqual([]);
+    });
+
+    it('a group budget’s cycles count the children, and a row in another currency is left out', () => {
+      const food = budget({ id: 'b', categoryId: 'cat-food', amount: 500, ...from });
+      const transactions = [
+        row({ id: 'sep-g', date: new Date(2026, 8, 10), amount: -200, category: 'cat-groceries' }),
+        row({ id: 'sep-e', date: new Date(2026, 8, 12), amount: -100, category: 'cat-eating-out' }),
+        row({ id: 'sep-eur', date: new Date(2026, 8, 13), amount: -900, category: 'cat-eating-out', accountId: 'acc-eur' }),
+        thisMonth,
+      ];
+      const { past } = evaluateBudgetHistory(food, { transactions, categories, now: NOW, foreignAccountIds: new Set(['acc-eur']) });
+      expect(past).toHaveLength(1);
+      expect(past[0].spent.toNumber()).toBe(300);
+    });
   });
 
   it('a legacy row keeping the calendar carries from the month it was written, not before', () => {
