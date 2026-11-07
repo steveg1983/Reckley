@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '../../test/testUtils';
 import { __setAppContextValue, __resetAppContextValue } from '../../test/mocks/AppContextSupabase';
 import BudgetModal from '../BudgetModal';
@@ -466,6 +466,65 @@ describe('BudgetModal', () => {
         renderWithProviders(<BudgetModal {...defaultProps} budget={carries} />);
         expect(screen.getByLabelText('At the end of each period')).toHaveValue('both');
         expect(screen.getByText('Whatever a period leaves — left over or gone over — carries into the next one.')).toBeInTheDocument();
+      });
+    });
+
+    /**
+     * WHERE A SURPLUS GOES (owner, 7 Nov 2026): under a mode that carries a
+     * surplus, it may be sent to another running budget; otherwise kept.
+     */
+    describe('Send what is left to — where a surplus goes', () => {
+      const holiday = {
+        id: 'b-holiday',
+        categoryId: 'sub-food',
+        amount: 50,
+        period: 'monthly',
+        isActive: true,
+        spent: 0,
+        startDate: '2026-11-01',
+        createdAt: new Date('2026-11-07T10:00:00.000Z'),
+        updatedAt: new Date('2026-11-07T10:00:00.000Z'),
+      } satisfies Budget;
+
+      it('is not offered while nothing is carried, and writes no destination', () => {
+        __setAppContextValue({ budgets: [holiday] });
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        expect(screen.queryByLabelText('Send what is left to')).not.toBeInTheDocument();
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ rolloverTo: null });
+      });
+
+      it('once a surplus is carried, offers the other running budgets, keeps by default, and writes the chosen one', () => {
+        __setAppContextValue({ budgets: [holiday, { ...holiday, id: 'b-paused', categoryId: 'det-payslip', isActive: false }] });
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        fireEvent.change(screen.getByLabelText('At the end of each period'), { target: { value: 'surplus' } });
+        const select = screen.getByLabelText('Send what is left to');
+        expect(select).toHaveValue('');
+        expect(within(select).getAllByRole('option').map(o => o.textContent)).toEqual(['Keep it here', 'Food']);
+
+        fireEvent.change(select, { target: { value: 'b-holiday' } });
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ rolloverMode: 'surplus', rolloverTo: 'b-holiday' });
+      });
+
+      it('a destination chosen and then the mode moved to one that keeps nothing is not written', () => {
+        __setAppContextValue({ budgets: [holiday] });
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        fireEvent.change(screen.getByLabelText('At the end of each period'), { target: { value: 'both' } });
+        fireEvent.change(screen.getByLabelText('Send what is left to'), { target: { value: 'b-holiday' } });
+        fireEvent.change(screen.getByLabelText('At the end of each period'), { target: { value: 'overspend' } });
+        expect(screen.queryByLabelText('Send what is left to')).not.toBeInTheDocument();
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ rolloverMode: 'overspend', rolloverTo: null });
+      });
+
+      it('a budget that already sends its surplus shows where, and never offers itself', () => {
+        const groceries = { ...holiday, id: 'b-groceries', categoryId: 'det-groceries', rolloverMode: 'surplus' as const, rolloverTo: 'b-holiday' };
+        __setAppContextValue({ budgets: [holiday, groceries] });
+        renderWithProviders(<BudgetModal {...defaultProps} budget={groceries} />);
+        const select = screen.getByLabelText('Send what is left to');
+        expect(select).toHaveValue('b-holiday');
+        expect(within(select).getAllByRole('option').map(o => o.textContent)).toEqual(['Keep it here', 'Food']);
       });
     });
 

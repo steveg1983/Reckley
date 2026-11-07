@@ -669,6 +669,65 @@ describe('Budget page — a past period that went over reads as the card would',
  * card says "not yet paid" until the payment lands and "paid" after, in
  * neutral ink, and never "£x under the pace".
  */
+/**
+ * WHERE A SURPLUS GOES (owner, 7 Nov 2026). Groceries sends what it leaves to
+ * Household; the card names both ends, and the history shows the send and
+ * the receipt as columns of their own.
+ */
+describe('Budget page — a surplus sent to another budget', () => {
+  const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const iso = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const lastMonth = new Date(`${iso(firstOfLastMonth).slice(0, 8)}10`);
+
+  beforeEach(() => {
+    __setAppContextValue({
+      accounts: ACCOUNTS,
+      categories: CATEGORIES,
+      transactions: [txn({ id: 'then', amount: -150, date: lastMonth }), txn({ id: 'now', amount: -40 })],
+      transactionSplits: [],
+      budgets: [
+        budget({
+          id: 'bud-groceries', categoryId: 'det-groceries', amount: 200, rolloverMode: 'surplus', rolloverTo: 'bud-household',
+          startDate: iso(firstOfLastMonth), createdAt: now, updatedAt: now
+        }),
+        budget({ id: 'bud-household', categoryId: 'det-household', amount: 100, startDate: iso(firstOfLastMonth), createdAt: now, updatedAt: now })
+      ]
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    __resetAppContextValue();
+  });
+
+  it('the sender keeps nothing and says where its surplus goes; the receiver says what arrived and from whom', () => {
+    renderBudget();
+    const groceries = within(card('Groceries'));
+    expect(groceries.getByText('£40.00 of £200.00')).toBeInTheDocument();
+    expect(groceries.queryByTestId('budget-carry')).not.toBeInTheDocument();
+    expect(groceries.getByTestId('budget-sends')).toHaveTextContent('What is left at the end of the period goes to Household');
+
+    const household = within(card('Household'));
+    expect(household.getByText('£0.00 of £150.00')).toBeInTheDocument();
+    expect(household.getByTestId('budget-received')).toHaveTextContent('Includes £50.00 sent here from Groceries');
+  });
+
+  it('the history shows the send on one card and the receipt on the other', () => {
+    renderBudget();
+    const groceries = within(card('Groceries'));
+    fireEvent.click(groceries.getByRole('button', { name: 'Past periods' }));
+    expect(groceries.getByRole('columnheader', { name: 'Sent on' })).toBeInTheDocument();
+    expect(groceries.queryByRole('columnheader', { name: 'Carried on' })).not.toBeInTheDocument();
+    expect(within(groceries.getAllByTestId('budget-history-row')[0]).getAllByText('£50.00')).toHaveLength(2); // left, and sent on
+
+    const household = within(card('Household'));
+    fireEvent.click(household.getByRole('button', { name: 'Past periods' }));
+    // Last month's send lands THIS month; last month itself received nothing.
+    expect(household.queryByRole('columnheader', { name: 'Received' })).not.toBeInTheDocument();
+  });
+});
+
 describe('Budget page — a budget paid in one go', () => {
   const iso = (d: Date): string =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

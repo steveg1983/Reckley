@@ -2177,6 +2177,24 @@ export function runDataPortContract(name: string, harness: DataPortContractHarne
         expect(unsaid.rolloverMode ?? 'none').toBe('none');
       });
 
+      rule(['createBudget', 'updateBudget', 'listBudgets'], 'keeps where a surplus goes, as the id it is, and a stated null clears it', async () => {
+        // WHERE A SURPLUS GOES (7 Nov 2026): a budget id on the row, or
+        // null; a plain id on every engine. A stated null on an update must
+        // CLEAR it — `undefined` would leave the surplus going where it went.
+        const { port } = await harness.create({ accounts: threeAccounts() });
+
+        const holiday = await port.createBudget(aNewBudget('cat-bills', 100));
+        const groceries = await port.createBudget(
+          aNewBudget('cat-everyday', 500, { rolloverMode: 'surplus', rolloverTo: holiday.id })
+        );
+        expect(groceries.rolloverTo).toBe(holiday.id);
+        expect((await port.listBudgets()).find(b => b.id === groceries.id)?.rolloverTo).toBe(holiday.id);
+
+        const kept = await port.updateBudget(groceries.id, { rolloverTo: null });
+        expect(kept.rolloverTo ?? null).toBeNull();
+        expect(holiday.rolloverTo ?? null).toBeNull();
+      });
+
       rule(['createBudget', 'updateBudget', 'listBudgets'], 'keeps how a budget’s money lands, as the word it is', async () => {
         // PACE SHAPE (7 Nov 2026): 'even' or 'once' on the row; 'even' for a
         // budget that never said — the column's default on one engine, the

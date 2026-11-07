@@ -52,7 +52,7 @@ import {
   type BudgetSpendingFilter,
   type DatedDecimalTransaction,
 } from './calculations-decimal.js';
-import { normaliseRolloverMode, previousBudgetWindow, type BudgetPeriodWindow } from './budgetPeriods.js';
+import { getBudgetPeriodWindow, normaliseRolloverMode, previousBudgetWindow, type BudgetPeriodWindow } from './budgetPeriods.js';
 import {
   buildCategoryChildIndex,
   calculateBudgetSpend,
@@ -106,6 +106,12 @@ export interface EvaluatedBudget<B extends Budget = Budget> {
   carriedIn: DecimalInstance;
   /** The cycle before the window — where a carry comes out of — or null in a first cycle. */
   carriedFrom: BudgetPeriodWindow | null;
+  /** The budget this one sends its surplus to, or null when it keeps it (see resolveRolloverTarget). */
+  rolloverTo: string | null;
+  /** What other budgets sent into this window — their surpluses landing here. */
+  receivedIn: DecimalInstance;
+  /** The same, by sender. */
+  receivedFrom: ReadonlyArray<{ budgetId: string; amount: DecimalInstance }>;
   /** Net spend in the window — positive magnitude, refunds deducted. */
   spent: DecimalInstance;
   /** Allowance less spend, SIGNED: negative is how far over. */
@@ -128,6 +134,12 @@ export interface EvaluateBudgetsInput {
   foreignAccountIds?: ReadonlySet<string>;
   /** One evaluation instant for the whole set. Defaults to now. */
   now?: Date;
+  /**
+   * Every budget of the login, for the links between them: a budget that
+   * sends its surplus to one in this list is counted into it even when the
+   * caller evaluates a subset. Defaults to the budgets being evaluated.
+   */
+  budgets?: readonly Budget[];
 }
 
 /**
@@ -137,7 +149,7 @@ export interface EvaluateBudgetsInput {
  */
 const MAX_CARRY_CYCLES = 1200;
 
-/** What a cycle's remainder becomes under a mode: only its surplus, only its overspend, all of it, or nothing. */
+/** What a cycle's remainder keeps for the budget's OWN next cycle under a mode: only its surplus, only its overspend, all of it, or nothing. */
 function keptUnder(mode: BudgetRolloverMode, remainder: DecimalInstance): DecimalInstance {
   switch (mode) {
     case 'surplus':
@@ -151,107 +163,246 @@ function keptUnder(mode: BudgetRolloverMode, remainder: DecimalInstance): Decima
   }
 }
 
+/**
+ * ── WHERE A SURPLUS GOES (7 Nov 2026, the last part of the owner's "3") ─────
+ *
+ * A budget whose mode carries a surplus may SEND it to another budget rather
+ * than keep it: `rolloverTo` names the budget. At the end of each of the
+ * source's cycles what was left — the surplus, never an overspend — lands in
+ * the target's cycle holding the day after, and counts into that cycle's
+ * allowance as `receivedIn`; under 'both' the overspend still stays with the
+ * source. The pointer is a plain id and not a foreign key, on purpose: a
+ * ledger-wide link would need the deferred restore pass the account parents
+ * have, and a dangling, foreign or self reference simply reads as "keep it
+ * here" — `resolveRolloverTarget` is the one place that is decided. The
+ * editor offers only the login's own running budgets and never the budget
+ * itself, and both engines' CHECKs refuse self and a mode that carries no
+ * surplus. A loop (A sends to B, B to A) is cut where it is met and the
+ * second link reads as "keep".
+ */
+
 /** One completed cycle of a budget, as the history shows it (7 Nov 2026, the owner's "7"). */
 export interface BudgetCycleFigures {
   /** The cycle's days. */
   window: BudgetPeriodWindow;
-  /** What the cycle before handed it, SIGNED, under the mode; zero in the first cycle. */
+  /** What the budget's own cycle before handed it, SIGNED, under the mode; zero in the first cycle. */
   carriedIn: DecimalInstance;
-  /** The plan plus the carry. */
+  /** What other budgets sent it — their surpluses landing in this cycle. */
+  receivedIn: DecimalInstance;
+  /** The plan plus the carry plus what was received. */
   allowance: DecimalInstance;
   /** Net spend in the cycle. */
   spent: DecimalInstance;
   /** Allowance less spend, SIGNED. */
   remaining: DecimalInstance;
-  /** What it handed to the next cycle, SIGNED, under the mode. */
+  /** What it kept for its own next cycle, SIGNED, under the mode. */
   carriedOut: DecimalInstance;
+  /** What it sent on to the budget it sends its surplus to; zero when it keeps. */
+  sentOn: DecimalInstance;
 }
 
 /**
- * Every cycle before `window`, oldest first, each with its figures — the
- * walk the carry comes out of, and what the history shows (see the header).
- *
- * The rows of every earlier cycle are taken in ONE pass over the prepared
- * set, so each cycle's own sum walks only the budget's rows; the cycles are
- * then summed oldest first, each handing what it kept to the next.
+ * The budget a budget sends its surplus to, or null when it keeps it: a
+ * mode that carries no surplus, no target stated, the budget itself, or a
+ * target not among the budgets given (deleted, or never this login's) all
+ * read as "keep". See the header.
  */
-function cyclesBefore(
+export function resolveRolloverTarget(
+  budget: Pick<Budget, 'id' | 'rolloverMode' | 'rolloverTo'>,
+  budgets: ReadonlyMap<string, Budget>
+): string | null {
+  const mode = normaliseRolloverMode(budget.rolloverMode);
+  if (mode !== 'surplus' && mode !== 'both') return null;
+  const target = budget.rolloverTo;
+  if (!target || target === budget.id || !budgets.has(target)) return null;
+  return target;
+}
+
+/** What one evaluation pass shares between the budgets it evaluates. */
+interface Ledger {
+  prepared: DatedDecimalTransaction[];
+  childIndex: ReadonlyMap<string, string[]>;
+  resolveCategoryId: (budget: Pick<Budget, 'categoryId'>) => string;
+  foreignAccountIds: ReadonlySet<string> | undefined;
+  now: Date;
+  /** Every budget the links may name — see EvaluateBudgetsInput.budgets. */
+  byId: Map<string, Budget>;
+  /** The RUNNING budgets that send their surplus to each target. */
+  sourcesByTarget: Map<string, Budget[]>;
+  /** One budget's figures computed once per pass. */
+  memo: Map<string, BudgetFigures>;
+}
+
+/** A budget's cycles and what flows between them, as at the ledger's instant. */
+interface BudgetFigures {
+  categoryId: string;
+  window: BudgetPeriodWindow;
+  mode: BudgetRolloverMode;
+  rolloverTo: string | null;
+  carriedFrom: BudgetPeriodWindow | null;
+  /** Every completed cycle, oldest first. Empty when nothing asked for them. */
+  past: BudgetCycleFigures[];
+  /** Into the current window. */
+  carriedIn: DecimalInstance;
+  receivedIn: DecimalInstance;
+  receivedFrom: Array<{ budgetId: string; amount: DecimalInstance }>;
+}
+
+function ledgerOf(budgets: readonly Budget[], input: EvaluateBudgetsInput): Ledger {
+  const all = input.budgets ?? budgets;
+  const byId = new Map<string, Budget>();
+  for (const budget of all) byId.set(budget.id, budget);
+  const sourcesByTarget = new Map<string, Budget[]>();
+  for (const budget of all) {
+    // A paused budget is out of play on the Budget page, and sends nothing.
+    if (budget.isActive === false) continue;
+    const target = resolveRolloverTarget(budget, byId);
+    if (target === null) continue;
+    const sources = sourcesByTarget.get(target);
+    if (sources) sources.push(budget);
+    else sourcesByTarget.set(target, [budget]);
+  }
+  return {
+    prepared: prepareBudgetTransactions(input.transactions, input.transactionSplits ?? []),
+    childIndex: buildCategoryChildIndex(input.categories),
+    resolveCategoryId: buildBudgetCategoryResolver(input.categories),
+    foreignAccountIds: input.foreignAccountIds,
+    now: input.now ?? new Date(),
+    byId,
+    sourcesByTarget,
+    memo: new Map(),
+  };
+}
+
+/** The day after a window's last day, at noon — where a surplus sent on lands. */
+function dayAfter(window: BudgetPeriodWindow): Date {
+  return new Date(window.end.getFullYear(), window.end.getMonth(), window.end.getDate() + 1, 12);
+}
+
+const within = (day: Date, window: BudgetPeriodWindow): boolean => day >= window.start && day <= window.end;
+
+/**
+ * One budget's cycles and the flows between them, memoised per pass.
+ *
+ * The walk back through the cycles is made only when something needs it —
+ * the budget carries, sends, or is sent to, or the caller asked for the
+ * history — because under 'none' with no links it is a cost every card
+ * would otherwise pay. The rows of every earlier cycle are taken in ONE pass
+ * over the prepared set, so each cycle's own sum walks only the budget's
+ * rows; the cycles are then summed oldest first, each handing what it kept
+ * to the next and what it sent on to its target's cycle holding the day after.
+ *
+ * `visiting` is the chain of budgets being asked about, so a loop between
+ * two budgets is cut where it is met rather than followed for ever.
+ */
+function figuresFor(
   budget: Budget,
-  categoryId: string,
-  window: BudgetPeriodWindow,
-  mode: BudgetRolloverMode,
-  prepared: DatedDecimalTransaction[],
-  filter: BudgetSpendingFilter
-): BudgetCycleFigures[] {
+  ledger: Ledger,
+  visiting: ReadonlySet<string>,
+  options: { history?: boolean } = {}
+): BudgetFigures {
+  const memoised = ledger.memo.get(budget.id);
+  if (memoised && (!options.history || memoised.past.length > 0 || memoised.carriedFrom === null)) return memoised;
+
+  const categoryId = ledger.resolveCategoryId(budget);
+  const categoryIds = collectBudgetCategoryIds(categoryId, ledger.childIndex);
+  const filter: BudgetSpendingFilter = {
+    categoryIds: categoryIds.size > 1 ? categoryIds : undefined,
+    excludeAccountIds: ledger.foreignAccountIds,
+  };
+  const window = getBudgetPeriodWindow(budget, ledger.now);
+  const mode = normaliseRolloverMode(budget.rolloverMode);
+  const rolloverTo = resolveRolloverTarget(budget, ledger.byId);
+  const carriedFrom = previousBudgetWindow(budget, window);
+  const sources = (ledger.sourcesByTarget.get(budget.id) ?? []).filter(source => !visiting.has(source.id));
+
+  const zero = toDecimal(0);
+  const unwalked: BudgetFigures = {
+    categoryId, window, mode, rolloverTo, carriedFrom, past: [], carriedIn: zero, receivedIn: zero, receivedFrom: [],
+  };
+  const needsWalk = options.history === true || mode !== 'none' || sources.length > 0;
+  if (!needsWalk || (carriedFrom === null && sources.length === 0)) {
+    ledger.memo.set(budget.id, unwalked);
+    return unwalked;
+  }
+
   const windows: BudgetPeriodWindow[] = [];
-  for (
-    let cycle = previousBudgetWindow(budget, window);
-    cycle && windows.length < MAX_CARRY_CYCLES;
-    cycle = previousBudgetWindow(budget, cycle)
-  ) {
+  for (let cycle = carriedFrom; cycle && windows.length < MAX_CARRY_CYCLES; cycle = previousBudgetWindow(budget, cycle)) {
     windows.push(cycle);
   }
-  if (windows.length === 0) return [];
   windows.reverse();
 
-  const earlier = calculateBudgetSpendingBreakdown(
-    { categoryId },
-    prepared,
-    windows[0].start,
-    windows[windows.length - 1].end,
-    filter
-  ).counted;
+  // What the senders' completed cycles landed in each of this budget's
+  // cycles — by index into `windows`, and `windows.length` for the current.
+  const landed = new Map<number, Array<{ budgetId: string; amount: DecimalInstance }>>();
+  const chain = new Set(visiting);
+  chain.add(budget.id);
+  for (const source of sources) {
+    const theirs = figuresFor(source, ledger, chain);
+    for (const cycle of theirs.past) {
+      if (!cycle.sentOn.greaterThan(0)) continue;
+      const day = dayAfter(cycle.window);
+      let index = windows.findIndex(w => within(day, w));
+      if (index < 0 && within(day, window)) index = windows.length;
+      if (index < 0) continue;
+      const list = landed.get(index);
+      const entry = { budgetId: source.id, amount: cycle.sentOn };
+      if (list) list.push(entry);
+      else landed.set(index, [entry]);
+    }
+  }
+  const receivedAt = (index: number): DecimalInstance =>
+    (landed.get(index) ?? []).reduce((sum, entry) => sum.plus(entry.amount), zero);
+
+  const earlier = windows.length === 0
+    ? []
+    : calculateBudgetSpendingBreakdown({ categoryId }, ledger.prepared, windows[0].start, windows[windows.length - 1].end, filter).counted;
   const plan = toDecimal(budget.amount);
-  let carry = toDecimal(0);
-  return windows.map(cycle => {
+  let carry = zero;
+  const past = windows.map((cycle, index) => {
     const { spent } = calculateBudgetSpendingBreakdown({ categoryId }, earlier, cycle.start, cycle.end, {
       categoryIds: filter.categoryIds,
     });
     const carriedIn = carry;
-    const allowance = plan.plus(carriedIn);
+    const receivedIn = receivedAt(index);
+    const allowance = plan.plus(carriedIn).plus(receivedIn);
     const remaining = allowance.minus(spent);
-    carry = keptUnder(mode, remaining);
-    return { window: cycle, carriedIn, allowance, spent, remaining, carriedOut: carry };
+    // Sent on: the surplus, to the target; kept: the rest the mode allows.
+    const sentOn = rolloverTo !== null && remaining.greaterThan(0) ? remaining : zero;
+    carry = rolloverTo !== null ? keptUnder(mode, remaining.minus(sentOn)) : keptUnder(mode, remaining);
+    return { window: cycle, carriedIn, receivedIn, allowance, spent, remaining, carriedOut: carry, sentOn };
   });
-}
 
-/**
- * The carry into `window`, and the cycle it comes out of (see the header).
- * Under 'none' nothing is carried, so the walk is not made.
- */
-function carryInto(
-  budget: Budget,
-  categoryId: string,
-  window: BudgetPeriodWindow,
-  prepared: DatedDecimalTransaction[],
-  filter: BudgetSpendingFilter
-): { mode: BudgetRolloverMode; carriedIn: DecimalInstance; carriedFrom: BudgetPeriodWindow | null } {
-  const mode = normaliseRolloverMode(budget.rolloverMode);
-  const carriedFrom = previousBudgetWindow(budget, window);
-  if (mode === 'none' || !carriedFrom) return { mode, carriedIn: toDecimal(0), carriedFrom };
-  const cycles = cyclesBefore(budget, categoryId, window, mode, prepared, filter);
-  const last = cycles[cycles.length - 1];
-  return { mode, carriedIn: last ? last.carriedOut : toDecimal(0), carriedFrom };
+  const figures: BudgetFigures = {
+    categoryId,
+    window,
+    mode,
+    rolloverTo,
+    carriedFrom,
+    past,
+    carriedIn: carry,
+    receivedIn: receivedAt(windows.length),
+    receivedFrom: landed.get(windows.length) ?? [],
+  };
+  ledger.memo.set(budget.id, figures);
+  return figures;
 }
 
 /**
  * ONE budget's completed cycles, oldest first, each with its figures — "how
  * has this budget run" (the owner's "7", 7 Nov 2026) — plus the one being
  * measured now. Called when a history is opened, not for every card: the
- * walk under 'none' is a cost the card itself never pays.
+ * walk under 'none' is a cost the card itself never pays. Pass every budget
+ * of the login in `input.budgets`, so what others sent it is counted.
  */
 export function evaluateBudgetHistory(
   budget: Budget,
   input: EvaluateBudgetsInput
 ): { current: EvaluatedBudget; past: BudgetCycleFigures[] } {
-  const [current] = evaluateBudgets([budget], input);
-  const prepared = prepareBudgetTransactions(input.transactions, input.transactionSplits ?? []);
-  const categoryIds = collectBudgetCategoryIds(current.categoryId, buildCategoryChildIndex(input.categories));
-  const past = cyclesBefore(budget, current.categoryId, current.window, current.rolloverMode, prepared, {
-    categoryIds: categoryIds.size > 1 ? categoryIds : undefined,
-    excludeAccountIds: input.foreignAccountIds,
-  });
-  return { current, past };
+  const ledger = ledgerOf([budget], input);
+  const figures = figuresFor(budget, ledger, new Set(), { history: true });
+  const [current] = evaluateBudgets([budget], { ...input, budgets: input.budgets ?? [budget] });
+  return { current, past: figures.past };
 }
 
 /**
@@ -260,42 +411,40 @@ export function evaluateBudgetHistory(
  * Splits are expanded and amounts decimalised ONCE for the whole set; a group
  * budget counts every category beneath its own; a detail budget keeps the
  * plain equality match it always had (a single-id set is the same thing).
+ * The links between budgets are read from `input.budgets` when given, so a
+ * surface that evaluates a subset still counts what the rest sent it.
  */
 export function evaluateBudgets<B extends Budget>(
   budgets: readonly B[],
   input: EvaluateBudgetsInput
 ): EvaluatedBudget<B>[] {
-  const prepared = prepareBudgetTransactions(input.transactions, input.transactionSplits ?? []);
-  const childIndex = buildCategoryChildIndex(input.categories);
-  const resolveCategoryId = buildBudgetCategoryResolver(input.categories);
-  const now = input.now ?? new Date();
+  const ledger = ledgerOf(budgets, input);
 
   return budgets.map(budget => {
-    const categoryId = resolveCategoryId(budget);
-    const categoryIds = collectBudgetCategoryIds(categoryId, childIndex);
-    const groupIds = categoryIds.size > 1 ? categoryIds : undefined;
-    const { spent, window, counted, excludedForeignCount } = calculateBudgetSpend(
+    const figures = figuresFor(budget, ledger, new Set());
+    const { categoryId, window } = figures;
+    const categoryIds = collectBudgetCategoryIds(categoryId, ledger.childIndex);
+    const { spent, counted, excludedForeignCount } = calculateBudgetSpend(
       { ...budget, categoryId },
-      prepared,
+      ledger.prepared,
       {
-        now,
-        categoryIds: groupIds,
+        now: ledger.now,
+        categoryIds: categoryIds.size > 1 ? categoryIds : undefined,
         foreignAccountIds: input.foreignAccountIds,
       }
     );
-    const { mode, carriedIn, carriedFrom } = carryInto(budget, categoryId, window, prepared, {
-      categoryIds: groupIds,
-      excludeAccountIds: input.foreignAccountIds,
-    });
-    const effectiveAmount = toDecimal(budget.amount).plus(carriedIn);
+    const effectiveAmount = toDecimal(budget.amount).plus(figures.carriedIn).plus(figures.receivedIn);
 
     return {
       budget,
       categoryId,
       effectiveAmount,
-      rolloverMode: mode,
-      carriedIn,
-      carriedFrom,
+      rolloverMode: figures.mode,
+      rolloverTo: figures.rolloverTo,
+      carriedIn: figures.carriedIn,
+      carriedFrom: figures.carriedFrom,
+      receivedIn: figures.receivedIn,
+      receivedFrom: figures.receivedFrom,
       spent,
       remaining: effectiveAmount.minus(spent),
       percentage: calculateBudgetPercentage({ amount: effectiveAmount }, spent),

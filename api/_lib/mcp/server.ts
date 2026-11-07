@@ -1164,6 +1164,8 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
         transactionSplits: range.splits,
         categories,
         now: today,
+        // Every active budget, so what one sends another is counted into it.
+        budgets: active,
       });
       const described = evaluated.map(entry => ({
         id: entry.budget.id,
@@ -1176,7 +1178,10 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
         // The part of the allowance that came from the period before, signed,
         // under the budget's own mode; zero when nothing did.
         carried_in: money(entry.carriedIn.toNumber(), currency),
+        // What other budgets sent into this period, and where this one sends its own surplus.
+        received_in: money(entry.receivedIn.toNumber(), currency),
         rollover_mode: entry.rolloverMode,
+        rollover_to: entry.rolloverTo,
         spent: money(entry.spent.toNumber(), currency),
         remaining: money(entry.remaining.toNumber(), currency),
         percent_used: Number(entry.percentage.toFixed(1)),

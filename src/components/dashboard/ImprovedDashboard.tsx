@@ -425,6 +425,8 @@ export function ImprovedDashboard() {
       transactionSplits,
       categories,
       foreignAccountIds: foreignCurrencyAccountIds(accounts, displayCurrency),
+      // The whole set, so what one budget sends another is counted here too.
+      budgets,
     })
       // This card answers "how am I doing": a budget past its end date has
       // nothing to be doing, and one that has not started would read "0%

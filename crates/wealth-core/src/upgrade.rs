@@ -62,6 +62,9 @@
 //! * **2 → 3** (7 Nov 2026, again): `pace_shape` with `budgets_pace_check` —
 //!   the owner's "pace shape". A column the old table lacks, left to its
 //!   default by the introspecting copy; nothing is translated.
+//! * **3 → 4** (7 Nov 2026, once more): `rollover_to` with
+//!   `budgets_rollover_to_check` — where a surplus goes. Nullable, left NULL
+//!   by the copy; nothing is translated.
 
 use rusqlite::Connection;
 
@@ -69,7 +72,7 @@ use crate::error::{CoreError, CoreResult};
 
 /// The version `schema.sql` stamps into a file it makes, and the one this
 /// build upgrades to. Raised in the same commit as the change it names.
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 /// The columns whose meaning moved between versions: the new column, the old
 /// one it is read from, and the expression that reads it. Today the one such
@@ -534,6 +537,49 @@ mod tests {
             [OWNER],
         );
         assert!(refused.unwrap_err().to_string().contains("budgets_pace_check"));
+    }
+
+    #[test]
+    fn a_version_three_file_gains_where_a_surplus_goes_at_null_and_the_rule_is_live() {
+        // `rollover_to` is named by a TABLE constraint, which SQLite will not
+        // DROP COLUMN out from under — so the version-3 shape is stood in for
+        // by the current one stamped 3: the copy by name is the same copy,
+        // and what the test is about is the column's NULL and the rule.
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("v3.db");
+        let connection = Connection::open(&path).unwrap();
+        crate::db::configure(&connection).unwrap();
+        crate::apply_schema(&connection).unwrap();
+        connection
+            .execute_batch(&format!(
+                "INSERT INTO users (id, email) VALUES ('{OWNER}', 'device@local');
+                 INSERT INTO budgets (id, user_id, name, amount_minor, period, start_date, rollover_mode)
+                   VALUES ('b-9', '{OWNER}', 'Groceries', 50000, 'monthly', '2026-11-01', 'surplus');
+                 PRAGMA user_version = 3;"
+            ))
+            .unwrap();
+        drop(connection);
+
+        let mut connection = crate::db::open(&path).unwrap();
+        assert_eq!(file_version(&connection).unwrap(), 3);
+        assert_eq!(upgrade_schema(&mut connection).unwrap(), SCHEMA_VERSION);
+        let target: Option<String> = connection
+            .query_row("SELECT rollover_to FROM budgets WHERE id = 'b-9'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(target, None);
+
+        // Not itself; and only a mode that carries a surplus.
+        let refused = connection.execute("UPDATE budgets SET rollover_to = 'b-9' WHERE id = 'b-9'", []);
+        assert!(refused.unwrap_err().to_string().contains("budgets_rollover_to_check"));
+        let refused = connection.execute(
+            "UPDATE budgets SET rollover_mode = 'none', rollover_to = 'b-elsewhere' WHERE id = 'b-9'",
+            [],
+        );
+        assert!(refused.unwrap_err().to_string().contains("budgets_rollover_to_check"));
+        // A plain id: a budget that is not there is accepted by the table and read as "keep" by the app.
+        connection
+            .execute("UPDATE budgets SET rollover_to = 'b-elsewhere' WHERE id = 'b-9'", [])
+            .unwrap();
     }
 
     #[test]

@@ -334,7 +334,7 @@ not. Seven suggestions were drawn from it; the owner answered each the same day.
    where a surplus goes; a year's carry for yearly budgets. **Agreed — the modes and the
    carry for every rhythm built as PR F (§8), by the owner's 7 Nov word: "neither" for
    himself, "give the user the option". Where a surplus GOES — sent to another budget
-   rather than kept — is the one part still owed, its own PR.**
+   rather than kept — followed as PR I (§8).**
 4. **Any repeat interval** — every N weeks or months, not only the six named rhythms.
    **Agreed — built as PR E (§8), with a real column and the first ledger‑file
    upgrade.**
@@ -511,3 +511,24 @@ BEFORE the deploy; until it runs the app reads budgets fine and refuses a save o
 shape. **Local**: schema version 3; the introspecting rebuild leaves the new column to its
 default. Owed from the PocketSmith round: "last time in March" on the not‑yet‑paid line —
 the past periods fold (#622) answers it for now.
+
+**PR I (where a surplus goes, 7 Nov)** — the last part of the second round's 3. A budget
+that carries its surplus may **send it to another budget** rather than keep it: the editor's
+**Send what is left to** select, offered only under a mode that carries a surplus, lists the
+login's other running budgets by category and never the budget itself. At the end of each of
+the sender's cycles what was left — the surplus, never an overspend — lands in the target's
+cycle holding the day after and counts into that cycle's allowance; under *both* the
+overspend still stays with the sender. Derived like the carry: `evaluateBudgets` now shares
+one ledger across the set (`figuresFor`, memoised), reads the links from every budget of
+the login (`input.budgets`, so the Dashboard's and the connector's subsets still count what
+the rest sent), and cuts a loop where it meets it. The sender's card says where its surplus
+goes; the receiver's says what arrived and from whom; the history fold gains **Sent on** and
+**Received** columns, each present only when it happened. **A plain id, not a foreign key,
+on purpose**: a ledger‑wide link between two rows of this table would need what the account
+parents have — the user‑scoped composite key, the deferred second pass of a restore, the link
+section in the backup file — and a pointer that names nothing (a deleted budget, another
+login's, itself) simply reads as "keep", in one place (`resolveRolloverTarget`). The table
+holds it to the two things it can: not itself, and only a mode that carries a surplus. The
+restore's remapper rewrites it with the rest (`ENTITY_REFERENCES.budgets`). **Cloud**:
+migration `20261107223000_budgets_rollover_to` (column + CHECK), run by the owner BEFORE
+the deploy. **Local**: schema version 4, the column left NULL by the introspecting copy.

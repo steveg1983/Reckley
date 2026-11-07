@@ -160,6 +160,9 @@ pub struct BudgetPatch {
     /// both engines.
     #[serde(default)]
     pub pace_shape: Field<String>,
+    /// The budget this one sends its surplus to; a stated null CLEARS it.
+    #[serde(default)]
+    pub rollover_to: Field<String>,
     /// Percent, as a two-place decimal string. NOT money.
     #[serde(default)]
     pub alert_threshold: Field<String>,
@@ -290,6 +293,7 @@ fn apply(
            repeat_count          = CASE WHEN ?25 THEN ?26 ELSE repeat_count END,
            repeat_unit           = CASE WHEN ?27 THEN ?28 ELSE repeat_unit END,
            pace_shape            = CASE WHEN ?29 THEN ?30 ELSE pace_shape END,
+           rollover_to           = CASE WHEN ?31 THEN ?32 ELSE rollover_to END,
            category              = CASE WHEN ?7  THEN ?8  ELSE category END,
            start_date            = CASE WHEN ?9  THEN ?10 ELSE start_date END,
            end_date              = CASE WHEN ?11 THEN ?12 ELSE end_date END,
@@ -331,6 +335,8 @@ fn apply(
             patch.repeat_unit.value(),
             patch.pace_shape.is_present(),
             patch.pace_shape.value(),
+            patch.rollover_to.is_present(),
+            patch.rollover_to.value(),
         ],
     )?)
 }

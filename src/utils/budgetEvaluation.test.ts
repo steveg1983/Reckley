@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { evaluateBudgets, evaluateBudgetHistory, buildBudgetCategoryResolver } from './budgetEvaluation';
+import { evaluateBudgets, evaluateBudgetHistory, buildBudgetCategoryResolver, resolveRolloverTarget } from './budgetEvaluation';
 import { expandSplitTransactions } from './transactionSplits';
 import type { Budget, Category, Transaction, TransactionSplit } from '../types';
 
@@ -303,6 +303,91 @@ describe('evaluateBudgets — a carry from the cycles before, under the budget�
       const { past } = evaluateBudgetHistory(food, { transactions, categories, now: NOW, foreignAccountIds: new Set(['acc-eur']) });
       expect(past).toHaveLength(1);
       expect(past[0].spent.toNumber()).toBe(300);
+    });
+  });
+
+  /**
+   * WHERE A SURPLUS GOES (7 Nov 2026, the last part of the owner's "3"): a
+   * budget may send what it leaves to another budget instead of keeping it.
+   * The surplus lands in the target's cycle holding the day after; an
+   * overspend never travels; a dangling or self pointer reads as "keep".
+   */
+  describe('a surplus sent to another budget', () => {
+    const groceries = budget({ id: 'g', categoryId: 'cat-groceries', amount: 500, rolloverMode: 'surplus', rolloverTo: 'h', ...from });
+    const holiday = budget({ id: 'h', categoryId: 'cat-fuel', amount: 100, ...from });
+
+    it('lands in the target’s window and raises its allowance; the sender keeps nothing', () => {
+      const transactions = [september(-300), thisMonth];
+      const [g, h] = evaluateBudgets([groceries, holiday], { transactions, categories, now: NOW });
+
+      expect(g.rolloverTo).toBe('h');
+      expect(g.carriedIn.toNumber()).toBe(0);
+      expect(g.effectiveAmount.toNumber()).toBe(500);
+      expect(h.receivedIn.toNumber()).toBe(200);
+      expect(h.receivedFrom).toEqual([{ budgetId: 'g', amount: expect.objectContaining({}) }]);
+      expect(h.effectiveAmount.toNumber()).toBe(300);
+    });
+
+    it('is counted into the target even when only the target is evaluated, given every budget', () => {
+      const transactions = [september(-300), thisMonth];
+      const [h] = evaluateBudgets([holiday], { transactions, categories, now: NOW, budgets: [groceries, holiday] });
+      expect(h.receivedIn.toNumber()).toBe(200);
+      const [alone] = evaluateBudgets([holiday], { transactions, categories, now: NOW });
+      expect(alone.receivedIn.toNumber()).toBe(0);
+    });
+
+    it('under both, the overspend stays with the sender and only a surplus travels', () => {
+      const both = { ...groceries, rolloverMode: 'both' as const };
+      const [g, h] = evaluateBudgets([both, holiday], { transactions: [september(-650), thisMonth], categories, now: NOW });
+      expect(g.carriedIn.toNumber()).toBe(-150);
+      expect(h.receivedIn.toNumber()).toBe(0);
+    });
+
+    it('a yearly target takes a monthly sender’s surpluses month by month, into the year they fall in', () => {
+      const yearly = budget({ id: 'h', categoryId: 'cat-fuel', amount: 1200, period: 'yearly', startDate: '2026-04-06', createdAt: new Date(2026, 10, 7) });
+      const sender = { ...groceries, ...fromAugust };
+      const { past, current } = evaluateBudgetHistory(yearly, {
+        transactions: [august(-400), september(-300), thisMonth], categories, now: NOW, budgets: [sender, yearly],
+      });
+      expect(past).toEqual([]);
+      expect(current.receivedIn.toNumber()).toBe(300);
+    });
+
+    it('the history of both shows what was sent and what was received', () => {
+      const sender = { ...groceries, ...fromAugust };
+      const target = { ...holiday, ...fromAugust };
+      const input = { transactions: [august(-400), september(-650), thisMonth], categories, now: NOW, budgets: [sender, target] };
+      const sent = evaluateBudgetHistory(sender, input).past;
+      expect(sent.map(c => [c.remaining.toNumber(), c.sentOn.toNumber(), c.carriedOut.toNumber()])).toEqual([[100, 100, 0], [-150, 0, 0]]);
+      const received = evaluateBudgetHistory(target, input).past;
+      // August's surplus lands in September's cycle; nothing landed in August.
+      expect(received.map(c => [c.receivedIn.toNumber(), c.allowance.toNumber()])).toEqual([[0, 100], [100, 200]]);
+    });
+
+    it('a pointer to a budget that is not there, to itself, or under a mode that carries no surplus, keeps', () => {
+      const budgets = new Map([['g', groceries], ['h', holiday]]);
+      expect(resolveRolloverTarget({ id: 'g', rolloverMode: 'surplus', rolloverTo: 'gone' }, budgets)).toBeNull();
+      expect(resolveRolloverTarget({ id: 'g', rolloverMode: 'surplus', rolloverTo: 'g' }, budgets)).toBeNull();
+      expect(resolveRolloverTarget({ id: 'g', rolloverMode: 'overspend', rolloverTo: 'h' }, budgets)).toBeNull();
+      expect(resolveRolloverTarget({ id: 'g', rolloverMode: 'none', rolloverTo: 'h' }, budgets)).toBeNull();
+      expect(resolveRolloverTarget({ id: 'g', rolloverMode: 'both', rolloverTo: 'h' }, budgets)).toBe('h');
+      const [g] = evaluateBudgets([{ ...groceries, rolloverTo: 'gone' }], { transactions: [september(-300), thisMonth], categories, now: NOW });
+      expect(g.rolloverTo).toBeNull();
+      expect(g.carriedIn.toNumber()).toBe(200);
+    });
+
+    it('a loop is cut where it is met rather than followed for ever', () => {
+      const a = budget({ id: 'a', categoryId: 'cat-groceries', amount: 500, rolloverMode: 'surplus', rolloverTo: 'b', ...from });
+      const b = budget({ id: 'b', categoryId: 'cat-fuel', amount: 100, rolloverMode: 'surplus', rolloverTo: 'a', ...from });
+      const [ea, eb] = evaluateBudgets([a, b], { transactions: [september(-300), thisMonth], categories, now: NOW });
+      expect(ea.receivedIn.toNumber() + eb.receivedIn.toNumber()).toBeGreaterThan(0);
+      expect(Number.isFinite(ea.effectiveAmount.toNumber())).toBe(true);
+    });
+
+    it('a paused sender sends nothing', () => {
+      const paused = { ...groceries, isActive: false };
+      const [h] = evaluateBudgets([holiday], { transactions: [september(-300), thisMonth], categories, now: NOW, budgets: [paused, holiday] });
+      expect(h.receivedIn.toNumber()).toBe(0);
     });
   });
 

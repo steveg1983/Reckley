@@ -130,7 +130,7 @@ function BudgetView() {
     return evaluateBudgets(
       budgets.filter((budget): budget is Budget => budget !== null && budget !== undefined),
       { transactions, transactionSplits, categories, foreignAccountIds, now: evaluatedAt }
-    ).map(({ budget, effectiveAmount, carriedIn, carriedFrom, spent, percentage, remaining, window, excludedForeignCount }) => {
+    ).map(({ budget, effectiveAmount, carriedIn, carriedFrom, receivedIn, receivedFrom, rolloverTo, spent, percentage, remaining, window, excludedForeignCount }) => {
       // How far through its window the budget is, and spending against that
       // pace (owner, 5 Nov 2026): a year read on day five and on day 360 used
       // to show the same bar. See utils/budgetPace.
@@ -140,6 +140,9 @@ function BudgetView() {
         effectiveAmount,
         carriedIn,
         carriedFrom,
+        receivedIn,
+        receivedFrom,
+        rolloverTo,
         spent: spent.toNumber(),
         percentage,
         remaining: remaining.toNumber(),
@@ -196,6 +199,15 @@ function BudgetView() {
     const categoryKey = budget.categoryId ?? legacyCategory ?? '';
     return categoryNameById.get(categoryKey) ?? budget.name ?? (categoryKey || 'Budget');
   }, [categoryNameById]);
+
+  /** Each budget's label by its id — for naming the budget a surplus went to or came from. */
+  const budgetLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    budgets.forEach(budget => {
+      if (budget?.id) map.set(budget.id, getBudgetCategoryLabel(budget));
+    });
+    return map;
+  }, [budgets, getBudgetCategoryLabel]);
 
   /**
    * The cards in the chosen order — see `budgetOrder`. Sorted on a COPY, so
@@ -625,6 +637,20 @@ function BudgetView() {
               {!budget.carriedIn.isZero() && budget.carriedFrom && (
                 <p className="text-dense text-gray-500 dark:text-gray-400" data-testid="budget-carry">
                   Includes {formatCurrency(budget.carriedIn)} carried over from {describeBudgetWindow(budget.carriedFrom)}
+                </p>
+              )}
+              {/* WHAT OTHERS SENT (owner, 7 Nov 2026: where a surplus goes).
+                  Named by sender, so the figure can be traced to the budget
+                  whose period left it. A figure, not a verdict. */}
+              {!budget.receivedIn.isZero() && (
+                <p className="text-dense text-gray-500 dark:text-gray-400" data-testid="budget-received">
+                  Includes {formatCurrency(budget.receivedIn)} sent here from{' '}
+                  {budget.receivedFrom.map(entry => budgetLabelById.get(entry.budgetId) ?? 'another budget').join(', ')}
+                </p>
+              )}
+              {budget.rolloverTo !== null && (
+                <p className="text-dense text-gray-500 dark:text-gray-400" data-testid="budget-sends">
+                  What is left at the end of the period goes to {budgetLabelById.get(budget.rolloverTo) ?? 'another budget'}
                 </p>
               )}
 

@@ -669,7 +669,11 @@ const ENTITY_REFERENCES: Readonly<Record<BackupEntity, EntityReferences>> = {
     uuid: ['transaction_id', 'transfer_account_id', 'linked_transfer_id'],
     textId: ['category'],
   },
-  budgets: { uuid: ['category_id'], textId: ['category'] },
+  // `rollover_to` names another budget — where a surplus goes (7 Nov 2026) —
+  // and is rewritten with the rest, as an account's parent is. No foreign
+  // key holds it, so a restore that missed it would not fail: the surplus
+  // would quietly stay where it was. This line is what stops that.
+  budgets: { uuid: ['category_id', 'rollover_to'], textId: ['category'] },
   goals: {
     uuid: ['account_id'],
     textId: ['category'],

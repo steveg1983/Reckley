@@ -463,6 +463,7 @@ const BUDGET_CREATE_KEYS: readonly string[] = [
   'end_date',
   'rollover_mode',
   'pace_shape',
+  'rollover_to',
   'alert_threshold',
   'is_active',
   'notes'

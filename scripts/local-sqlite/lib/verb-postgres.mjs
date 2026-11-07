@@ -243,6 +243,7 @@ const BUDGET_JSON = `jsonb_build_object(
   'spent', ${money('b.spent')},
   'rollover_mode', b.rollover_mode,
   'pace_shape', b.pace_shape,
+  'rollover_to', b.rollover_to,
   'alert_threshold', ${money('b.alert_threshold')},
   'is_active', b.is_active,
   'notes', b.notes,
@@ -1604,7 +1605,7 @@ const VERBS = {
     const text = (key) => `${payloadLiteral}::jsonb->>'${key}'`;
     return `INSERT INTO public.budgets (
        id, user_id, name, amount, period, repeat_count, repeat_unit, category, start_date, end_date,
-       spent, rollover_mode, pace_shape, alert_threshold, is_active, notes
+       spent, rollover_mode, pace_shape, rollover_to, alert_threshold, is_active, notes
      ) VALUES (
        COALESCE(NULLIF(${text('id')},'')::uuid, uuid_generate_v4()),
        (${text('user_id')})::uuid,
@@ -1632,6 +1633,9 @@ const VERBS = {
        COALESCE(NULLIF(${text('rollover_mode')},''), 'none'),
        -- The pace shape (20261107213000): the same judgement, 'even' when absent.
        COALESCE(NULLIF(${text('pace_shape')},''), 'even'),
+       -- Where a surplus goes (20261107223000): a budget id or NULL; the
+       -- table holds it to not-itself and a surplus-carrying mode, on both.
+       NULLIF(${text('rollover_to')},'')::uuid,
        COALESCE(NULLIF(${text('alert_threshold')},'')::numeric, 80),
        COALESCE((${text('is_active')})::boolean, true),
        ${text('notes')}
@@ -1667,6 +1671,7 @@ const VERBS = {
        ${set('spent', `(${text('spent')})::numeric`)},
        ${set('rollover_mode', text('rollover_mode'))},
        ${set('pace_shape', text('pace_shape'))},
+       ${set('rollover_to', `(${text('rollover_to')})::uuid`)},
        ${set('alert_threshold', `(${text('alert_threshold')})::numeric`)},
        ${set('is_active', `(${text('is_active')})::boolean`)},
        ${set('notes', text('notes'))}
