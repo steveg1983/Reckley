@@ -268,6 +268,7 @@ interface BudgetRow {
   is_active: boolean | null;
   rollover_mode: string | null;
   pace_shape: string | null;
+  rollover_to: string | null;
   alert_threshold: number | string | null;
   notes: string | null;
   created_at: string;
@@ -356,6 +357,7 @@ const toBudget = (row: BudgetRow): Budget => ({
   endDate: row.end_date ?? undefined,
   rolloverMode: normaliseRolloverMode(row.rollover_mode),
   paceShape: normalisePaceShape(row.pace_shape),
+  rolloverTo: row.rollover_to ?? null,
   alertThreshold: row.alert_threshold === null ? undefined : num(row.alert_threshold),
   notes: row.notes ?? undefined,
 });
@@ -575,7 +577,7 @@ export function createSupabasePort(
     async listBudgets() {
       const { data, error } = await supabase
         .from('budgets')
-        .select('id, name, amount, period, repeat_count, repeat_unit, category, category_id, start_date, end_date, is_active, rollover_mode, pace_shape, alert_threshold, notes, created_at, updated_at')
+        .select('id, name, amount, period, repeat_count, repeat_unit, category, category_id, start_date, end_date, is_active, rollover_mode, pace_shape, rollover_to, alert_threshold, notes, created_at, updated_at')
         .eq('user_id', userId)
         .order('name');
       if (error) return fail('budgets', error);

@@ -1363,6 +1363,13 @@ CREATE TABLE budgets (
   -- before gains the column on open, at its default.
   pace_shape TEXT NOT NULL DEFAULT 'even'
     CONSTRAINT budgets_pace_check CHECK (pace_shape IN ('even','once')),
+  -- WHERE A SURPLUS GOES (7 Nov 2026, cloud 20261107223000): the budget this
+  -- one sends its surplus to, or NULL to keep it. A plain id and NOT a
+  -- foreign key, on purpose — the cloud migration says why at length: a
+  -- pointer that names nothing reads as "keep", the restore's remapper
+  -- rewrites it with the rest, and the table holds it to the two things it
+  -- can (not itself; only a mode that carries a surplus). SCHEMA VERSION 4.
+  rollover_to   TEXT,
 
   -- NOT MONEY. numeric(5,2) in the cloud, default 80, meaning 80%.
   -- Stored as basis-points-of-a-percent (1e2), so 80.00% = 8000.
@@ -1378,6 +1385,9 @@ CREATE TABLE budgets (
     amount_minor          BETWEEN -1000000000000000 AND 1000000000000000 AND
     spent_minor           BETWEEN -1000000000000000 AND 1000000000000000),
   CONSTRAINT budgets_period_ordered CHECK (end_date IS NULL OR end_date >= start_date),
+  CONSTRAINT budgets_rollover_to_check CHECK (
+    rollover_to IS NULL
+    OR (rollover_to <> id AND rollover_mode IN ('surplus','both'))),
   CONSTRAINT budgets_repeat_check CHECK (
     -- IS NOT NULL first: a CHECK that evaluates to NULL PASSES in SQLite and
     -- in Postgres alike, so `NULL >= 1` would have let an 'every' row through
@@ -2291,7 +2301,8 @@ CREATE VIEW v_integrity_ok AS
 --   2  budgets.rollover_mode in place of rollover / rollover_amount_minor,
 --      with budgets_rollover_check (same day)
 --   3  budgets.pace_shape with budgets_pace_check (same day again)
+--   4  budgets.rollover_to with budgets_rollover_to_check (and again)
 --
 -- Raise it in the SAME commit as the change it names, with the upgrade step
 -- beside it in the crate.
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;

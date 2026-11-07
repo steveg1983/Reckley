@@ -301,6 +301,8 @@ export const toBudget = (row: Record<string, unknown>): Budget => {
     endDate: text(value.endDate),
     rolloverMode: normaliseRolloverMode(value.rolloverMode),
     paceShape: normalisePaceShape(value.paceShape),
+    // Where a surplus goes: null, not undefined, when the row names nowhere.
+    rolloverTo: text(value.rolloverTo) ?? null,
     alertThreshold: typeof value.alertThreshold === 'number' ? value.alertThreshold : undefined,
     notes: text(value.notes)
   };

@@ -32,7 +32,7 @@
 //!
 //! # And a second projection, for the reader
 //!
-//! [`ListedBudget`] is the same twenty columns with ONE difference, and the
+//! [`ListedBudget`] is the same twenty-one columns with ONE difference, and the
 //! difference is the threshold:
 //!
 //! * the AUDIT entry keeps `alert_threshold_bp`, the stored integer, for the
@@ -90,6 +90,10 @@ pub struct BudgetRow {
     /// engines. The pace reads a `once` budget as "not yet paid" rather than
     /// "behind" (7 Nov 2026).
     pub pace_shape: String,
+    /// The budget this one sends its surplus to, or None to keep it. A plain
+    /// id, not a foreign key — `schema.sql` says why; a pointer that names
+    /// nothing reads as "keep".
+    pub rollover_to: Option<String>,
     /// Basis points of a percent (8000 = 80.00%). NOT money — see the module
     /// docs.
     pub alert_threshold_bp: i64,
@@ -138,6 +142,8 @@ pub struct ListedBudget {
     pub rollover_mode: String,
     /// `even` | `once` — how the money lands over the period.
     pub pace_shape: String,
+    /// The budget this one sends its surplus to, or None to keep it.
+    pub rollover_to: Option<String>,
     /// Percent, as a two-place decimal string (`"80.00"`). NOT money — see the
     /// module docs, and [`hundredths_to_decimal_string`].
     pub alert_threshold: String,
@@ -171,7 +177,7 @@ pub fn list_all(connection: &Connection, user_id: &str) -> CoreResult<Vec<Listed
     //   USE TEMP B-TREE FOR ORDER BY
     let mut statement = connection.prepare(
         "SELECT id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
-                category, category_id, start_date, end_date, spent_minor, rollover_mode, pace_shape,
+                category, category_id, start_date, end_date, spent_minor, rollover_mode, pace_shape, rollover_to,
                 alert_threshold_bp, is_active, notes, metadata,
                 created_at, updated_at
            FROM budgets
@@ -179,7 +185,7 @@ pub fn list_all(connection: &Connection, user_id: &str) -> CoreResult<Vec<Listed
           ORDER BY created_at, id",
     )?;
     let rows = statement.query_map(params![user_id], |record| {
-        let metadata_text: String = record.get(17)?;
+        let metadata_text: String = record.get(18)?;
         Ok(ListedBudget {
             id: record.get(0)?,
             user_id: record.get(1)?,
@@ -195,12 +201,13 @@ pub fn list_all(connection: &Connection, user_id: &str) -> CoreResult<Vec<Listed
             spent: Money::from_minor(record.get(11)?),
             rollover_mode: record.get(12)?,
             pace_shape: record.get(13)?,
-            alert_threshold: hundredths_to_decimal_string(record.get(14)?),
-            is_active: record.get::<_, i64>(15)? != 0,
-            notes: record.get(16)?,
+            rollover_to: record.get(14)?,
+            alert_threshold: hundredths_to_decimal_string(record.get(15)?),
+            is_active: record.get::<_, i64>(16)? != 0,
+            notes: record.get(17)?,
             metadata: serde_json::from_str(&metadata_text).unwrap_or(serde_json::Value::Null),
-            created_at: record.get(18)?,
-            updated_at: record.get(19)?,
+            created_at: record.get(19)?,
+            updated_at: record.get(20)?,
         })
     })?;
 
@@ -234,7 +241,7 @@ pub fn read_listed(
     Ok(connection
         .query_row(
             "SELECT id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
-                    category, category_id, start_date, end_date, spent_minor, rollover_mode, pace_shape,
+                    category, category_id, start_date, end_date, spent_minor, rollover_mode, pace_shape, rollover_to,
                     alert_threshold_bp, is_active, notes, metadata,
                     created_at, updated_at
                FROM budgets
@@ -242,7 +249,7 @@ pub fn read_listed(
                 AND (?2 IS NULL OR user_id = ?2)",
             params![id, user_id],
             |record| {
-                let metadata_text: String = record.get(17)?;
+                let metadata_text: String = record.get(18)?;
                 Ok(ListedBudget {
                     id: record.get(0)?,
                     user_id: record.get(1)?,
@@ -258,13 +265,14 @@ pub fn read_listed(
                     spent: Money::from_minor(record.get(11)?),
                     rollover_mode: record.get(12)?,
             pace_shape: record.get(13)?,
-                    alert_threshold: hundredths_to_decimal_string(record.get(14)?),
-                    is_active: record.get::<_, i64>(15)? != 0,
-                    notes: record.get(16)?,
+            rollover_to: record.get(14)?,
+                    alert_threshold: hundredths_to_decimal_string(record.get(15)?),
+                    is_active: record.get::<_, i64>(16)? != 0,
+                    notes: record.get(17)?,
                     metadata: serde_json::from_str(&metadata_text)
                         .unwrap_or(serde_json::Value::Null),
-                    created_at: record.get(18)?,
-                    updated_at: record.get(19)?,
+                    created_at: record.get(19)?,
+                    updated_at: record.get(20)?,
                 })
             },
         )
@@ -288,7 +296,7 @@ pub fn read_owned(
     Ok(connection
         .query_row(
             "SELECT id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
-                    category, category_id, start_date, end_date, spent_minor, rollover_mode, pace_shape,
+                    category, category_id, start_date, end_date, spent_minor, rollover_mode, pace_shape, rollover_to,
                     alert_threshold_bp, is_active, notes, metadata,
                     created_at, updated_at
                FROM budgets
@@ -307,7 +315,7 @@ pub fn read_owned(
 pub fn read(connection: &Connection, id: &str) -> CoreResult<BudgetRow> {
     Ok(connection.query_row(
         "SELECT id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
-                category, category_id, start_date, end_date, spent_minor, rollover_mode, pace_shape,
+                category, category_id, start_date, end_date, spent_minor, rollover_mode, pace_shape, rollover_to,
                 alert_threshold_bp, is_active, notes, metadata,
                 created_at, updated_at
            FROM budgets
@@ -317,13 +325,13 @@ pub fn read(connection: &Connection, id: &str) -> CoreResult<BudgetRow> {
     )?)
 }
 
-/// One record of that twenty-column SELECT as a [`BudgetRow`].
+/// One record of that twenty-one-column SELECT as a [`BudgetRow`].
 ///
 /// Written once because two readers use the identical column list, and a second
 /// copy is how an added column comes to be read at the wrong index by one of
 /// them.
 fn row_of(record: &rusqlite::Row<'_>) -> rusqlite::Result<BudgetRow> {
-    let metadata_text: String = record.get(17)?;
+    let metadata_text: String = record.get(18)?;
     Ok(BudgetRow {
         id: record.get(0)?,
         user_id: record.get(1)?,
@@ -339,11 +347,12 @@ fn row_of(record: &rusqlite::Row<'_>) -> rusqlite::Result<BudgetRow> {
         spent: Money::from_minor(record.get(11)?),
         rollover_mode: record.get(12)?,
             pace_shape: record.get(13)?,
-        alert_threshold_bp: record.get(14)?,
-        is_active: record.get::<_, i64>(15)? != 0,
-        notes: record.get(16)?,
+            rollover_to: record.get(14)?,
+        alert_threshold_bp: record.get(15)?,
+        is_active: record.get::<_, i64>(16)? != 0,
+        notes: record.get(17)?,
         metadata: serde_json::from_str(&metadata_text).unwrap_or(serde_json::Value::Null),
-        created_at: record.get(18)?,
-        updated_at: record.get(19)?,
+        created_at: record.get(19)?,
+        updated_at: record.get(20)?,
     })
 }

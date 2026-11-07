@@ -393,7 +393,7 @@ export const CATEGORY_COLUMNS: readonly Column[] = [
 /**
  * A budget, column by column.
  *
- * Fourteen of the twenty the table has, and the six absences are each a
+ * Fifteen of the twenty-one the table has, and the six absences are each a
  * decision. `user_id` is the port's own (`#ask` adds it and no method below
  * could send another) and `created_at`/`updated_at` are stamped by the file's
  * clock inside the write's transaction — the same rule the category table
@@ -432,6 +432,8 @@ export const BUDGET_COLUMNS: readonly Column[] = [
   { key: 'rollover_mode', field: 'rolloverMode', kind: 'text' },
   // How the money lands over the period (7 Nov 2026): 'even' or 'once', by CHECK.
   { key: 'pace_shape', field: 'paceShape', kind: 'text' },
+  // Where a surplus goes (7 Nov 2026): a budget id, or null to keep it.
+  { key: 'rollover_to', field: 'rolloverTo', kind: 'text' },
   { key: 'alert_threshold', field: 'alertThreshold', kind: 'money' },
   { key: 'is_active', field: 'isActive', kind: 'flag' },
   { key: 'notes', field: 'notes', kind: 'text' }

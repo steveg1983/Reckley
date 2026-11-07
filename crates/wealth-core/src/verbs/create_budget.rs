@@ -195,6 +195,11 @@ pub struct BudgetDraft {
     /// the table's CHECK, on both.
     #[serde(default)]
     pub pace_shape: Option<String>,
+    /// The budget this one sends its surplus to, or absent/null to keep it.
+    /// A plain id — the table holds it to "not itself" and "a mode that
+    /// carries a surplus", and nothing else (`schema.sql` says why).
+    #[serde(default)]
+    pub rollover_to: Option<String>,
     /// Percent, as a two-place decimal string (`"80.00"`). NOT money — see the
     /// module docs. Defaults to the column's 80%.
     #[serde(default)]
@@ -277,11 +282,11 @@ pub fn create_budget(
         "INSERT INTO budgets (
            id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
            category, start_date, end_date,
-           spent_minor, rollover_mode, pace_shape, alert_threshold_bp,
+           spent_minor, rollover_mode, pace_shape, rollover_to, alert_threshold_bp,
            is_active, notes, created_at, updated_at
          ) VALUES (
            ?1, ?2, ?3, ?4, ?5, ?14, ?15, ?6, ?7, ?8,
-           0, COALESCE(?9, 'none'), COALESCE(?16, 'even'), ?10, ?11, ?12, ?13, ?13
+           0, COALESCE(?9, 'none'), COALESCE(?16, 'even'), ?17, ?10, ?11, ?12, ?13, ?13
          )",
         params![
             id,
@@ -303,6 +308,7 @@ pub fn create_budget(
             command.budget.repeat_count,
             null_if_empty(command.budget.repeat_unit.as_deref()),
             null_if_empty(command.budget.pace_shape.as_deref()),
+            null_if_empty(command.budget.rollover_to.as_deref()),
         ],
     )?;
 

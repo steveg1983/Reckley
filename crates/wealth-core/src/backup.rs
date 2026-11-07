@@ -333,6 +333,10 @@ const BUDGETS: &[Column] = &[
             text("rollover_mode"),
             // How the money lands over the period (7 Nov 2026).
             text("pace_shape"),
+            // Where a surplus goes: a budget id the TypeScript remapper has
+            // already rewritten with the rest (ENTITY_REFERENCES.budgets).
+            // No foreign key, so no deferred pass — `schema.sql` says why.
+            text("rollover_to"),
             Column { key: "alert_threshold", column: "alert_threshold_bp", kind: Kind::Scaled(2) },
             flag("is_active"),
             text("notes"),

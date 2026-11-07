@@ -439,7 +439,7 @@ function splitFromRow(row: BackupRow): Record<string, unknown> {
 
 const BUDGET_CARRIED = new Set<string>([
   'id', 'categoryId', 'amount', 'period', 'isActive', 'createdAt', 'updatedAt',
-  'name', 'spent', 'startDate', 'endDate', 'rolloverMode', 'paceShape',
+  'name', 'spent', 'startDate', 'endDate', 'rolloverMode', 'paceShape', 'rolloverTo',
   'alertThreshold', 'notes',
 ]);
 
@@ -460,6 +460,8 @@ function budgetToRow(app: Record<string, unknown>): BackupRow {
   put(row, 'end_date', dateColumn(app.endDate));
   put(row, 'rollover_mode', text(app.rolloverMode));
   put(row, 'pace_shape', text(app.paceShape));
+  // A budget id the remapper rewrites with the rest (ENTITY_REFERENCES.budgets).
+  put(row, 'rollover_to', text(app.rolloverTo));
   put(row, 'alert_threshold', numeric(app.alertThreshold));
   put(row, 'notes', text(app.notes));
   put(row, 'created_at', timestampColumn(app.createdAt));
@@ -484,6 +486,7 @@ function budgetFromRow(row: BackupRow): Record<string, unknown> {
     // that is no longer a column, and the budget reads as starting afresh.
     rolloverMode: normaliseRolloverMode(row.rollover_mode),
     paceShape: normalisePaceShape(row.pace_shape),
+    rolloverTo: text(row.rollover_to) ?? null,
     alertThreshold: numeric(row.alert_threshold),
     notes: text(row.notes),
     createdAt: text(row.created_at),

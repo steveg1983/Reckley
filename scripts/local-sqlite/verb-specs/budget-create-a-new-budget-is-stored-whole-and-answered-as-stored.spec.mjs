@@ -52,6 +52,7 @@ export default {
     end_date: null,
     rollover_mode: 'none',
     pace_shape: 'even',
+    rollover_to: null,
     alert_threshold: '80.00',
     is_active: true,
     category_id: null,

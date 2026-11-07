@@ -2659,6 +2659,8 @@ export function listedBudget(fields) {
     rollover_mode: 'none',
     // How the money lands (20261107213000): 'even' unless said.
     pace_shape: 'even',
+    // Where a surplus goes (20261107223000): nowhere unless said.
+    rollover_to: null,
     alert_threshold: '80.00',
     is_active: true,
     notes: null,

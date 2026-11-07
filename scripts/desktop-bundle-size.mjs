@@ -377,16 +377,29 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3903 / 1202
  * (+38.8 KiB raw, +1.00%; +11.8 KiB gzip, +0.99%).
+ *
+ * ── RE-RECORDED 2026-11-07, A SIXTH TIME: WHERE A SURPLUS GOES ─────────────
+ *
+ *     + Paid in one go        3864.2 KiB raw   1190.2 KiB gzip
+ *     + Where a surplus goes  3868.0 KiB raw   1191.2 KiB gzip   +3.8 / +1.0
+ *
+ * Intended: the editor's "Send what is left to" select, the card's two
+ * lines naming where a surplus went and what arrived, the history fold's
+ * "Sent on" and "Received" columns, and the one shared ledger in the
+ * evaluation (owner, 7 Nov 2026). Desktop surfaces all.
+ *
+ * Budgets reset to the standing rule, ~1% above measured: 3907 / 1203
+ * (+39.0 KiB raw, +1.01%; +11.8 KiB gzip, +0.99%).
  */
-const BASELINE_TOTAL_RAW_KIB = 3864.2;
-const BASELINE_TOTAL_GZIP_KIB = 1190.2;
+const BASELINE_TOTAL_RAW_KIB = 3868.0;
+const BASELINE_TOTAL_GZIP_KIB = 1191.2;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that
 // slack deliberately rather than banking it, so this is tight ON PURPOSE and
 // intended growth is expected to raise it in the commit that causes it.
-const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3903);
-const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1202);
+const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3907);
+const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1203);
 
 const isReport = process.argv.includes('--report');
 

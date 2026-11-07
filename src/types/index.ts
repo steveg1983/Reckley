@@ -549,6 +549,13 @@ export interface Budget {
    * cycles before the one being measured, so it follows the ledger.
    */
   rolloverMode?: BudgetRolloverMode;
+  /**
+   * The budget this one sends its surplus to (`budgets.rollover_to`), or
+   * null to keep it — and null on an update CLEARS a stored one. A plain id,
+   * not a foreign key: a dangling or foreign one reads as "keep" (see
+   * utils/budgetEvaluation, resolveRolloverTarget).
+   */
+  rolloverTo?: string | null;
   /** The pace shape (`budgets.pace_shape`): absent reads as 'even'. See utils/budgetPace. */
   paceShape?: BudgetPaceShape;
   alertThreshold?: number;

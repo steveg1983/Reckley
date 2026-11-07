@@ -6,6 +6,7 @@ import { useModalForm } from '../hooks/useModalForm';
 import { parseMoneyInput } from '../utils/decimal';
 import { getBudgetPeriodWindow, resolveBudgetAnchor, type BudgetRepeat } from '../utils/budgetPeriods';
 import { describeBudgetDay, describeBudgetWindow } from '../utils/budgetPace';
+import { compareText } from '../utils/localeFormat';
 import CategorySelector from './CategorySelector';
 import type { Budget, BudgetPaceShape, BudgetRepeatUnit, BudgetRolloverMode, Category } from '../types';
 
@@ -55,6 +56,8 @@ interface FormData {
   repeatUnit: BudgetRepeatUnit;
   /** What the end of each period does with the gap. Not asked for a one-off, which has no next period. */
   rolloverMode: BudgetRolloverMode;
+  /** The budget a surplus is sent to, or '' to keep it. Asked only under a mode that carries a surplus. */
+  rolloverTo: string;
   /** How the money lands over the period: spread across it, or in one go. */
   paceShape: BudgetPaceShape;
   isActive: boolean;
@@ -91,6 +94,11 @@ const ROLLOVER_OPTIONS: ReadonlyArray<{ value: BudgetRolloverMode; label: string
 /** A <select> value narrowed to a real mode — no cast, no unlisted value. */
 function toRolloverMode(value: string): BudgetRolloverMode {
   return ROLLOVER_OPTIONS.find(option => option.value === value)?.value ?? 'none';
+}
+
+/** Whether a period and mode leave a surplus to send anywhere: a repeating budget carrying its surplus. */
+function sendsSurplus(period: Budget['period'], mode: BudgetRolloverMode): boolean {
+  return period !== 'custom' && (mode === 'surplus' || mode === 'both');
 }
 
 /** What a mode means for the NEXT period, in one sentence under the select. */
@@ -248,6 +256,7 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
       repeatCount: budget?.repeatCount ? String(budget.repeatCount) : '',
       repeatUnit: budget?.repeatUnit ?? 'month',
       rolloverMode: budget?.rolloverMode ?? 'none',
+      rolloverTo: budget?.rolloverTo ?? '',
       paceShape: budget?.paceShape ?? 'even',
       isActive: budget?.isActive !== false
     },
@@ -266,6 +275,11 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
           // A one-off has no next period to carry into, so it is written as
           // starting afresh whatever the select last showed.
           rolloverMode: data.period === 'custom' ? 'none' : data.rolloverMode,
+          // Where the surplus goes — only under a mode that carries one, and
+          // never to itself; null clears a stored destination otherwise.
+          rolloverTo: sendsSurplus(data.period, data.rolloverMode) && data.rolloverTo && data.rolloverTo !== budget?.id
+            ? data.rolloverTo
+            : null,
           paceShape: data.paceShape,
           isActive: data.isActive,
           createdAt: budget?.createdAt || now,
@@ -321,6 +335,25 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
     ? categories.find((c: Category) => c.id === formData.categoryId)?.name ?? 'That category'
     : '';
 
+  /**
+   * The budgets a surplus may be sent to: every other RUNNING budget of the
+   * login, named by its category, in name order. A paused budget is out of
+   * play and sends and receives nothing.
+   */
+  const destinations = useMemo(
+    () =>
+      budgets
+        .filter((candidate: Budget) => candidate.id !== budget?.id && candidate.isActive !== false)
+        .map((candidate: Budget) => ({
+          id: candidate.id,
+          label: categories.find((c: Category) => c.id === resolveCategoryId(candidate.categoryId))?.name
+            ?? candidate.name
+            ?? candidate.categoryId,
+        }))
+        .sort((a, b) => compareText(a.label, b.label)),
+    [budgets, budget?.id, categories, resolveCategoryId]
+  );
+
   const onFormSubmit = (e: React.FormEvent): void => {
     if (!formData.categoryId) {
       e.preventDefault();
@@ -362,6 +395,7 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
         repeatCount: budget.repeatCount ? String(budget.repeatCount) : '',
         repeatUnit: budget.repeatUnit ?? 'month',
         rolloverMode: budget.rolloverMode ?? 'none',
+        rolloverTo: budget.rolloverTo ?? '',
         paceShape: budget.paceShape ?? 'even',
         isActive: budget.isActive !== false
       });
@@ -619,6 +653,31 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 {describeRollover(formData.rolloverMode)}
               </p>
+
+              {/* WHERE A SURPLUS GOES (owner, 7 Nov 2026: the last part of
+                  "rollover modes"). Offered only once a surplus is carried:
+                  kept here, or sent to one of the other running budgets —
+                  groceries to the holiday fund. Never to itself; the table
+                  refuses that too. A destination that is no longer there
+                  reads as "keep", which is what this select then shows. */}
+              {sendsSurplus(formData.period, formData.rolloverMode) && (
+                <div className="mt-2">
+                  <label htmlFor="budget-rollover-to" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Send what is left to
+                  </label>
+                  <select
+                    id="budget-rollover-to"
+                    value={destinations.some(option => option.id === formData.rolloverTo) ? formData.rolloverTo : ''}
+                    onChange={(e) => updateField('rolloverTo', e.target.value)}
+                    className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
+                  >
+                    <option value="">Keep it here</option>
+                    {destinations.map(option => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
 

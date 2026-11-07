@@ -364,6 +364,7 @@ describe('the port over a transport', () => {
               spent: '0.00',
               rollover_mode: 'none',
               pace_shape: 'even',
+              rollover_to: null,
               alert_threshold: '80.00',
               is_active: true,
               notes: null,
