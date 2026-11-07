@@ -50,8 +50,7 @@ export default {
     // WRITER's zero rather than a default; the caller has no say in it.
     spent: '0.00',
     end_date: null,
-    rollover: false,
-    rollover_amount: '0.00',
+    rollover_mode: 'none',
     alert_threshold: '80.00',
     is_active: true,
     category_id: null,
@@ -59,7 +58,7 @@ export default {
 
   state: [
     budgetsOwnedBy(USER, '1'),
-    budgetShape(NEW, 'Food:70.10:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:no:0.00:80.00:active:Watch the takeaways'),
+    budgetShape(NEW, 'Food:70.10:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:none:80.00:active:Watch the takeaways'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

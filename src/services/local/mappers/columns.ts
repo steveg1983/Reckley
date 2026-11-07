@@ -393,7 +393,7 @@ export const CATEGORY_COLUMNS: readonly Column[] = [
 /**
  * A budget, column by column.
  *
- * Twelve of the eighteen the table has, and the six absences are each a
+ * Thirteen of the nineteen the table has, and the six absences are each a
  * decision. `user_id` is the port's own (`#ask` adds it and no method below
  * could send another) and `created_at`/`updated_at` are stamped by the file's
  * clock inside the write's transaction — the same rule the category table
@@ -426,8 +426,10 @@ export const BUDGET_COLUMNS: readonly Column[] = [
   { key: 'start_date', field: 'startDate', kind: 'dayText' },
   { key: 'end_date', field: 'endDate', kind: 'dayText' },
   { key: 'spent', field: 'spent', kind: 'money' },
-  { key: 'rollover', field: 'rollover', kind: 'flag' },
-  { key: 'rollover_amount', field: 'rolloverAmount', kind: 'money' },
+  // What the end of each cycle does (7 Nov 2026): one of four words, held by
+  // CHECK in both engines. The carry is derived on the app's side, never a
+  // column — see utils/budgetEvaluation.
+  { key: 'rollover_mode', field: 'rolloverMode', kind: 'text' },
   { key: 'alert_threshold', field: 'alertThreshold', kind: 'money' },
   { key: 'is_active', field: 'isActive', kind: 'flag' },
   { key: 'notes', field: 'notes', kind: 'text' }

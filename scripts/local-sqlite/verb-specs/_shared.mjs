@@ -2449,21 +2449,21 @@ export const FUEL_BUDGET = 'b0000000-0000-0000-0000-00000000b002';
 export const twoBudgets = {
   sqlite: `
     INSERT INTO budgets (id, user_id, name, amount_minor, period, category, start_date,
-                         end_date, spent_minor, rollover, rollover_amount_minor,
+                         end_date, spent_minor, rollover_mode,
                          alert_threshold_bp, is_active, notes, created_at, updated_at) VALUES
       ('${FOOD_BUDGET}', '${USER}', 'Food', 12345, 'monthly', '${WEEKLY_SHOP}', '2024-01-01',
-       '2024-12-31', 6789, 1, 250, 4250, 1, 'the food one', '${OPENED_FIRST}', '${OPENED_FIRST}'),
+       '2024-12-31', 6789, 'surplus', 4250, 1, 'the food one', '${OPENED_FIRST}', '${OPENED_FIRST}'),
       ('${FUEL_BUDGET}', '${USER}', 'Fuel', 5000, 'weekly', NULL, '2024-02-01',
-       NULL, 0, 0, 0, 8000, 0, NULL, '${OPENED_SECOND}', '${OPENED_SECOND}');`,
+       NULL, 0, 'none', 8000, 0, NULL, '${OPENED_SECOND}', '${OPENED_SECOND}');`,
   postgres: `
     SELECT set_config('app.restore_in_progress', '1', true);
     INSERT INTO public.budgets (id, user_id, name, amount, period, category, start_date,
-                                end_date, spent, rollover, rollover_amount,
+                                end_date, spent, rollover_mode,
                                 alert_threshold, is_active, notes, created_at, updated_at) VALUES
       ('${FOOD_BUDGET}', '${USER}', 'Food', 123.45, 'monthly', '${WEEKLY_SHOP}', '2024-01-01',
-       '2024-12-31', 67.89, true, 2.50, 42.50, true, 'the food one', '${OPENED_FIRST}', '${OPENED_FIRST}'),
+       '2024-12-31', 67.89, 'surplus', 42.50, true, 'the food one', '${OPENED_FIRST}', '${OPENED_FIRST}'),
       ('${FUEL_BUDGET}', '${USER}', 'Fuel', 50.00, 'weekly', NULL, '2024-02-01',
-       NULL, 0.00, false, 0.00, 80.00, false, NULL, '${OPENED_SECOND}', '${OPENED_SECOND}');
+       NULL, 0.00, 'none', 80.00, false, NULL, '${OPENED_SECOND}', '${OPENED_SECOND}');
     SELECT set_config('app.restore_in_progress', '0', true);`,
 };
 
@@ -2655,8 +2655,8 @@ export function listedBudget(fields) {
     start_date: '2024-01-01',
     end_date: null,
     spent: '0.00',
-    rollover: false,
-    rollover_amount: '0.00',
+    // What the end of each cycle does (20261107203000): a word, 'none' unless said.
+    rollover_mode: 'none',
     alert_threshold: '80.00',
     is_active: true,
     notes: null,
@@ -3505,7 +3505,7 @@ export const strangersGoal = {
 
 /**
  * One budget as one canonical string: `name:amount:period:category:start:end:
- * spent:rollover:rolloverAmount:threshold:active:notes`.
+ * spent:rolloverMode:threshold:active:notes`.
  *
  * Money and the threshold both render as two-place decimals from an INTEGER
  * column on one engine and a `numeric` on the other, which is the whole reason
@@ -3518,9 +3518,6 @@ export function budgetShape(budgetId, expect) {
     const table = engine === 'sqlite' ? 'budgets' : 'public.budgets';
     const amount = engine === 'sqlite' ? minorToDecimal('b.amount_minor') : numericToDecimal('b.amount');
     const spent = engine === 'sqlite' ? minorToDecimal('b.spent_minor') : numericToDecimal('b.spent');
-    const rolled = engine === 'sqlite'
-      ? minorToDecimal('b.rollover_amount_minor')
-      : numericToDecimal('b.rollover_amount');
     const threshold = engine === 'sqlite'
       ? minorToDecimal('b.alert_threshold_bp')
       : numericToDecimal('b.alert_threshold');
@@ -3534,8 +3531,8 @@ export function budgetShape(budgetId, expect) {
                  || ':' || COALESCE(b.category, '-')
                  || ':' || COALESCE(${asText('b.start_date')}, '-')
                  || ':' || COALESCE(${asText('b.end_date')}, '-')
-                 || ':' || ${spent} || ':' || ${flag('rollover', 'carries', 'no')}
-                 || ':' || ${rolled} || ':' || ${threshold}
+                 || ':' || ${spent} || ':' || b.rollover_mode
+                 || ':' || ${threshold}
                  || ':' || ${flag('is_active', 'active', 'paused')}
                  || ':' || COALESCE(b.notes, '-')`;
     return `SELECT COALESCE((SELECT ${row} FROM ${table} b WHERE b.id = '${budgetId}'), 'GONE')`;

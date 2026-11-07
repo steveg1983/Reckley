@@ -3,9 +3,7 @@ import type { Notification } from '../contexts/NotificationContext';
 import type { JsonValue, UnknownObject } from '../types/common';
 import { formatCurrency as formatCurrencyDecimal } from '../utils/currency-decimal';
 import { createScopedLogger, type ScopedLogger } from '../loggers/scopedLogger';
-import { calculateBudgetSpend, prepareBudgetTransactions } from '../utils/budgetSpending';
-import { getEffectiveBudgetAmount } from '../utils/budgetAmounts';
-import { calculateBudgetPercentage } from '../utils/calculations-decimal';
+import { evaluateBudgets } from '../utils/budgetEvaluation';
 import { buildTransactionRegisterPath } from '../utils/transactionDeepLink';
 
 export interface NotificationRule {
@@ -373,8 +371,6 @@ export class NotificationService {
   ): Notification[] {
     const notifications: Notification[] = [];
     const now = this.getCurrentDate();
-    // Expanded and decimalised ONCE for every budget in this pass.
-    const prepared = prepareBudgetTransactions(transactions, context.transactionSplits ?? []);
 
     // Budgets key on a category ID; matching on the NAME never hit, so every
     // budget notification named a raw UUID. Keyed both ways so budgets written
@@ -385,20 +381,24 @@ export class NotificationService {
       if (category?.name && !categoryByKey.has(category.name)) categoryByKey.set(category.name, category);
     });
 
-    budgets.forEach(budget => {
-      // The Budget page's calculation, not a second one: the budget's OWN
-      // period window, split lines expanded, refunds netted, Decimal throughout.
-      const amount = getEffectiveBudgetAmount(budget);
-      const { spent: spentDecimal, excludedForeignCount, window } = calculateBudgetSpend(budget, prepared, {
-        now,
-        foreignAccountIds: context.foreignAccountIds
-      });
+    // The Budget page's evaluation, not a second one: the budget's OWN period
+    // window, a group's children rolled up, the carry its mode allows counted
+    // into the allowance, split lines expanded, refunds netted, Decimal
+    // throughout (utils/budgetEvaluation).
+    const evaluated = evaluateBudgets(budgets, {
+      transactions,
+      transactionSplits: context.transactionSplits,
+      categories,
+      foreignAccountIds: context.foreignAccountIds,
+      now
+    });
+
+    evaluated.forEach(({ budget, effectiveAmount: amount, spent: spentDecimal, percentage, excludedForeignCount, window }) => {
       // A budget past its end date, or not yet started, is nothing to be
       // warned about: the finished one's figure is history and the future
       // one's is nothing. The Budget page's own alert pass makes the same cut.
       if (window.ended || window.notStarted) return;
       const spent = spentDecimal.toNumber();
-      const percentage = calculateBudgetPercentage({ amount }, spentDecimal);
 
       // Check budget rules
       const applicableRules = this.rules.filter(rule => 

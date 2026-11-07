@@ -18,7 +18,7 @@ export default {
     budgets: [
       listedBudget({
         id: FOOD_BUDGET, name: 'Food', amount: '123.45', category: WEEKLY_SHOP,
-        end_date: '2024-12-31', spent: '67.89', rollover: true, rollover_amount: '2.50',
+        end_date: '2024-12-31', spent: '67.89', rollover_mode: 'surplus',
         alert_threshold: '42.50', notes: 'the food one',
       }),
       listedBudget({

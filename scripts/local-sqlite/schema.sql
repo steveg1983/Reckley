@@ -1349,8 +1349,14 @@ CREATE TABLE budgets (
   start_date    TEXT NOT NULL CHECK (start_date LIKE '____-__-__'),
   end_date      TEXT CHECK (end_date IS NULL OR end_date LIKE '____-__-__'),
   spent_minor           INTEGER NOT NULL DEFAULT 0,
-  rollover              INTEGER NOT NULL DEFAULT 0 CHECK (rollover IN (0,1)),
-  rollover_amount_minor INTEGER NOT NULL DEFAULT 0,
+  -- ROLLOVER MODE (7 Nov 2026, cloud 20261107203000): what the end of each
+  -- cycle does with the gap — nothing, a surplus carried, an overspend
+  -- carried, or both. The carry itself is derived by the app from the cycles
+  -- before (utils/budgetEvaluation), never a column: the `rollover` flag and
+  -- `rollover_amount_minor` this replaces held a carry applied by hand. A
+  -- file made before this is SCHEMA VERSION 1 or 0 and is rebuilt on open.
+  rollover_mode TEXT NOT NULL DEFAULT 'none'
+    CONSTRAINT budgets_rollover_check CHECK (rollover_mode IN ('none','surplus','overspend','both')),
 
   -- NOT MONEY. numeric(5,2) in the cloud, default 80, meaning 80%.
   -- Stored as basis-points-of-a-percent (1e2), so 80.00% = 8000.
@@ -1364,8 +1370,7 @@ CREATE TABLE budgets (
 
   CONSTRAINT budgets_money_bounded CHECK (
     amount_minor          BETWEEN -1000000000000000 AND 1000000000000000 AND
-    spent_minor           BETWEEN -1000000000000000 AND 1000000000000000 AND
-    rollover_amount_minor BETWEEN -1000000000000000 AND 1000000000000000),
+    spent_minor           BETWEEN -1000000000000000 AND 1000000000000000),
   CONSTRAINT budgets_period_ordered CHECK (end_date IS NULL OR end_date >= start_date),
   CONSTRAINT budgets_repeat_check CHECK (
     -- IS NOT NULL first: a CHECK that evaluates to NULL PASSES in SQLite and
@@ -1377,11 +1382,11 @@ CREATE TABLE budgets (
 ) STRICT;
 CREATE INDEX idx_budgets_user ON budgets(user_id);
 
--- NOTE the widening vs cloud: budgets.spent and rollover_amount are
--- numeric(10,2) in Postgres (max ~£99.9m) while budgets.amount is
--- numeric(20,2). A budget over £99,999,999.99 already cannot record its own
--- spend in the cloud. Local uses one bound for all three. That is a deliberate
--- divergence and a differential test must expect it.
+-- NOTE the widening vs cloud: budgets.spent is numeric(10,2) in Postgres
+-- (max ~£99.9m) while budgets.amount is numeric(20,2). A budget over
+-- £99,999,999.99 already cannot record its own spend in the cloud. Local uses
+-- one bound for both. That is a deliberate divergence and a differential test
+-- must expect it.
 
 CREATE TABLE goals (
   id                  TEXT PRIMARY KEY,
@@ -2277,7 +2282,9 @@ CREATE VIEW v_integrity_ok AS
 --
 --   0  every file before 7 Nov 2026 (desktop 0.1.6 and earlier)
 --   1  budgets.repeat_count / repeat_unit and the two CHECKs they come with
+--   2  budgets.rollover_mode in place of rollover / rollover_amount_minor,
+--      with budgets_rollover_check (same day)
 --
 -- Raise it in the SAME commit as the change it names, with the upgrade step
 -- beside it in the crate.
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;

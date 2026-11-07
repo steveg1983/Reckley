@@ -72,8 +72,10 @@ describe('Budget Workflow Integration', () => {
       // Verify form fields are present - use getAllByText since there might be multiple matches
       const categoryElements = within(modal).getAllByText(/category/i);
       expect(categoryElements.length).toBeGreaterThan(0);
-      expect(within(modal).getByText(/amount/i)).toBeInTheDocument();
-      expect(within(modal).getByText(/period/i)).toBeInTheDocument();
+      // Exact, as labels: the rollover select's label and hint also say
+      // "period" and "amount".
+      expect(within(modal).getByText('Amount', { selector: 'label' })).toBeInTheDocument();
+      expect(within(modal).getByText('Period', { selector: 'label' })).toBeInTheDocument();
 
       // Click cancel button
       const cancelButton = within(modal).getByRole('button', { name: /cancel/i });
@@ -107,22 +109,23 @@ describe('Budget Workflow Integration', () => {
         expect(screen.getByRole('heading', { level: 1, name: /budget/i })).toBeInTheDocument();
       });
 
-      // The features are collapsed folds, earned by the budget existing.
-      // (Templates was the third fold until 1 Sep 2026 — retired: applying
-      // a budget set in one go is the wizard's job now.)
-      const rolloverFold = await screen.findByRole('button', { name: /rollover/i });
-      expect(rolloverFold).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.getByRole('button', { name: /spending alerts/i })).toBeInTheDocument();
+      // The one feature left is a collapsed fold, earned by the budget
+      // existing. (Templates was a fold until 1 Sep 2026 — retired: applying
+      // a budget set in one go is the wizard's job now. Rollover until 7 Nov
+      // 2026 — a mode on each budget now, chosen in the editor.)
+      const alertsFold = await screen.findByRole('button', { name: /spending alerts/i });
+      expect(alertsFold).toHaveAttribute('aria-expanded', 'false');
 
       // The retired features are gone for good.
       expect(screen.queryByText(/envelope/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/zero-based/i)).not.toBeInTheDocument();
       expect(screen.queryByText(/budget templates/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /rollover/i })).not.toBeInTheDocument();
 
       // Opening a fold mounts its content.
-      await user.click(rolloverFold);
+      await user.click(alertsFold);
       await waitFor(() => {
-        expect(rolloverFold).toHaveAttribute('aria-expanded', 'true');
+        expect(alertsFold).toHaveAttribute('aria-expanded', 'true');
       });
     });
 
@@ -235,8 +238,9 @@ describe('Budget Workflow Integration', () => {
 
       const modal = screen.getByRole('dialog');
 
-      // Find period select - find by proximity to label
-      const periodLabel = within(modal).getByText(/period/i);
+      // Find period select - find by proximity to label. Exact, as a label:
+      // "At the end of each period" and its hint sit in the same form.
+      const periodLabel = within(modal).getByText('Period', { selector: 'label' });
       const periodSelect = periodLabel.parentElement?.querySelector('select');
       expect(periodSelect).toBeInTheDocument();
 

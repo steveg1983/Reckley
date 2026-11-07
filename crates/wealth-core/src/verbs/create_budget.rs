@@ -185,13 +185,11 @@ pub struct BudgetDraft {
     /// Last day covered, when the budget ends.
     #[serde(default)]
     pub end_date: Option<String>,
-    /// Does an unspent remainder carry forward? Defaults false, as the column
-    /// does on both engines.
+    /// What the end of each cycle does with the gap: `none` | `surplus` |
+    /// `overspend` | `both`. Defaults to `none`, as the column does on both
+    /// engines; anything else is refused by the table's CHECK, on both.
     #[serde(default)]
-    pub rollover: Option<Flag>,
-    /// How much did. Defaults zero.
-    #[serde(default)]
-    pub rollover_amount: Option<Money>,
+    pub rollover_mode: Option<String>,
     /// Percent, as a two-place decimal string (`"80.00"`). NOT money — see the
     /// module docs. Defaults to the column's 80%.
     #[serde(default)]
@@ -248,8 +246,6 @@ pub fn create_budget(
     // Everything that can refuse without touching the file, before the file is
     // touched — the ordering Postgres gets free from its casts.
     let threshold = resolve_threshold(command.budget.alert_threshold.as_deref())?;
-    let rollover =
-        super::create_account::resolve_flag(command.budget.rollover.as_ref(), false, "rollover")?;
     let is_active =
         super::create_account::resolve_flag(command.budget.is_active.as_ref(), true, "is_active")?;
 
@@ -276,11 +272,11 @@ pub fn create_budget(
         "INSERT INTO budgets (
            id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
            category, start_date, end_date,
-           spent_minor, rollover, rollover_amount_minor, alert_threshold_bp,
+           spent_minor, rollover_mode, alert_threshold_bp,
            is_active, notes, created_at, updated_at
          ) VALUES (
-           ?1, ?2, ?3, ?4, ?5, ?15, ?16, ?6, ?7, ?8,
-           0, ?9, ?10, ?11, ?12, ?13, ?14, ?14
+           ?1, ?2, ?3, ?4, ?5, ?14, ?15, ?6, ?7, ?8,
+           0, COALESCE(?9, 'none'), ?10, ?11, ?12, ?13, ?13
          )",
         params![
             id,
@@ -291,12 +287,10 @@ pub fn create_budget(
             null_if_empty(command.budget.category.as_deref()),
             start_date,
             null_if_empty(command.budget.end_date.as_deref()),
-            i64::from(rollover),
-            command
-                .budget
-                .rollover_amount
-                .unwrap_or(Money::ZERO)
-                .minor(),
+            // Absent or empty leaves the column's own default to answer, as
+            // an unstated key does in the cloud; a stated word is judged by
+            // the CHECK, on both engines.
+            null_if_empty(command.budget.rollover_mode.as_deref()),
             threshold.unwrap_or(DEFAULT_ALERT_THRESHOLD_BP),
             i64::from(is_active),
             command.budget.notes,

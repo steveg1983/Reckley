@@ -37,7 +37,7 @@ export default {
 
   state: [
     // The edit itself lands identically. Only the trail differs.
-    budgetShape(EXISTING_BUDGET, 'Food:150.00:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:no:0.00:80.00:active:-'),
+    budgetShape(EXISTING_BUDGET, 'Food:150.00:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:none:80.00:active:-'),
     auditTrailFor('budget', { sqlite: 'update', postgres: 'NONE' }),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],

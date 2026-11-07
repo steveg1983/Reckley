@@ -498,19 +498,20 @@ describe('Budget page — an empty page is an empty state, not zeroed furniture'
     expect(screen.queryByText('Total Budgeted')).not.toBeInTheDocument();
     expect(screen.queryByText('Total Spent')).not.toBeInTheDocument();
     expect(screen.queryByText('Total Remaining')).not.toBeInTheDocument();
-    // Nor the feature folds — furniture until there is a budget to slice
+    // Nor the feature fold — furniture until there is a budget to slice
     // (Claude Design 22 Aug §7, carried into §12's one-page shape).
-    expect(screen.queryByRole('button', { name: /Rollover/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Spending alerts/ })).not.toBeInTheDocument();
   });
 
-  it('brings the feature folds — not tabs — the moment a budget exists (§12)', async () => {
+  it('brings the feature fold — not tabs — the moment a budget exists (§12)', async () => {
     // §12 (owner, 23 Aug): one budgeting approach. Envelope and Zero-Based
-    // are RETIRED — they must never come back as choices — and Rollover and
-    // Alerts are collapsed folds below the budgets, mounting their content
-    // only when opened. Templates joined the retired list on 1 Sep 2026:
-    // applying a budget set in one go is the wizard's job, and the named
-    // sets lived only in localStorage.
+    // are RETIRED — they must never come back as choices — and Alerts is a
+    // collapsed fold below the budgets, mounting its content only when
+    // opened. Templates joined the retired list on 1 Sep 2026: applying a
+    // budget set in one go is the wizard's job, and the named sets lived
+    // only in localStorage. Rollover left the folds on 7 Nov 2026: it is a
+    // mode on each budget now, chosen in the editor, and the carry is
+    // derived rather than applied by hand.
     // Every figure here is invented; the repo is public.
     __setAppContextValue({
       accounts: ACCOUNTS,
@@ -521,14 +522,77 @@ describe('Budget page — an empty page is an empty state, not zeroed furniture'
     });
     renderBudget();
 
-    expect(await screen.findByRole('button', { name: /Rollover/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Spending alerts/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Spending alerts/ })).toBeInTheDocument();
     // The retired features are gone for good.
     expect(screen.queryByText('Envelope')).not.toBeInTheDocument();
     expect(screen.queryByText('Zero-Based')).not.toBeInTheDocument();
     expect(screen.queryByText(/Budget templates/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Rollover/ })).not.toBeInTheDocument();
     // Folds start closed: a fold's content mounts only when opened.
-    expect(screen.getByRole('button', { name: /Rollover/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /Spending alerts/ })).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+/**
+ * THE CARRY, NAMED ON THE CARD (owner, 7 Nov 2026: rollover is a per-budget
+ * choice, "neither" by default). A budget that carries says what it carried
+ * and from where; one that does not says nothing. Every figure is invented.
+ */
+describe('Budget page — a budget that carries what the last period left', () => {
+  const firstOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const iso = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  /** The 10th of last month, as the wire would send it. */
+  const lastMonth = new Date(`${iso(firstOfLastMonth).slice(0, 8)}10`);
+
+  beforeEach(() => {
+    __setAppContextValue({
+      accounts: ACCOUNTS,
+      categories: CATEGORIES,
+      transactions: [
+        txn({ id: 'then', amount: -150, date: lastMonth }),
+        txn({ id: 'then-home', amount: -150, date: lastMonth, category: 'det-household' }),
+        txn({ id: 'now', amount: -40 }),
+        txn({ id: 'now-home', amount: -40, category: 'det-household' }),
+      ],
+      transactionSplits: [],
+      budgets: [
+        // Both began last month, from the 1st. Groceries carries its surplus;
+        // Household starts afresh, whatever last month left.
+        budget({
+          id: 'bud-groceries', categoryId: 'det-groceries', amount: 200, rolloverMode: 'surplus',
+          startDate: iso(firstOfLastMonth), createdAt: now, updatedAt: now
+        }),
+        budget({
+          id: 'bud-household', categoryId: 'det-household', amount: 200,
+          startDate: iso(firstOfLastMonth), createdAt: now, updatedAt: now
+        })
+      ]
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    __resetAppContextValue();
+  });
+
+  it('says what was carried and from which period, and measures against the plan plus the carry', () => {
+    renderBudget();
+    const groceries = within(card('Groceries'));
+    expect(groceries.getByText('£40.00 of £250.00')).toBeInTheDocument();
+    // "1–31 Oct 2026", or "1 Dec 2026 – 31 Dec 2026" across a year end: Intl
+    // folds what the two days share.
+    expect(groceries.getByTestId('budget-carry').textContent?.replace(/\s+/g, ' ')).toMatch(
+      /^Includes £50\.00 carried over from 1( \w{3}( \d{4})?)?\s*[–-]\s*\d{1,2} \w{3} \d{4}$/
+    );
+    expect(groceries.getByText('£210.00 remaining')).toBeInTheDocument();
+  });
+
+  it('a budget that starts afresh says nothing about a carry', () => {
+    renderBudget();
+    const household = within(card('Household'));
+    expect(household.getByText('£40.00 of £200.00')).toBeInTheDocument();
+    expect(household.queryByTestId('budget-carry')).not.toBeInTheDocument();
   });
 });
 

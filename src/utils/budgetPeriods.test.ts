@@ -4,6 +4,8 @@ import {
   getBudgetPeriodLabel,
   getBudgetPeriodWindow,
   normaliseBudgetPeriod,
+  normaliseRolloverMode,
+  previousBudgetWindow,
   resolveBudgetAnchor,
   resolveBudgetRepeat
 } from './budgetPeriods';
@@ -467,5 +469,94 @@ describe('getBudgetPeriodWindow — an end date is honoured by every period', ()
       expect(stamp(window.start)).toBe('2026-12-01 00:00:00.000');
       expect(stamp(window.end)).toBe('2027-01-31 23:59:59.999');
     });
+  });
+});
+
+describe('normaliseRolloverMode', () => {
+  it('reads the four modes, and anything else as none', () => {
+    expect(normaliseRolloverMode('surplus')).toBe('surplus');
+    expect(normaliseRolloverMode('overspend')).toBe('overspend');
+    expect(normaliseRolloverMode('both')).toBe('both');
+    expect(normaliseRolloverMode('none')).toBe('none');
+    expect(normaliseRolloverMode(undefined)).toBe('none');
+    expect(normaliseRolloverMode(null)).toBe('none');
+    expect(normaliseRolloverMode('all')).toBe('none');
+    expect(normaliseRolloverMode(true)).toBe('none');
+  });
+});
+
+/**
+ * THE CYCLE BEFORE (7 Nov 2026). The one step of the carry's walk: the cycle
+ * before a window, measured as that day would have measured it, or null at
+ * the budget's first cycle.
+ */
+describe('previousBudgetWindow', () => {
+  it('a yearly budget from 6 April: the year before, and null before the first', () => {
+    const taxYear = { period: 'yearly', startDate: '2025-04-06', createdAt: new Date(2026, 10, 7) };
+    const thisYear = getBudgetPeriodWindow(taxYear, at(2026, 10, 10));
+    const lastYear = previousBudgetWindow(taxYear, thisYear);
+    expect(lastYear && stamp(lastYear.start)).toBe('2025-04-06 00:00:00.000');
+    expect(lastYear && stamp(lastYear.end)).toBe('2026-04-05 23:59:59.999');
+    expect(lastYear && previousBudgetWindow(taxYear, lastYear)).toBeNull();
+  });
+
+  it('a monthly budget from the 15th steps back a cycle of its own, 15th to 14th', () => {
+    const payday = { period: 'monthly', startDate: '2026-09-15', createdAt: new Date(2026, 10, 7) };
+    const window = getBudgetPeriodWindow(payday, at(2026, 10, 20));
+    const before = previousBudgetWindow(payday, window);
+    expect(before && stamp(before.start)).toBe('2026-10-15 00:00:00.000');
+    expect(before && stamp(before.end)).toBe('2026-11-14 23:59:59.999');
+    const first = before && previousBudgetWindow(payday, before);
+    expect(first && stamp(first.start)).toBe('2026-09-15 00:00:00.000');
+    expect(first && previousBudgetWindow(payday, first)).toBeNull();
+  });
+
+  it('a legacy row keeping the calendar begins in the month it was written, not before', () => {
+    // Start = creation day, created before the model: calendar months, and
+    // the first cycle is the one holding that day.
+    const legacy = { period: 'monthly', startDate: '2026-08-20', createdAt: '2026-08-20T09:00:00.000Z' };
+    const october = getBudgetPeriodWindow(legacy, at(2026, 9, 15));
+    const september = previousBudgetWindow(legacy, october);
+    expect(september && stamp(september.start)).toBe('2026-09-01 00:00:00.000');
+    const august = september && previousBudgetWindow(legacy, september);
+    expect(august && stamp(august.start)).toBe('2026-08-01 00:00:00.000');
+    expect(august && stamp(august.end)).toBe('2026-08-31 23:59:59.999');
+    expect(august && previousBudgetWindow(legacy, august)).toBeNull();
+  });
+
+  it('a weekly budget begins in the week holding its start', () => {
+    // 1 Nov 2026 is a Sunday: weeks 1–7, 8–14, 15–21 Nov. Started on the 4th.
+    const weekly = { period: 'weekly', startDate: '2026-11-04', createdAt: new Date(2026, 10, 4) };
+    const window = getBudgetPeriodWindow(weekly, at(2026, 10, 18));
+    const before = previousBudgetWindow(weekly, window);
+    expect(before && stamp(before.start)).toBe('2026-11-08 00:00:00.000');
+    const first = before && previousBudgetWindow(weekly, before);
+    expect(first && stamp(first.start)).toBe('2026-11-01 00:00:00.000');
+    expect(first && previousBudgetWindow(weekly, first)).toBeNull();
+  });
+
+  it('every 6 weeks steps back six weeks, and stops at the start', () => {
+    const six = { period: 'every', repeatCount: 6, repeatUnit: 'week', startDate: '2026-09-01', createdAt: new Date(2026, 10, 7) };
+    const window = getBudgetPeriodWindow(six, at(2026, 10, 20)); // 13 Oct – 23 Nov
+    const before = previousBudgetWindow(six, window);
+    expect(before && stamp(before.start)).toBe('2026-09-01 00:00:00.000');
+    expect(before && stamp(before.end)).toBe('2026-10-12 23:59:59.999');
+    expect(before && previousBudgetWindow(six, before)).toBeNull();
+  });
+
+  it('a finished budget still has the cycle before its last', () => {
+    const ended = { period: 'monthly', startDate: '2026-01-01', endDate: '2026-03-15', createdAt: new Date(2026, 10, 7) };
+    const last = getBudgetPeriodWindow(ended, at(2026, 10, 10));
+    expect(last.ended).toBe(true);
+    const before = previousBudgetWindow(ended, last);
+    expect(before && stamp(before.start)).toBe('2026-02-01 00:00:00.000');
+    expect(before && stamp(before.end)).toBe('2026-02-28 23:59:59.999');
+  });
+
+  it('a budget that has not started, and a one-off, have no cycle before', () => {
+    const future = { period: 'monthly', startDate: '2027-01-01', createdAt: new Date(2026, 10, 7) };
+    expect(previousBudgetWindow(future, getBudgetPeriodWindow(future, at(2026, 10, 10)))).toBeNull();
+    const once = { period: 'custom', startDate: '2026-06-01', endDate: '2026-06-30', createdAt: new Date(2026, 10, 7) };
+    expect(previousBudgetWindow(once, getBudgetPeriodWindow(once, at(2026, 10, 10)))).toBeNull();
   });
 });

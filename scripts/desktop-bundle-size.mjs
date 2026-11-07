@@ -337,16 +337,32 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3911 / 1203
  * (+38.4 KiB raw, +0.99%; +12.0 KiB gzip, +1.01%).
+ *
+ * ── RE-RECORDED 2026-11-07, A THIRD TIME: ROLLOVER MODES, AND A MOVE DOWN ──
+ *
+ *     + Every…                3872.6 KiB raw   1191.0 KiB gzip
+ *     + Rollover modes        3858.9 KiB raw   1188.8 KiB gzip   −13.7 / −2.2
+ *
+ * Intended, and DOWN: the "Apply Rollover" screen — a fold on the Budget
+ * page that applied a carry by hand, month by month, for monthly budgets
+ * alone, with its settings and history in localStorage — is gone, and a
+ * per-budget mode in the editor plus a derived carry in the one evaluation
+ * weigh less than it did (owner, 7 Nov 2026). The budgets follow the
+ * measurement down, as on 1 Sep: a win left as headroom is permission
+ * nobody granted.
+ *
+ * Budgets reset to the standing rule, ~1% above measured: 3898 / 1201
+ * (+39.1 KiB raw, +1.01%; +12.2 KiB gzip, +1.03%).
  */
-const BASELINE_TOTAL_RAW_KIB = 3872.6;
-const BASELINE_TOTAL_GZIP_KIB = 1191.0;
+const BASELINE_TOTAL_RAW_KIB = 3858.9;
+const BASELINE_TOTAL_GZIP_KIB = 1188.8;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that
 // slack deliberately rather than banking it, so this is tight ON PURPOSE and
 // intended growth is expected to raise it in the commit that causes it.
-const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3911);
-const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1203);
+const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3898);
+const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1201);
 
 const isReport = process.argv.includes('--report');
 

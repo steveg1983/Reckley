@@ -461,8 +461,7 @@ const BUDGET_CREATE_KEYS: readonly string[] = [
   'category',
   'start_date',
   'end_date',
-  'rollover',
-  'rollover_amount',
+  'rollover_mode',
   'alert_threshold',
   'is_active',
   'notes'

@@ -463,8 +463,7 @@ const ENTITIES = {
     { column: 'start_date', field: 'startDate', kind: 'dayText' },
     { column: 'end_date', field: 'endDate', kind: 'dayText' },
     { column: 'spent_minor', field: 'spent', kind: 'money' },
-    { column: 'rollover', field: 'rollover', kind: 'bool' },
-    { column: 'rollover_amount_minor', field: 'rolloverAmount', kind: 'money' },
+    { column: 'rollover_mode', field: 'rolloverMode', kind: 'text' },
     { column: 'alert_threshold_bp', field: 'alertThreshold', kind: 'percent' },
     { column: 'is_active', field: 'isActive', kind: 'bool' },
     { column: 'notes', field: 'notes', kind: 'text' },
@@ -896,8 +895,7 @@ export function readBack(file: string): PortStoreState {
         spent: asNumber(value.spent),
         startDate: typeof value.startDate === 'string' ? value.startDate : undefined,
         endDate: typeof value.endDate === 'string' ? value.endDate : undefined,
-        rollover: asFlag(value.rollover),
-        rolloverAmount: asNumber(value.rolloverAmount),
+        rolloverMode: rolloverModeOf(value.rolloverMode),
         alertThreshold:
           typeof value.alertThreshold === 'number' ? value.alertThreshold : undefined,
         notes: typeof value.notes === 'string' ? value.notes : undefined
@@ -1072,6 +1070,10 @@ const categoryTypeOf = (value: unknown): Category['type'] =>
 
 const categoryLevelOf = (value: unknown): Category['level'] =>
   oneOf(value, ['type', 'sub', 'detail'] as const, 'detail');
+
+/** One of the four modes, as the column's CHECK holds it; 'none' for a fixture that states none. */
+const rolloverModeOf = (value: unknown): Budget['rolloverMode'] =>
+  value === 'surplus' || value === 'overspend' || value === 'both' ? value : 'none';
 
 const budgetPeriodOf = (value: unknown): Budget['period'] =>
   oneOf(value, ['monthly', 'weekly', 'yearly', 'quarterly', 'custom'] as const, 'custom');

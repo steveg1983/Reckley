@@ -46,7 +46,7 @@ export default {
     // budgets page having typed `80.005`.
     budgetShape(NEW, {
       sqlite: 'GONE',
-      postgres: 'Food:50.00:monthly:-:2024-01-01:-:0.00:no:0.00:80.01:active:-',
+      postgres: 'Food:50.00:monthly:-:2024-01-01:-:0.00:none:80.01:active:-',
     }),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],

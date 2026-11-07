@@ -1,6 +1,7 @@
 import { storageAdapter, STORAGE_KEYS } from './storageAdapter';
 import { browserAbsence } from './backup/browserCoverage';
 import { toDecimal } from '../utils/decimal';
+import { normaliseRolloverMode } from '../utils/budgetPeriods';
 import { preferences, type PreferencesDocument } from './preferencesService';
 import {
   BACKUP_ENTITIES,
@@ -438,7 +439,7 @@ function splitFromRow(row: BackupRow): Record<string, unknown> {
 
 const BUDGET_CARRIED = new Set<string>([
   'id', 'categoryId', 'amount', 'period', 'isActive', 'createdAt', 'updatedAt',
-  'name', 'spent', 'startDate', 'endDate', 'rollover', 'rolloverAmount',
+  'name', 'spent', 'startDate', 'endDate', 'rolloverMode',
   'alertThreshold', 'notes',
 ]);
 
@@ -457,8 +458,7 @@ function budgetToRow(app: Record<string, unknown>): BackupRow {
   put(row, 'spent', numeric(app.spent));
   put(row, 'start_date', dateColumn(app.startDate));
   put(row, 'end_date', dateColumn(app.endDate));
-  put(row, 'rollover', bool(app.rollover));
-  put(row, 'rollover_amount', numeric(app.rolloverAmount));
+  put(row, 'rollover_mode', text(app.rolloverMode));
   put(row, 'alert_threshold', numeric(app.alertThreshold));
   put(row, 'notes', text(app.notes));
   put(row, 'created_at', timestampColumn(app.createdAt));
@@ -478,8 +478,10 @@ function budgetFromRow(row: BackupRow): Record<string, unknown> {
     spent: numeric(row.spent),
     startDate: text(row.start_date),
     endDate: text(row.end_date),
-    rollover: bool(row.rollover),
-    rolloverAmount: numeric(row.rollover_amount),
+    // A backup from before 7 Nov 2026 carries `rollover`/`rollover_amount`
+    // instead: both are dropped here, as the cloud's restore drops a key
+    // that is no longer a column, and the budget reads as starting afresh.
+    rolloverMode: normaliseRolloverMode(row.rollover_mode),
     alertThreshold: numeric(row.alert_threshold),
     notes: text(row.notes),
     createdAt: text(row.created_at),
@@ -778,7 +780,7 @@ export const LOCAL_SOURCE_USER_ID = 'local-device';
 /** Money columns whose magnitude decides whether a backup can be exact. */
 const MONEY_COLUMNS = [
   'amount', 'balance', 'initial_balance', 'bank_balance', 'target_amount',
-  'current_amount', 'low_balance_threshold', 'spent', 'rollover_amount',
+  'current_amount', 'low_balance_threshold', 'spent',
 ] as const;
 
 /**

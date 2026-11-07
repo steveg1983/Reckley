@@ -5,8 +5,8 @@ import {
 
 export default {
   invariant: 'READ-1',
-  title: 'the budgets come back oldest first, and their three money columns come back as decimal strings',
-  design: 'planningService.getBudgets: .select(\'*\').eq(\'user_id\', …).order(\'created_at\', { ascending: true }). Three of the eighteen columns are money — amount, spent, rollover_amount — and schema.sql records that the last two are numeric(10,2) in the cloud against numeric(20,2) here',
+  title: 'the budgets come back oldest first, and their two money columns come back as decimal strings',
+  design: 'planningService.getBudgets: .select(\'*\').eq(\'user_id\', …).order(\'created_at\', { ascending: true }). Two of the nineteen columns are money — amount, spent — and schema.sql records that spent is numeric(10,2) in the cloud against numeric(20,2) here; rollover_mode (20261107203000) is a word, not a figure',
   consequence: 'a budget is an amount against a category. Through a float it is an amount that nearly matches, and the number on the page stops agreeing with the number in the file',
   parity: 'match',
 
@@ -17,7 +17,7 @@ export default {
     budgets: [
       listedBudget({
         id: FOOD_BUDGET, name: 'Food', amount: '123.45', category: WEEKLY_SHOP,
-        end_date: '2024-12-31', spent: '67.89', rollover: true, rollover_amount: '2.50',
+        end_date: '2024-12-31', spent: '67.89', rollover_mode: 'surplus',
         alert_threshold: '42.50', notes: 'the food one',
       }),
       listedBudget({

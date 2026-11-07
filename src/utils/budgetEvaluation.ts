@@ -7,7 +7,7 @@
  * done twice was everything around the sum: which category a budget means
  * (a budget saved by the old picker carries a category NAME where the id
  * belongs), whether a group budget rolls its children up, what the allowance
- * is once a rollover is carried in, and above all WHICH WINDOW the budget is
+ * is once a carry is counted in, and above all WHICH WINDOW the budget is
  * measured over. The Budget page did all of that; the Dashboard's Budget
  * Status card did none of it — it summed the budget's own category over a
  * rolling thirty days against the base amount, so the same budget read one
@@ -20,6 +20,20 @@
  * inputs and show the same numbers under the same caption, and the Dashboard
  * can open the rows behind a figure because this returns them.
  *
+ * ── THE CARRY IS DERIVED, NEVER STORED (7 Nov 2026, the owner's "3") ────────
+ * A budget's `rolloverMode` says what the gap at the end of each cycle does:
+ * nothing ('none', the default and the owner's own choice), a surplus carried
+ * into the next cycle, an overspend carried, or both. The carry into the
+ * window being measured is worked out HERE, from the cycles before it: from
+ * the budget's first cycle forward, each cycle's allowance is the plan plus
+ * what the cycle before left it, less what it spent, and what that leaves —
+ * kept under the mode — is the next cycle's carry. Nothing is written back.
+ * The old build stored a carry a person applied by hand, month by month,
+ * from a fold on the Budget page: a stored figure went stale the moment a
+ * row behind it changed, and the fold assumed every budget was monthly. A
+ * derived one follows the ledger, means the same thing for a year as for a
+ * week, and costs one extra pass over the budget's own rows.
+ *
  * ── WHAT COMES BACK ─────────────────────────────────────────────────────────
  * Decimal throughout — callers convert at the edge, as the Budget page always
  * did. `remaining` is SIGNED: an overspent budget reads "over by £155", not
@@ -29,11 +43,16 @@
  * counted and nothing a second filter might have chosen differently.
  */
 
-import type { Budget, Category, Transaction, TransactionSplit } from '../types/index.js';
+import type { Budget, BudgetRolloverMode, Category, Transaction, TransactionSplit } from '../types/index.js';
+import { toDecimal } from './decimal.js';
 import type { DecimalInstance } from './decimal.js';
-import { getEffectiveBudgetAmount } from './budgetAmounts.js';
-import { calculateBudgetPercentage } from './calculations-decimal.js';
-import type { BudgetPeriodWindow } from './budgetPeriods.js';
+import {
+  calculateBudgetPercentage,
+  calculateBudgetSpendingBreakdown,
+  type BudgetSpendingFilter,
+  type DatedDecimalTransaction,
+} from './calculations-decimal.js';
+import { normaliseRolloverMode, previousBudgetWindow, type BudgetPeriodWindow } from './budgetPeriods.js';
 import {
   buildCategoryChildIndex,
   calculateBudgetSpend,
@@ -76,8 +95,17 @@ export interface EvaluatedBudget<B extends Budget = Budget> {
   budget: B;
   /** The category the budget means — healed, see buildBudgetCategoryResolver. */
   categoryId: string;
-  /** The allowance for the window: the amount plus any rollover carried in. */
+  /** The allowance for the window: the amount plus the carry. */
   effectiveAmount: DecimalInstance;
+  /** The mode the budget runs under — 'none' for a row that states none. */
+  rolloverMode: BudgetRolloverMode;
+  /**
+   * What the cycles before this one left behind, SIGNED, under that mode:
+   * zero under 'none', in a first cycle, or when nothing was left.
+   */
+  carriedIn: DecimalInstance;
+  /** The cycle before the window — where a carry comes out of — or null in a first cycle. */
+  carriedFrom: BudgetPeriodWindow | null;
   /** Net spend in the window — positive magnitude, refunds deducted. */
   spent: DecimalInstance;
   /** Allowance less spend, SIGNED: negative is how far over. */
@@ -103,6 +131,73 @@ export interface EvaluateBudgetsInput {
 }
 
 /**
+ * How many earlier cycles the walk will visit at most. A weekly budget
+ * running since 2003 has fewer; this guards against a model that never
+ * answers "first", not a case anyone meets.
+ */
+const MAX_CARRY_CYCLES = 1200;
+
+/** What a cycle's remainder becomes under a mode: only its surplus, only its overspend, all of it, or nothing. */
+function keptUnder(mode: BudgetRolloverMode, remainder: DecimalInstance): DecimalInstance {
+  switch (mode) {
+    case 'surplus':
+      return remainder.greaterThan(0) ? remainder : toDecimal(0);
+    case 'overspend':
+      return remainder.lessThan(0) ? remainder : toDecimal(0);
+    case 'both':
+      return remainder;
+    case 'none':
+      return toDecimal(0);
+  }
+}
+
+/**
+ * The carry into `window`, and the cycle it comes out of (see the header).
+ *
+ * The rows of every earlier cycle are taken in ONE pass over the prepared
+ * set, so each cycle's own sum walks only the budget's rows; the cycles are
+ * then summed oldest first, each handing what it kept to the next.
+ */
+function carryInto(
+  budget: Budget,
+  categoryId: string,
+  window: BudgetPeriodWindow,
+  prepared: DatedDecimalTransaction[],
+  filter: BudgetSpendingFilter
+): { mode: BudgetRolloverMode; carriedIn: DecimalInstance; carriedFrom: BudgetPeriodWindow | null } {
+  const mode = normaliseRolloverMode(budget.rolloverMode);
+  const carriedFrom = previousBudgetWindow(budget, window);
+  if (mode === 'none' || !carriedFrom) return { mode, carriedIn: toDecimal(0), carriedFrom };
+
+  const cycles: BudgetPeriodWindow[] = [];
+  for (
+    let cycle: BudgetPeriodWindow | null = carriedFrom;
+    cycle && cycles.length < MAX_CARRY_CYCLES;
+    cycle = previousBudgetWindow(budget, cycle)
+  ) {
+    cycles.push(cycle);
+  }
+  cycles.reverse();
+
+  const earlier = calculateBudgetSpendingBreakdown(
+    { categoryId },
+    prepared,
+    cycles[0].start,
+    carriedFrom.end,
+    filter
+  ).counted;
+  const plan = toDecimal(budget.amount);
+  let carry = toDecimal(0);
+  for (const cycle of cycles) {
+    const { spent } = calculateBudgetSpendingBreakdown({ categoryId }, earlier, cycle.start, cycle.end, {
+      categoryIds: filter.categoryIds,
+    });
+    carry = keptUnder(mode, plan.plus(carry).minus(spent));
+  }
+  return { mode, carriedIn: carry, carriedFrom };
+}
+
+/**
  * Evaluate every budget given, in the order given, as at one instant.
  *
  * Splits are expanded and amounts decimalised ONCE for the whole set; a group
@@ -121,21 +216,29 @@ export function evaluateBudgets<B extends Budget>(
   return budgets.map(budget => {
     const categoryId = resolveCategoryId(budget);
     const categoryIds = collectBudgetCategoryIds(categoryId, childIndex);
+    const groupIds = categoryIds.size > 1 ? categoryIds : undefined;
     const { spent, window, counted, excludedForeignCount } = calculateBudgetSpend(
       { ...budget, categoryId },
       prepared,
       {
         now,
-        categoryIds: categoryIds.size > 1 ? categoryIds : undefined,
+        categoryIds: groupIds,
         foreignAccountIds: input.foreignAccountIds,
       }
     );
-    const effectiveAmount = getEffectiveBudgetAmount(budget);
+    const { mode, carriedIn, carriedFrom } = carryInto(budget, categoryId, window, prepared, {
+      categoryIds: groupIds,
+      excludeAccountIds: input.foreignAccountIds,
+    });
+    const effectiveAmount = toDecimal(budget.amount).plus(carriedIn);
 
     return {
       budget,
       categoryId,
       effectiveAmount,
+      rolloverMode: mode,
+      carriedIn,
+      carriedFrom,
       spent,
       remaining: effectiveAmount.minus(spent),
       percentage: calculateBudgetPercentage({ amount: effectiveAmount }, spent),
