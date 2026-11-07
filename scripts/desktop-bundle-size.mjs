@@ -353,15 +353,27 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3898 / 1201
  * (+39.1 KiB raw, +1.01%; +12.2 KiB gzip, +1.03%).
+ *
+ * ── RE-RECORDED 2026-11-07, A FOURTH TIME: "PAST PERIODS" ──────────────────
+ *
+ *     + Rollover modes        3858.9 KiB raw   1188.8 KiB gzip
+ *     + Past periods          3862.2 KiB raw   1189.0 KiB gzip   +3.3 / +0.2
+ *
+ * Intended: a fold on each budget card listing its completed cycles — what
+ * each was allowed, spent, left, and handed on (owner, 7 Nov 2026). The
+ * Budget page is a desktop surface.
+ *
+ * Budgets reset to the standing rule, ~1% above measured: 3901 / 1201
+ * (+38.8 KiB raw, +1.00%; +12.0 KiB gzip, +1.01% — the gzip budget holds).
  */
-const BASELINE_TOTAL_RAW_KIB = 3858.9;
-const BASELINE_TOTAL_GZIP_KIB = 1188.8;
+const BASELINE_TOTAL_RAW_KIB = 3862.2;
+const BASELINE_TOTAL_GZIP_KIB = 1189.0;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that
 // slack deliberately rather than banking it, so this is tight ON PURPOSE and
 // intended growth is expected to raise it in the commit that causes it.
-const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3898);
+const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3901);
 const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1201);
 
 const isReport = process.argv.includes('--report');
