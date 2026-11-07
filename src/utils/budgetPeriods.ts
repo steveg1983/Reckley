@@ -85,6 +85,22 @@
  * as every month. The six named rhythms are untouched: a monthly budget is
  * still 'monthly', not 'every 1 month', so nothing stored changed.
  *
+ * ── THE CYCLE BEFORE, FOR A CARRY (7 Nov 2026, the owner's "3") ───────────
+ *
+ * A budget may carry what the last cycle left behind — a surplus, an
+ * overspend, or both — and the carry is DERIVED, never stored: the cycles
+ * before the one being measured are walked from the budget's first day, so
+ * the figure follows the ledger and an edited row re-reads cleanly.
+ * `previousBudgetWindow` is the one step of that walk: the cycle before a
+ * window, measured exactly as `getBudgetPeriodWindow` would have measured it
+ * on its last day, or null when the window is the budget's FIRST cycle. The
+ * first cycle is the one holding the budget's first day: the anchor, where
+ * there is one; otherwise the start date, which for a row older than the
+ * model is its creation day — so a legacy row keeping the calendar and a
+ * weekly budget both begin in the cycle that holds their start, and a
+ * one-off has no cycle before it at all. `normaliseRolloverMode` reads the
+ * stored mode, 'none' for anything that is not one of the four.
+ *
  * BOUNDARIES: windows are inclusive and run to the LAST MILLISECOND of the end
  * day. The old code ended a month at `new Date(y, m + 1, 0)` — local midnight —
  * which dropped the final day of every month for anyone west of the row's
@@ -98,7 +114,7 @@
  */
 
 import { toDateMs } from './dateBoundary.js';
-import type { BudgetRepeatUnit } from '../types/index.js';
+import type { BudgetRepeatUnit, BudgetRolloverMode } from '../types/index.js';
 
 /** Every period a budget can be measured over. */
 export type BudgetPeriodName = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom' | 'every';
@@ -559,4 +575,40 @@ export function getBudgetPeriodWindow(
       );
     }
   }
+}
+
+/**
+ * A stored rollover mode as one of the four, 'none' for anything else. Nothing
+ * writes another value (both engines' CHECKs refuse one); a reader still has to
+ * answer for a row that has none.
+ */
+export function normaliseRolloverMode(value: unknown): BudgetRolloverMode {
+  if (value === 'surplus' || value === 'overspend' || value === 'both') return value;
+  return 'none';
+}
+
+/**
+ * The cycle before `window`, or null when `window` is the budget's first
+ * cycle, the budget has not started, or it runs once. See the header.
+ *
+ * Measured by asking `getBudgetPeriodWindow` about the day before the window
+ * begins, so the previous cycle is cut and anchored exactly as that day would
+ * have seen it. Before an anchor the model answers the first cycle again — the
+ * same start — which is how an anchored budget's first cycle is told; a cycle
+ * that ends before the budget's first day is before the budget, which is how
+ * a calendar or weekly one's is.
+ */
+export function previousBudgetWindow(
+  budget: BudgetPeriodSource,
+  window: BudgetPeriodWindow
+): BudgetPeriodWindow | null {
+  if (window.period === 'custom' || window.notStarted) return null;
+  const firstDay = toDayParts(budget.startDate) ?? toDayParts(budget.createdAt);
+  if (!firstDay) return null;
+
+  const dayBeforeStart = new Date(window.start.getFullYear(), window.start.getMonth(), window.start.getDate() - 1, 12);
+  const previous = getBudgetPeriodWindow(budget, dayBeforeStart);
+  if (previous.start.getTime() >= window.start.getTime()) return null;
+  if (compareDays(partsOf(previous.end), firstDay) < 0) return null;
+  return previous;
 }

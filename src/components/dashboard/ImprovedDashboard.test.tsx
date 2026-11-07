@@ -792,13 +792,20 @@ describe('Budget Status', () => {
     expect(within(screen.getByTestId('budget-status')).queryByText('Fuel')).not.toBeInTheDocument();
   });
 
-  it('marks an overspend against the allowance the Budget page shows — rollover carried in', () => {
+  it('marks an overspend against the allowance the Budget page shows — the carry counted in', () => {
+    // Carries its surplus, and began in September (a row written before the
+    // cycle model keeps the calendar month): September left £100 of £500,
+    // so October's allowance is £600 (utils/budgetEvaluation).
     mocks.app.budgets = [{
       ...(mocks.app.budgets[0] as object),
-      rollover: true,
-      rolloverAmount: 100,
+      rolloverMode: 'surplus',
+      startDate: '2026-09-01',
+      createdAt: new Date(2026, 8, 1),
     }] as never[];
-    mocks.app.transactions = [txn({ id: 'big', date: new Date(2026, 9, 2), amount: -655 })];
+    mocks.app.transactions = [
+      txn({ id: 'last-month', date: new Date(2026, 8, 12), amount: -400 }),
+      txn({ id: 'big', date: new Date(2026, 9, 2), amount: -655 }),
+    ];
 
     render(<ImprovedDashboard />);
 

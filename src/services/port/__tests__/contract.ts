@@ -2157,6 +2157,26 @@ export function runDataPortContract(name: string, harness: DataPortContractHarne
         expect(named.repeatUnit ?? null).toBeNull();
       });
 
+      rule(['createBudget', 'updateBudget', 'listBudgets'], 'keeps what a budget does at the end of each period, as the word it is', async () => {
+        // ROLLOVER MODES (7 Nov 2026): one of four words on the row; the
+        // carry is derived from the cycles before, never stored. The word
+        // must travel whole on a create, change on an update, and read as
+        // 'none' on a budget that never said — a column-backed engine
+        // answers the column's default, the browser's store what it was
+        // given, which is nothing; both are "starts afresh".
+        const { port } = await harness.create({ accounts: threeAccounts() });
+
+        const created = await port.createBudget(aNewBudget('cat-everyday', 50, { rolloverMode: 'both' }));
+        expect(created.rolloverMode).toBe('both');
+        expect((await port.listBudgets())[0].rolloverMode).toBe('both');
+
+        const changed = await port.updateBudget(created.id, { rolloverMode: 'overspend' });
+        expect(changed.rolloverMode).toBe('overspend');
+
+        const unsaid = await port.createBudget(aNewBudget('cat-bills', 20));
+        expect(unsaid.rolloverMode ?? 'none').toBe('none');
+      });
+
       rule(['updateBudget'], 'refuses to change a budget that is not there, and says which', async () => {
         // Not created-on-the-fly: an id that names nothing is a bug upstream
         // (a stale page, a double submit after a delete), and inventing a

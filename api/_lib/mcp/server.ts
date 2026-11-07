@@ -1123,7 +1123,7 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
     'reckley_budget_status',
     {
       title: 'Budget status',
-      description: `Every active budget that is running today, measured over its own period — the cycle counted from the budget's own start date (a monthly budget from the 1st is the calendar month; a yearly one runs twelve months from its start), the week for a weekly one, the single run of a one-off — exactly as the app's Budget page shows it: the allowance (with any rollover carried in), what has been spent, what is left or by how much it is over, and the days the period covers. A budget past its end date, or not yet started, is left out.`,
+      description: `Every active budget that is running today, measured over its own period — the cycle counted from the budget's own start date (a monthly budget from the 1st is the calendar month; a yearly one runs twelve months from its start), the week for a weekly one, the single run of a one-off — exactly as the app's Budget page shows it: the allowance (the plan plus whatever the budget's rollover mode carries in from the period before — a surplus, an overspend, both or nothing), what has been spent, what is left or by how much it is over, and the days the period covers. A budget past its end date, or not yet started, is left out.`,
       inputSchema: z.strictObject({
         response_format: responseFormat,
       }),
@@ -1173,6 +1173,10 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
         from: localDay(entry.window.start),
         to: localDay(entry.window.end),
         allowance: money(entry.effectiveAmount.toNumber(), currency),
+        // The part of the allowance that came from the period before, signed,
+        // under the budget's own mode; zero when nothing did.
+        carried_in: money(entry.carriedIn.toNumber(), currency),
+        rollover_mode: entry.rolloverMode,
         spent: money(entry.spent.toNumber(), currency),
         remaining: money(entry.remaining.toNumber(), currency),
         percent_used: Number(entry.percentage.toFixed(1)),

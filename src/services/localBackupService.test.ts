@@ -119,7 +119,7 @@ const seedSplits = (): Record<string, unknown>[] => [
 
 const seedBudgets = (): Record<string, unknown>[] => [{
   id: 'budget-food', categoryId: CAT_SUB, amount: 400, period: 'monthly', isActive: true,
-  name: 'Food', spent: 112.34, startDate: '2026-07-01', rollover: false, rolloverAmount: 0,
+  name: 'Food', spent: 112.34, startDate: '2026-07-01', rolloverMode: 'surplus',
   createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z',
 }];
 

@@ -39,6 +39,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Budget, Category, Transaction, TransactionSplit } from '../../../src/types/index.js';
+import { normaliseRolloverMode } from '../../../src/utils/budgetPeriods.js';
 import { readAllPages } from './paging.js';
 
 /** Which rows a search wants with respect to review. */
@@ -265,8 +266,7 @@ interface BudgetRow {
   start_date: string | null;
   end_date: string | null;
   is_active: boolean | null;
-  rollover: boolean | null;
-  rollover_amount: number | string | null;
+  rollover_mode: string | null;
   alert_threshold: number | string | null;
   notes: string | null;
   created_at: string;
@@ -353,8 +353,7 @@ const toBudget = (row: BudgetRow): Budget => ({
   spent: 0,
   startDate: row.start_date ?? undefined,
   endDate: row.end_date ?? undefined,
-  rollover: row.rollover === true,
-  rolloverAmount: num(row.rollover_amount),
+  rolloverMode: normaliseRolloverMode(row.rollover_mode),
   alertThreshold: row.alert_threshold === null ? undefined : num(row.alert_threshold),
   notes: row.notes ?? undefined,
 });
@@ -574,7 +573,7 @@ export function createSupabasePort(
     async listBudgets() {
       const { data, error } = await supabase
         .from('budgets')
-        .select('id, name, amount, period, repeat_count, repeat_unit, category, category_id, start_date, end_date, is_active, rollover, rollover_amount, alert_threshold, notes, created_at, updated_at')
+        .select('id, name, amount, period, repeat_count, repeat_unit, category, category_id, start_date, end_date, is_active, rollover_mode, alert_threshold, notes, created_at, updated_at')
         .eq('user_id', userId)
         .order('name');
       if (error) return fail('budgets', error);

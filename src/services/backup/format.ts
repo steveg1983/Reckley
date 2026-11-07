@@ -277,7 +277,7 @@ const MONEY_FIELDS = [
   'amount', 'balance', 'initial_balance', 'bank_balance', 'target_amount',
   'current_amount', 'contribution_amount', 'low_balance_threshold', 'price',
   'total_amount', 'fees', 'cost_basis', 'current_price', 'market_value',
-  'purchase_price', 'spent', 'rollover_amount',
+  'purchase_price', 'spent',
 ] as const;
 
 /**

@@ -64,7 +64,7 @@ const FINANCIAL_MERGE_RULES: Record<string, MergeRule[]> = {
     { field: 'spent', strategy: 'serverWins' },
     { field: 'category', strategy: 'newer' },
     { field: 'period', strategy: 'newer' },
-    { field: 'rollover', strategy: 'newer' },
+    { field: 'rolloverMode', strategy: 'newer' },
   ],
   goal: [
     { field: 'targetAmount', strategy: 'newer' },

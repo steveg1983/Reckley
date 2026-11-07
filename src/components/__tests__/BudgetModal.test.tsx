@@ -413,6 +413,62 @@ describe('BudgetModal', () => {
      * EVERY… — an interval of the user's own (owner, 7 Nov 2026): N weeks or
      * months, counted from Starts. A whole number of at least one, or no save.
      */
+    /**
+     * AT THE END OF EACH PERIOD (owner, 7 Nov 2026): rollover is a choice per
+     * budget, "neither" by default. The carry is derived from the periods
+     * before, so the editor only records the mode.
+     */
+    describe('At the end of each period — the rollover mode', () => {
+      it('starts afresh unless told otherwise, and says what that means', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        expect(screen.getByLabelText('At the end of each period')).toHaveValue('none');
+        expect(screen.getByText('Each period starts with the amount above, whatever the last one left.')).toBeInTheDocument();
+
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ rolloverMode: 'none' });
+      });
+
+      it('carries what is left when asked, and writes the mode', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        fireEvent.change(screen.getByLabelText('At the end of each period'), { target: { value: 'surplus' } });
+        expect(screen.getByText('Anything left at the end of a period is added to the next one. An overspend is not carried.')).toBeInTheDocument();
+
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ rolloverMode: 'surplus' });
+      });
+
+      it('a one-off has no next period: the choice is not offered, and it is written as starting afresh', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        fireEvent.change(screen.getByLabelText('At the end of each period'), { target: { value: 'both' } });
+        choosePeriod('custom');
+        expect(screen.queryByLabelText('At the end of each period')).not.toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2026-12-01' } });
+        fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2027-01-31' } });
+
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ period: 'custom', rolloverMode: 'none' });
+      });
+
+      it('a budget that carries both shows its mode', () => {
+        const carries = {
+          id: 'b-1',
+          categoryId: 'det-groceries',
+          amount: 90,
+          period: 'monthly',
+          rolloverMode: 'both',
+          isActive: true,
+          spent: 0,
+          startDate: '2026-11-01',
+          createdAt: new Date('2026-11-07T10:00:00.000Z'),
+          updatedAt: new Date('2026-11-07T10:00:00.000Z'),
+        } satisfies Budget;
+
+        renderWithProviders(<BudgetModal {...defaultProps} budget={carries} />);
+        expect(screen.getByLabelText('At the end of each period')).toHaveValue('both');
+        expect(screen.getByText('Whatever a period leaves — left over or gone over — carries into the next one.')).toBeInTheDocument();
+      });
+    });
+
     describe('Every… — an interval of the user’s own', () => {
       it('asks how many and of what, names the first interval, and writes the pair', () => {
         renderWithProviders(<BudgetModal {...defaultProps} />);

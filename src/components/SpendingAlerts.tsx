@@ -4,7 +4,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useCurrencyDecimal } from '../hooks/useCurrencyDecimal';
 import { calculateBudgetSpending, calculateBudgetPercentage } from '../utils/calculations-decimal';
 import { toDecimal, toStorageNumber } from '../utils/decimal';
-import { getEffectiveBudgetAmount } from '../utils/budgetAmounts';
+import { evaluateBudgets } from '../utils/budgetEvaluation';
 import { toDecimalTransaction } from '../utils/decimal-converters';
 import { expandSplitTransactions } from '../utils/transactionSplits';
 import { formatDecimal } from '../utils/decimal-format';
@@ -265,19 +265,24 @@ export default function SpendingAlerts() {
   // Check for new alerts
   useEffect(() => {
     const checkAlerts = () => {
-      // Convert regular budgets to decimal budgets, counting any rollover
-      // carried into this period so an alert matches the spendable amount.
+      const now = new Date();
+      // The allowance the Budget page shows — the plan plus whatever carry
+      // the budget's mode allows in from the cycles before — so an alert
+      // matches the spendable amount (utils/budgetEvaluation).
+      const allowanceById = new Map(
+        evaluateBudgets(budgets, { transactions, transactionSplits, categories, now })
+          .map(entry => [entry.budget.id, entry.effectiveAmount] as const)
+      );
       const decimalBudgets: DecimalBudget[] = budgets.map(b => ({
         ...b,
-        amount: getEffectiveBudgetAmount(b)
+        amount: allowanceById.get(b.id) ?? toDecimal(b.amount)
       }));
       // Split parents expand into per-line rows so split lines alert
       // against THEIR categories' budgets.
       const decimalTransactions = expandSplitTransactions(transactions, transactionSplits)
         .map(toDecimalTransaction);
       const newAlerts: Alert[] = [];
-      
-      const now = new Date();
+
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
       const startDate = new Date(currentYear, currentMonth, 1);
@@ -365,7 +370,7 @@ export default function SpendingAlerts() {
     const interval = setInterval(checkAlerts, 60000); // Check every minute
     
     return () => clearInterval(interval);
-  }, [budgets, alertConfigs, mutedCategories, transactions, transactionSplits, alerts, setAlerts, getCategoryLabel]);
+  }, [budgets, categories, alertConfigs, mutedCategories, transactions, transactionSplits, alerts, setAlerts, getCategoryLabel]);
 
   // Calculate alert statistics
   const alertStats = useMemo((): AlertStats => {

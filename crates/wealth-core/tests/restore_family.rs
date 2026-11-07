@@ -622,8 +622,8 @@ fn every_entity_the_format_carries_can_be_restored() {
             "created_at": "2019-05-04T00:00:00+00:00", "updated_at": "2019-05-04T00:00:00+00:00" }]},
         { "entity": "budgets", "rows": [{
             "id": "b0000000-0000-0000-0000-000000000001", "name": "Food", "amount": "100.00",
-            "period": "monthly", "start_date": "2019-01-01", "spent": "42.50", "rollover": true,
-            "rollover_amount": "7.25", "alert_threshold": "80.00", "is_active": true,
+            "period": "monthly", "start_date": "2019-01-01", "spent": "42.50",
+            "rollover_mode": "surplus", "alert_threshold": "80.00", "is_active": true,
             "category": OUTGOINGS, "notes": "a note", "metadata": {},
             "created_at": "2019-01-01T00:00:00+00:00", "updated_at": "2019-01-01T00:00:00+00:00" }]},
         { "entity": "goals", "rows": [{
@@ -701,9 +701,14 @@ fn every_entity_the_format_carries_can_be_restored() {
     );
     assert_eq!(
         scalar(&connection, "SELECT amount_minor || '/' || spent_minor || '/'
-                 || rollover_amount_minor || '/' || alert_threshold_bp FROM budgets"),
-        "10000/4250/725/8000",
+                 || alert_threshold_bp FROM budgets"),
+        "10000/4250/8000",
         "alert_threshold is a PERCENTAGE stored as basis points of a percent, not money"
+    );
+    assert_eq!(
+        scalar(&connection, "SELECT rollover_mode FROM budgets"),
+        "surplus",
+        "the rollover mode travels as the word it is"
     );
     assert_eq!(
         scalar(&connection, "SELECT target_amount_minor || '/' || current_amount_minor FROM goals"),

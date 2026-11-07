@@ -26,7 +26,7 @@ export default {
   },
 
   state: [
-    budgetShape(THEIR_BUDGET, 'Theirs:50.00:monthly:-:2024-01-01:-:0.00:no:0.00:80.00:active:-'),
+    budgetShape(THEIR_BUDGET, 'Theirs:50.00:monthly:-:2024-01-01:-:0.00:none:80.00:active:-'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

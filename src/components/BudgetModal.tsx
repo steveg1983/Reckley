@@ -7,7 +7,7 @@ import { parseMoneyInput } from '../utils/decimal';
 import { getBudgetPeriodWindow, resolveBudgetAnchor, type BudgetRepeat } from '../utils/budgetPeriods';
 import { describeBudgetDay, describeBudgetWindow } from '../utils/budgetPace';
 import CategorySelector from './CategorySelector';
-import type { Budget, BudgetRepeatUnit, Category } from '../types';
+import type { Budget, BudgetRepeatUnit, BudgetRolloverMode, Category } from '../types';
 
 const isoDay = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -53,7 +53,41 @@ interface FormData {
   /** For "Every…": how many, as typed, and of what. Ignored for every other period. */
   repeatCount: string;
   repeatUnit: BudgetRepeatUnit;
+  /** What the end of each period does with the gap. Not asked for a one-off, which has no next period. */
+  rolloverMode: BudgetRolloverMode;
   isActive: boolean;
+}
+
+/**
+ * The rollover modes, in the words a person chooses between (owner, 7 Nov
+ * 2026: "give the user the option" — his own answer being the first). The
+ * carry itself is derived from the periods before, never stored, so the
+ * choice can be changed at any time and the figures follow.
+ */
+const ROLLOVER_OPTIONS: ReadonlyArray<{ value: BudgetRolloverMode; label: string }> = [
+  { value: 'none', label: 'Start afresh' },
+  { value: 'surplus', label: 'Carry what is left' },
+  { value: 'overspend', label: 'Carry what went over' },
+  { value: 'both', label: 'Carry both' }
+];
+
+/** A <select> value narrowed to a real mode — no cast, no unlisted value. */
+function toRolloverMode(value: string): BudgetRolloverMode {
+  return ROLLOVER_OPTIONS.find(option => option.value === value)?.value ?? 'none';
+}
+
+/** What a mode means for the NEXT period, in one sentence under the select. */
+function describeRollover(mode: BudgetRolloverMode): string {
+  switch (mode) {
+    case 'none':
+      return 'Each period starts with the amount above, whatever the last one left.';
+    case 'surplus':
+      return 'Anything left at the end of a period is added to the next one. An overspend is not carried.';
+    case 'overspend':
+      return 'Anything over at the end of a period is taken off the next one. A surplus is not carried.';
+    case 'both':
+      return 'Whatever a period leaves — left over or gone over — carries into the next one.';
+  }
 }
 
 /**
@@ -196,6 +230,7 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
       endDate: budget?.endDate ?? '',
       repeatCount: budget?.repeatCount ? String(budget.repeatCount) : '',
       repeatUnit: budget?.repeatUnit ?? 'month',
+      rolloverMode: budget?.rolloverMode ?? 'none',
       isActive: budget?.isActive !== false
     },
     {
@@ -210,6 +245,9 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
           // other period, and null clears a stored one when the period moves.
           repeatCount: repeat?.count ?? null,
           repeatUnit: repeat?.unit ?? null,
+          // A one-off has no next period to carry into, so it is written as
+          // starting afresh whatever the select last showed.
+          rolloverMode: data.period === 'custom' ? 'none' : data.rolloverMode,
           isActive: data.isActive,
           createdAt: budget?.createdAt || now,
           updatedAt: now,
@@ -304,6 +342,7 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
         endDate: budget.endDate ?? '',
         repeatCount: budget.repeatCount ? String(budget.repeatCount) : '',
         repeatUnit: budget.repeatUnit ?? 'month',
+        rolloverMode: budget.rolloverMode ?? 'none',
         isActive: budget.isActive !== false
       });
     }
@@ -508,6 +547,33 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
             <p className="text-xs text-gray-700 dark:text-gray-200" data-testid="budget-choice">
               {choice}
             </p>
+          )}
+
+          {/* AT THE END OF EACH PERIOD — the rollover mode (owner, 7 Nov 2026:
+              "neither" for himself, "give the user the option"). Per budget,
+              because it is a preference about THIS allowance; not asked for
+              a one-off, which has no next period. The carry is derived from
+              the periods before (utils/budgetEvaluation), so changing this
+              changes the figures at once and never rewrites a row. */}
+          {formData.period !== 'custom' && (
+            <div>
+              <label htmlFor="budget-rollover" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                At the end of each period
+              </label>
+              <select
+                id="budget-rollover"
+                value={formData.rolloverMode}
+                onChange={(e) => updateField('rolloverMode', toRolloverMode(e.target.value))}
+                className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
+              >
+                {ROLLOVER_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {describeRollover(formData.rolloverMode)}
+              </p>
+            </div>
           )}
 
           <div className="flex items-center gap-2">

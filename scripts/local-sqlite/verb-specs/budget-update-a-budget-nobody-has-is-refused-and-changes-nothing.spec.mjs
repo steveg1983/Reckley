@@ -32,7 +32,7 @@ export default {
 
   state: [
     budgetsOwnedBy(USER, '1'),
-    budgetShape(EXISTING_BUDGET, 'Food:100.00:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:no:0.00:80.00:active:-'),
+    budgetShape(EXISTING_BUDGET, 'Food:100.00:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:none:80.00:active:-'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

@@ -502,6 +502,13 @@ export interface SuggestionDismissal {
 /** The unit of a budget that repeats "every N …" (period 'every'). */
 export type BudgetRepeatUnit = 'week' | 'month';
 
+/**
+ * What a budget does with the gap at the end of each cycle (owner, 7 Nov
+ * 2026: "give the user the option"): nothing, carry what was left, carry what
+ * was over, or both. `none` is the default, and the owner's own choice.
+ */
+export type BudgetRolloverMode = 'none' | 'surplus' | 'overspend' | 'both';
+
 export interface Budget {
   id: string;
   categoryId: string;  // Changed from 'category' to match service implementation
@@ -528,8 +535,12 @@ export interface Budget {
    * means "not stated", which an update leaves alone). See utils/budgetPeriods.
    */
   endDate?: string | null;
-  rollover?: boolean;
-  rolloverAmount?: number;
+  /**
+   * The rollover mode (`budgets.rollover_mode`): absent reads as 'none'. The
+   * carry itself is never stored — utils/budgetEvaluation derives it from the
+   * cycles before the one being measured, so it follows the ledger.
+   */
+  rolloverMode?: BudgetRolloverMode;
   alertThreshold?: number;
   notes?: string;
 }

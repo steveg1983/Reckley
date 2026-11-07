@@ -411,8 +411,9 @@ export function ImprovedDashboard() {
     // Budget status reads each budget over ITS OWN period — the calendar
     // month for a monthly budget, the week for a weekly one — through the one
     // evaluation the Budget page uses (utils/budgetEvaluation): group budgets
-    // roll their children up, a rollover is carried into the allowance,
-    // refunds net off, a legacy category name is healed. It used to sum the
+    // roll their children up, the carry a budget's mode allows is counted
+    // into the allowance, refunds net off, a legacy category name is healed.
+    // It used to sum the
     // budget's own category over a rolling thirty days against the base
     // amount here, which is no period a budget has — so the same budget read
     // one figure on this card and another on the Budget page, and this card
@@ -441,8 +442,8 @@ export function ImprovedDashboard() {
       // label, the group's aria-label and the progress bar's all say the same
       // thing.
       categoryName: categoryNameFor(categoryId),
-      // The allowance for the window with any rollover carried in — the figure
-      // the Budget page's card shows, so "£655 / £500" reads the same there.
+      // The allowance for the window with the carry counted in — the figure
+      // the Budget page's card shows, so "£655 / £600" reads the same there.
       amount: effectiveAmount.toNumber(),
       spent: spent.toNumber(),
       remaining: remaining.toNumber(),

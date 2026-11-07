@@ -26,7 +26,7 @@ export default {
   result: { id: NEW, name: 'Budget', category: null },
 
   state: [
-    budgetShape(NEW, 'Budget:25.00:yearly:-:2024-03-01:-:0.00:no:0.00:80.00:active:-'),
+    budgetShape(NEW, 'Budget:25.00:yearly:-:2024-03-01:-:0.00:none:80.00:active:-'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

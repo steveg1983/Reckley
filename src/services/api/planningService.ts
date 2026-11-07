@@ -54,6 +54,7 @@ import { storageAdapter, STORAGE_KEYS } from '../storageAdapter';
 import { createScopedLogger } from '../../loggers/scopedLogger';
 import { getDefaultCategories } from '../../data/defaultCategories';
 import { parseReportComponents, parseReportFilters } from '../reports/document';
+import { normaliseRolloverMode } from '../../utils/budgetPeriods';
 import type {
   ForecastAdjustment,
   Budget,
@@ -94,8 +95,8 @@ const budgetFromDb = (row: Row): Budget => ({
   spent: num(row.spent),
   startDate: str(row.start_date),
   endDate: str(row.end_date),
-  rollover: row.rollover === true,
-  rolloverAmount: num(row.rollover_amount),
+  // The mode is one of four by CHECK; the carry itself is derived, never a column.
+  rolloverMode: normaliseRolloverMode(row.rollover_mode),
   alertThreshold: typeof row.alert_threshold === 'number' ? row.alert_threshold : undefined,
   notes: str(row.notes)
 });
@@ -115,8 +116,7 @@ const budgetToDb = (b: Partial<Budget>, userId?: string): Row => {
   if (b.spent !== undefined) row.spent = b.spent;
   if (b.startDate !== undefined) row.start_date = b.startDate;
   if (b.endDate !== undefined) row.end_date = b.endDate;
-  if (b.rollover !== undefined) row.rollover = b.rollover;
-  if (b.rolloverAmount !== undefined) row.rollover_amount = b.rolloverAmount;
+  if (b.rolloverMode !== undefined) row.rollover_mode = b.rolloverMode;
   if (b.alertThreshold !== undefined) row.alert_threshold = b.alertThreshold;
   if (b.notes !== undefined) row.notes = b.notes;
   return row;

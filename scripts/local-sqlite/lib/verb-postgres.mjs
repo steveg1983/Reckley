@@ -241,8 +241,7 @@ const BUDGET_JSON = `jsonb_build_object(
   'start_date', b.start_date::text,
   'end_date', b.end_date::text,
   'spent', ${money('b.spent')},
-  'rollover', b.rollover,
-  'rollover_amount', ${money('b.rollover_amount')},
+  'rollover_mode', b.rollover_mode,
   'alert_threshold', ${money('b.alert_threshold')},
   'is_active', b.is_active,
   'notes', b.notes,
@@ -1604,7 +1603,7 @@ const VERBS = {
     const text = (key) => `${payloadLiteral}::jsonb->>'${key}'`;
     return `INSERT INTO public.budgets (
        id, user_id, name, amount, period, repeat_count, repeat_unit, category, start_date, end_date,
-       spent, rollover, rollover_amount, alert_threshold, is_active, notes
+       spent, rollover_mode, alert_threshold, is_active, notes
      ) VALUES (
        COALESCE(NULLIF(${text('id')},'')::uuid, uuid_generate_v4()),
        (${text('user_id')})::uuid,
@@ -1627,8 +1626,9 @@ const VERBS = {
        NULLIF(${text('end_date')},'')::date,
        -- { ...budget, spent: 0 }: the writer's zero, not the caller's.
        0,
-       COALESCE((${text('rollover')})::boolean, false),
-       COALESCE((${text('rollover_amount')})::numeric, 0),
+       -- The rollover mode (20261107203000): a word the table's CHECK judges
+       -- on both engines; absent leaves the column's 'none' to answer.
+       COALESCE(NULLIF(${text('rollover_mode')},''), 'none'),
        COALESCE(NULLIF(${text('alert_threshold')},'')::numeric, 80),
        COALESCE((${text('is_active')})::boolean, true),
        ${text('notes')}
@@ -1662,8 +1662,7 @@ const VERBS = {
        ${set('start_date', `(${text('start_date')})::date`)},
        ${set('end_date', `(${text('end_date')})::date`)},
        ${set('spent', `(${text('spent')})::numeric`)},
-       ${set('rollover', `(${text('rollover')})::boolean`)},
-       ${set('rollover_amount', `(${text('rollover_amount')})::numeric`)},
+       ${set('rollover_mode', text('rollover_mode'))},
        ${set('alert_threshold', `(${text('alert_threshold')})::numeric`)},
        ${set('is_active', `(${text('is_active')})::boolean`)},
        ${set('notes', text('notes'))}

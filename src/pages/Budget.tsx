@@ -6,12 +6,11 @@ import { useApp } from '../contexts/AppContextSupabase';
 import { useCurrencyDecimal } from '../hooks/useCurrencyDecimal';
 import { useNotifications } from '../contexts/NotificationContext';
 import { useToast } from '../contexts/ToastContext';
-import { ArrowRightIcon, BellIcon, ChevronDownIcon, ChevronRightIcon } from '../components/icons';
+import { BellIcon, ChevronDownIcon, ChevronRightIcon } from '../components/icons';
 import TrendArrow from '../components/TrendArrow';
 import { EditIcon, DeleteIcon } from '../components/icons';
 import { IconButton } from '../components/icons/IconButton';
 import BudgetModal from '../components/BudgetModal';
-import BudgetRollover from '../components/BudgetRollover';
 import SpendingAlerts from '../components/SpendingAlerts';
 import type { Budget } from '../types';
 import PageWrapper from '../components/PageWrapper';
@@ -70,13 +69,15 @@ function BudgetView() {
   /**
    * §12 (owner, 23 Aug): ONE budgeting approach — the traditional page IS
    * Budget. Envelope and Zero-Based are retired; Templates, Rollover and
-   * Alerts fold in as features below the budgets, each a collapsed section
+   * Alerts folded in as features below the budgets, each a collapsed section
    * that mounts only when opened. No tab strip: a first-time user is never
    * asked to choose between budgeting philosophies before they have a
-   * single budget.
+   * single budget. Templates left on 1 Sep 2026 (the wizard's job) and
+   * Rollover on 7 Nov 2026 (a per-budget mode in the editor, derived rather
+   * than applied by hand), so the one fold left is Alerts.
    */
-  const [openFeatures, setOpenFeatures] = useState<Set<'rollover' | 'alerts'>>(new Set());
-  const toggleFeature = (key: 'rollover' | 'alerts'): void =>
+  const [openFeatures, setOpenFeatures] = useState<Set<'alerts'>>(new Set());
+  const toggleFeature = (key: 'alerts'): void =>
     setOpenFeatures(previous => {
       const next = new Set(previous);
       if (next.has(key)) next.delete(key);
@@ -106,16 +107,16 @@ function BudgetView() {
   );
 
   // ONE evaluation per budget — window, group roll-up, legacy category
-  // healing, rollover, netting — from utils/budgetEvaluation, which the
-  // Dashboard's Budget Status card reads too, so the two can never show the
-  // same budget as two different figures again. `remaining` is UNCLAMPED: an
-  // overspent budget must read "over budget by £30.00" rather than "£0.00
-  // remaining" while the page total says something else.
+  // healing, the carry its mode allows, netting — from utils/budgetEvaluation,
+  // which the Dashboard's Budget Status card reads too, so the two can never
+  // show the same budget as two different figures again. `remaining` is
+  // UNCLAMPED: an overspent budget must read "over budget by £30.00" rather
+  // than "£0.00 remaining" while the page total says something else.
   const budgetsWithSpent = useMemo(() => {
     return evaluateBudgets(
       budgets.filter((budget): budget is Budget => budget !== null && budget !== undefined),
       { transactions, transactionSplits, categories, foreignAccountIds, now: evaluatedAt }
-    ).map(({ budget, effectiveAmount, spent, percentage, remaining, window, excludedForeignCount }) => {
+    ).map(({ budget, effectiveAmount, carriedIn, carriedFrom, spent, percentage, remaining, window, excludedForeignCount }) => {
       // How far through its window the budget is, and spending against that
       // pace (owner, 5 Nov 2026): a year read on day five and on day 360 used
       // to show the same bar. See utils/budgetPace.
@@ -123,6 +124,8 @@ function BudgetView() {
       return {
         ...budget,
         effectiveAmount,
+        carriedIn,
+        carriedFrom,
         spent: spent.toNumber(),
         percentage,
         remaining: remaining.toNumber(),
@@ -600,6 +603,17 @@ function BudgetView() {
                 </span>
               </div>
 
+              {/* THE CARRY, NAMED (owner, 7 Nov 2026). An allowance that is
+                  not the plan has to say why, and from where: the cycle
+                  before, under the budget's own mode. A figure, not a verdict
+                  — neutral ink, signed by formatCurrency, and absent when
+                  nothing was carried (a zero earns no line). */}
+              {!budget.carriedIn.isZero() && budget.carriedFrom && (
+                <p className="text-dense text-gray-500 dark:text-gray-400" data-testid="budget-carry">
+                  Includes {formatCurrency(budget.carriedIn)} carried over from {describeBudgetWindow(budget.carriedFrom)}
+                </p>
+              )}
+
               {/* The BAR stops at full — there is no more room to draw — while
                   the figures below it keep telling the truth past 100%. */}
               <div
@@ -702,10 +716,11 @@ function BudgetView() {
               TEMPLATES"): applying a budget set in one go is the wizard's
               job now, and the named-sets remainder lived in localStorage —
               sets that would not follow a person between devices. Rollover
-              stays: carrying unspent budget forward is a capability nothing
-              else has. */}
+              left on 7 Nov 2026: it was a screen that applied a carry by
+              hand, month by month, for monthly budgets alone, and held its
+              settings in localStorage; it is now a mode on each budget, in
+              the editor, and the carry is derived (utils/budgetEvaluation). */}
           {([
-            ['rollover', ArrowRightIcon, 'Rollover', 'Carry what is left of a budget into the next period.'],
             ['alerts', BellIcon, 'Spending alerts', 'Warnings as a budget fills, before it overflows.'],
           ] as const).map(([key, Icon, title, blurb]) => (
             <div key={key} className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700">
@@ -726,8 +741,7 @@ function BudgetView() {
               </button>
               {openFeatures.has(key) && (
                 <div className="px-5 pb-5">
-                  {key === 'rollover' && <BudgetRollover />}
-                  {key === 'alerts' && <SpendingAlerts />}
+                  <SpendingAlerts />
                 </div>
               )}
             </div>
@@ -760,7 +774,7 @@ function BudgetView() {
       <PageTip
         id="budget-intro-2"
         title="Track your spending with budgets"
-        description="Give a category a limit for its period — weekly, monthly or yearly — and the bar shows what you've spent against it. Rollover and alerts are in the folds below the list."
+        description="Give a category a limit for its period — weekly, monthly or yearly — and the bar shows what you've spent against it. What a budget does with what each period leaves is set when you edit it; alerts are in the fold below the list."
       />
     </PageWrapper>
   );

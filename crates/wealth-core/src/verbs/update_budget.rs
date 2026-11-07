@@ -16,11 +16,11 @@
 //!
 //! # ONE presence rule, and it is `budgetToDb`'s
 //!
-//! Twelve `if (b.k !== undefined)` lines. `undefined` means *leave this alone*
+//! Thirteen `if (b.k !== undefined)` lines. `undefined` means *leave this alone*
 //! and is dropped; anything else — `null` included — is sent. So every field
 //! below is the `p ? 'k'` class [`super::update_account`] describes: **the key
 //! being present is the whole test, and a JSON null stores NULL.** Where the
-//! column is `NOT NULL` (`amount`, `period`, `start_date`, `rollover`,
+//! column is `NOT NULL` (`amount`, `period`, `start_date`, `rollover_mode`,
 //! `alert_threshold`, `is_active`, and `name` — see below) a stated null is
 //! refused by the file, on both engines.
 //!
@@ -152,12 +152,10 @@ pub struct BudgetPatch {
     /// docs give.
     #[serde(default)]
     pub spent: Field<Money>,
-    /// Does an unspent remainder carry forward?
+    /// What the end of each cycle does with the gap — one of four words, by
+    /// CHECK on both engines.
     #[serde(default)]
-    pub rollover: Field<Flag>,
-    /// How much did.
-    #[serde(default)]
-    pub rollover_amount: Field<Money>,
+    pub rollover_mode: Field<String>,
     /// Percent, as a two-place decimal string. NOT money.
     #[serde(default)]
     pub alert_threshold: Field<String>,
@@ -196,7 +194,6 @@ pub fn update_budget(
 
     // Everything that can refuse without touching the file, before the file is
     // touched — the ordering Postgres gets free from its casts.
-    let rollover = resolve_flag_field(&patch.rollover, "rollover")?;
     let is_active = resolve_flag_field(&patch.is_active, "is_active")?;
     let threshold = match patch.alert_threshold.value() {
         None => None,
@@ -213,7 +210,7 @@ pub fn update_budget(
         return Err(not_found());
     };
 
-    let changed = apply(&transaction, &command, rollover, is_active, threshold, &now)?;
+    let changed = apply(&transaction, &command, is_active, threshold, &now)?;
     // `id` is the primary key and the row was just proven to exist, so more than
     // one is unreachable and zero would mean the WHERE clause had drifted from
     // the one that found it. SQLite reports zero changed rows and raises nothing
@@ -261,7 +258,6 @@ pub fn update_budget(
 fn apply(
     transaction: &rusqlite::Transaction<'_>,
     command: &UpdateBudget,
-    rollover: Option<bool>,
     is_active: Option<bool>,
     threshold: Option<i64>,
     now: &str,
@@ -287,19 +283,18 @@ fn apply(
            name                  = CASE WHEN ?1  THEN ?2  ELSE name END,
            amount_minor          = CASE WHEN ?3  THEN ?4  ELSE amount_minor END,
            period                = CASE WHEN ?5  THEN ?6  ELSE period END,
-           repeat_count          = CASE WHEN ?27 THEN ?28 ELSE repeat_count END,
-           repeat_unit           = CASE WHEN ?29 THEN ?30 ELSE repeat_unit END,
+           repeat_count          = CASE WHEN ?25 THEN ?26 ELSE repeat_count END,
+           repeat_unit           = CASE WHEN ?27 THEN ?28 ELSE repeat_unit END,
            category              = CASE WHEN ?7  THEN ?8  ELSE category END,
            start_date            = CASE WHEN ?9  THEN ?10 ELSE start_date END,
            end_date              = CASE WHEN ?11 THEN ?12 ELSE end_date END,
            spent_minor           = CASE WHEN ?13 THEN ?14 ELSE spent_minor END,
-           rollover              = CASE WHEN ?15 THEN ?16 ELSE rollover END,
-           rollover_amount_minor = CASE WHEN ?17 THEN ?18 ELSE rollover_amount_minor END,
-           alert_threshold_bp    = CASE WHEN ?19 THEN ?20 ELSE alert_threshold_bp END,
-           is_active             = CASE WHEN ?21 THEN ?22 ELSE is_active END,
-           notes                 = CASE WHEN ?23 THEN ?24 ELSE notes END,
-           updated_at            = ?25
-         WHERE id = ?26",
+           rollover_mode         = CASE WHEN ?15 THEN ?16 ELSE rollover_mode END,
+           alert_threshold_bp    = CASE WHEN ?17 THEN ?18 ELSE alert_threshold_bp END,
+           is_active             = CASE WHEN ?19 THEN ?20 ELSE is_active END,
+           notes                 = CASE WHEN ?21 THEN ?22 ELSE notes END,
+           updated_at            = ?23
+         WHERE id = ?24",
         params![
             names_it,
             name,
@@ -315,10 +310,8 @@ fn apply(
             patch.end_date.value(),
             patch.spent.is_present(),
             patch.spent.value().map(|money| money.minor()),
-            patch.rollover.is_present(),
-            rollover.map(i64::from),
-            patch.rollover_amount.is_present(),
-            patch.rollover_amount.value().map(|money| money.minor()),
+            patch.rollover_mode.is_present(),
+            patch.rollover_mode.value(),
             patch.alert_threshold.is_present(),
             threshold,
             patch.is_active.is_present(),

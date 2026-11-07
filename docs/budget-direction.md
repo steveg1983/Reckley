@@ -253,6 +253,10 @@ Scope `BudgetRollover` to monthly budgets **by name**, now, with one line saying
 build"). Deriving the previous window properly from `budgetPeriods` is a follow‑up once
 5.1 exists to derive it from.
 
+**Superseded 7 Nov 2026 (PR F, §8).** `BudgetRollover` is gone. Rollover is a mode on each
+budget, chosen in the editor, and the carry is derived from the cycles before through
+`previousBudgetWindow` — the follow‑up this paragraph promised, for every rhythm at once.
+
 ### 5.8 What this does NOT touch
 
 - **No schema change.** `start_date` and `end_date` exist in both engines
@@ -326,7 +330,10 @@ not. Seven suggestions were drawn from it; the owner answered each the same day.
    spent against allowance with no pace. No transaction carries a flag; no screen
    exists to set one; the category's own history is the evidence.
 3. **Rollover modes** — carry a surplus, carry an overspend, or neither, per budget;
-   where a surplus goes; a year's carry for yearly budgets. **Agreed.**
+   where a surplus goes; a year's carry for yearly budgets. **Agreed — the modes and the
+   carry for every rhythm built as PR F (§8), by the owner's 7 Nov word: "neither" for
+   himself, "give the user the option". Where a surplus GOES — sent to another budget
+   rather than kept — is the one part still owed, its own PR.**
 4. **Any repeat interval** — every N weeks or months, not only the six named rhythms.
    **Agreed — built as PR E (§8), with a real column and the first ledger‑file
    upgrade.**
@@ -440,3 +447,34 @@ file at the version it was. Proven against the real version‑0 DDL: rows kept, 
 remade, the new CHECK live, a failed step leaving version 0. The differential lanes gain
 the stored‑whole `every` spec and the refused‑on‑a‑named‑rhythm spec; the contract lane the
 round‑trip and the clearing null.
+
+**PR F (rollover modes, 7 Nov)** — the second round's 3, by the owner's answer the same
+day: "I would personally say neither, but give the user the option." So a **mode per
+budget**, `rollover_mode`: `none` (the default), `surplus`, `overspend` or `both`, chosen in
+the editor under **At the end of each period** with one sentence saying what each means,
+not offered for a one‑off (which has no next period). **The carry is derived, never
+stored.** `previousBudgetWindow` in `utils/budgetPeriods` is the one step of a walk back
+through the budget's cycles — the cycle before a window, measured as that day would have
+measured it, null at the budget's first cycle (the anchor; for a legacy or weekly row the
+cycle holding its start date) — and `evaluateBudgets` walks it from the first cycle
+forward: each cycle's allowance is the plan plus what the cycle before left it, less what
+it spent, and what that leaves, kept under the mode, is the next cycle's carry. One extra
+pass over the budget's own rows; the same for a year as for a week, so **a yearly budget
+carries a year**. The card says "Includes £x carried over from 1–31 Oct 2026" when it did,
+in neutral ink, and nothing when it did not; the Dashboard card, the alerts, the
+notifications and the connector's `reckley_budget_status` (which gains `carried_in` and
+`rollover_mode`) all read the same allowance from the one evaluation. **What went**: the
+"Apply Rollover" fold on the Budget page — a screen that applied a carry by hand, month by
+month, for monthly budgets alone, with its settings and history in localStorage — and
+with it the `rollover` flag and `rollover_amount` columns it wrote. **Cloud**: migration
+`20261107203000_budgets_rollover_mode` adds the column with `budgets_rollover_check`,
+reads a row that was carrying under the old flag as `surplus`, and drops the two old
+columns; run by the owner BEFORE the deploy. A backup from before restores with every
+budget starting afresh (the cloud's restore drops a key that is no longer a column; the
+crate's `backup.rs` records the same rule). **Local**: schema version 2, and the rebuild
+now copies by INTROSPECTION — every column the old table has that the new one keeps, by
+name; a column whose meaning moved translated by name (the flag to the word) — rather
+than by a per‑version list, so a file is brought from whatever it is to the current shape
+in one rebuild, and a current file merely stamped low (which the desktop shell's own test
+makes) loses nothing. Proven against the real version‑0 and version‑1 DDL. The renderer
+went DOWN 13.7 KiB and the ratchet followed it. Owed from this item: where a surplus goes.

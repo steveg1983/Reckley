@@ -327,8 +327,10 @@ const BUDGETS: &[Column] = &[
             date("start_date"),
             date("end_date"),
             money("spent", "spent_minor"),
-            flag("rollover"),
-            money("rollover_amount", "rollover_amount_minor"),
+            // What the end of each cycle does (7 Nov 2026). A backup from
+            // before carries `rollover` and `rollover_amount` instead, and
+            // both are unknown keys now — ignored, as the cloud ignores them.
+            text("rollover_mode"),
             Column { key: "alert_threshold", column: "alert_threshold_bp", kind: Kind::Scaled(2) },
             flag("is_active"),
             text("notes"),
