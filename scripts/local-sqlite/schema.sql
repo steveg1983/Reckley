@@ -1337,7 +1337,13 @@ CREATE TABLE budgets (
   user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   amount_minor  INTEGER NOT NULL,
-  period        TEXT NOT NULL CHECK (period IN ('weekly','biweekly','monthly','quarterly','yearly','custom')),
+  period        TEXT NOT NULL CHECK (period IN ('weekly','biweekly','monthly','quarterly','yearly','custom','every')),
+  -- ANY REPEAT INTERVAL (7 Nov 2026, cloud 20261107150000): for period 'every',
+  -- how many of which unit one cycle is. budgets_repeat_check below holds the
+  -- pair to exactly those rows. A file made before this is SCHEMA VERSION 0
+  -- and gains the columns on open — see the FILE VERSION block at the end.
+  repeat_count  INTEGER,
+  repeat_unit   TEXT,
   category      TEXT,                                          -- category id as text
   category_id   TEXT REFERENCES categories(id) ON DELETE SET NULL,
   start_date    TEXT NOT NULL CHECK (start_date LIKE '____-__-__'),
@@ -1360,7 +1366,14 @@ CREATE TABLE budgets (
     amount_minor          BETWEEN -1000000000000000 AND 1000000000000000 AND
     spent_minor           BETWEEN -1000000000000000 AND 1000000000000000 AND
     rollover_amount_minor BETWEEN -1000000000000000 AND 1000000000000000),
-  CONSTRAINT budgets_period_ordered CHECK (end_date IS NULL OR end_date >= start_date)
+  CONSTRAINT budgets_period_ordered CHECK (end_date IS NULL OR end_date >= start_date),
+  CONSTRAINT budgets_repeat_check CHECK (
+    -- IS NOT NULL first: a CHECK that evaluates to NULL PASSES in SQLite and
+    -- in Postgres alike, so `NULL >= 1` would have let an 'every' row through
+    -- with no interval at all. The crate's upgrade test proved it.
+    (period = 'every' AND repeat_count IS NOT NULL AND repeat_count >= 1
+      AND repeat_unit IS NOT NULL AND repeat_unit IN ('week','month'))
+    OR (period <> 'every' AND repeat_count IS NULL AND repeat_unit IS NULL))
 ) STRICT;
 CREATE INDEX idx_budgets_user ON budgets(user_id);
 
@@ -2250,3 +2263,21 @@ UNION ALL
 -- heuristics, and a file that trips one is not thereby corrupt.
 CREATE VIEW v_integrity_ok AS
   SELECT (SELECT COUNT(*) FROM v_integrity_violations WHERE severity = 'violation') = 0 AS ok;
+
+
+-- ============================================================================
+-- FILE VERSION
+-- ============================================================================
+-- The version this files shape is. A file made by this schema is stamped
+-- with it; a file made by an earlier schema reads 0 (SQLites default), and
+-- `wealth_core::upgrade::upgrade_schema` brings it here ON OPEN, one version
+-- at a time, rebuilding what SQLite cannot ALTER. The `schema_meta` row named
+-- `schema_version` in section 0 was documented and never written; this pragma
+-- is the mechanism, because it needs no table to be right about.
+--
+--   0  every file before 7 Nov 2026 (desktop 0.1.6 and earlier)
+--   1  budgets.repeat_count / repeat_unit and the two CHECKs they come with
+--
+-- Raise it in the SAME commit as the change it names, with the upgrade step
+-- beside it in the crate.
+PRAGMA user_version = 1;

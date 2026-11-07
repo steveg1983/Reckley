@@ -499,11 +499,21 @@ export interface SuggestionDismissal {
   dismissedAt: Date;
 }
 
+/** The unit of a budget that repeats "every N …" (period 'every'). */
+export type BudgetRepeatUnit = 'week' | 'month';
+
 export interface Budget {
   id: string;
   categoryId: string;  // Changed from 'category' to match service implementation
   amount: number;
-  period: 'monthly' | 'weekly' | 'yearly' | 'custom' | 'quarterly';
+  /**
+   * 'every' is a budget that repeats every N weeks or months (owner, 7 Nov
+   * 2026 — "any repeat interval"); `repeatCount` and `repeatUnit` say which,
+   * and are null for every other period. See utils/budgetPeriods.
+   */
+  period: 'monthly' | 'weekly' | 'yearly' | 'custom' | 'quarterly' | 'every';
+  repeatCount?: number | null;
+  repeatUnit?: BudgetRepeatUnit | null;
   isActive: boolean;
   createdAt: Date;
   name?: string;

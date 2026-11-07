@@ -149,11 +149,21 @@ pub fn open(path: &Path) -> Result<Document, String> {
     // `db::open` is the crate's, PRAGMAs and read-backs and all — including the
     // journal-mode assertion this slice added, which is the one check that is
     // about the FILE rather than about the connection.
-    let connection = db::open(path).map_err(|error| {
+    let mut connection = db::open(path).map_err(|error| {
         format!(
             "This file could not be opened as a ledger: {error}\n\nIf it is a \
              Reckley backup (.json) rather than a ledger (.db), restore it into a \
              new ledger instead."
+        )
+    })?;
+
+    // A file made by an earlier schema is brought to this one's shape here,
+    // before anything reads it — the only place an existing ledger is ever
+    // ALTERed. See `wealth_core::upgrade`.
+    wealth_core::upgrade::upgrade_schema(&mut connection).map_err(|error| {
+        format!(
+            "This ledger could not be brought up to date: {error}\n\nNothing in it was \
+             changed. Keep the file; a later version of Reckley may open it."
         )
     })?;
 
@@ -307,6 +317,33 @@ mod tests {
         let reopened = open(&path).expect("open").owner;
 
         assert_eq!(minted, reopened);
+    }
+
+    #[test]
+    fn opening_a_ledger_brings_it_to_the_current_schema_version() {
+        // A file that reports version 0 is upgraded on open — the crate's own
+        // tests prove the rebuild against the real version-0 shape; this proves
+        // the shell's open is where it happens, and that a second open is a
+        // no-op. The version is reset by hand here because `create` stamps it.
+        let dir = temp_dir();
+        let path = dir.join("old.db");
+        let made = create(&path).expect("create");
+        made.connection
+            .execute_batch("PRAGMA user_version = 0")
+            .unwrap();
+        drop(made);
+
+        let opened = open(&path).expect("open upgrades rather than refuses");
+        let version: i64 = opened
+            .connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, wealth_core::upgrade::SCHEMA_VERSION);
+        let enforced: i64 = opened
+            .connection
+            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
+            .unwrap();
+        assert_eq!(enforced, 1);
     }
 
     #[test]

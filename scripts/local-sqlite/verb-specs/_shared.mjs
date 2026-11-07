@@ -2647,6 +2647,9 @@ export function listedBudget(fields) {
     name: '',
     amount: '0.00',
     period: 'monthly',
+    // The 'every' pair (20261107150000): null on every named rhythm, by CHECK.
+    repeat_count: null,
+    repeat_unit: null,
     category: null,
     category_id: null,
     start_date: '2024-01-01',

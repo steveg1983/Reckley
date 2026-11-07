@@ -234,6 +234,8 @@ const BUDGET_JSON = `jsonb_build_object(
   'name', b.name,
   'amount', ${money('b.amount')},
   'period', b.period,
+  'repeat_count', b.repeat_count,
+  'repeat_unit', b.repeat_unit,
   'category', b.category,
   'category_id', b.category_id,
   'start_date', b.start_date::text,
@@ -1601,7 +1603,7 @@ const VERBS = {
   create_budget: (payloadLiteral) => {
     const text = (key) => `${payloadLiteral}::jsonb->>'${key}'`;
     return `INSERT INTO public.budgets (
-       id, user_id, name, amount, period, category, start_date, end_date,
+       id, user_id, name, amount, period, repeat_count, repeat_unit, category, start_date, end_date,
        spent, rollover, rollover_amount, alert_threshold, is_active, notes
      ) VALUES (
        COALESCE(NULLIF(${text('id')},'')::uuid, uuid_generate_v4()),
@@ -1613,6 +1615,10 @@ const VERBS = {
        COALESCE(NULLIF(${text('name')},''), NULLIF(${text('category')},''), 'Budget'),
        (${text('amount')})::numeric,
        ${text('period')},
+       -- The 'every' pair: integer and text, NULL when absent; the table's
+       -- CHECK (20261107150000) holds the pair to that period on both engines.
+       NULLIF(${text('repeat_count')},'')::integer,
+       NULLIF(${text('repeat_unit')},''),
        NULLIF(${text('category')},''),
        -- "if (!row.start_date) row.start_date = new Date().toISOString()
        -- .slice(0,10)" — the UTC day, which is what the local verb takes off
@@ -1650,6 +1656,8 @@ const VERBS = {
                    ELSE b.name END,
        ${set('amount', `(${text('amount')})::numeric`)},
        ${set('period', text('period'))},
+       ${set('repeat_count', `(${text('repeat_count')})::integer`)},
+       ${set('repeat_unit', text('repeat_unit'))},
        ${set('category', text('category'))},
        ${set('start_date', `(${text('start_date')})::date`)},
        ${set('end_date', `(${text('end_date')})::date`)},

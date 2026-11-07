@@ -4,10 +4,10 @@ import { Modal, ModalBody, ModalFooter } from './common/Modal';
 import MoneyInput from './common/MoneyInput';
 import { useModalForm } from '../hooks/useModalForm';
 import { parseMoneyInput } from '../utils/decimal';
-import { getBudgetPeriodWindow, resolveBudgetAnchor } from '../utils/budgetPeriods';
+import { getBudgetPeriodWindow, resolveBudgetAnchor, type BudgetRepeat } from '../utils/budgetPeriods';
 import { describeBudgetDay, describeBudgetWindow } from '../utils/budgetPace';
 import CategorySelector from './CategorySelector';
-import type { Budget, Category } from '../types';
+import type { Budget, BudgetRepeatUnit, Category } from '../types';
 
 const isoDay = (d: Date): string =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -50,6 +50,9 @@ interface FormData {
    * required for a one-off, which is nothing but its two days.
    */
   endDate: string;
+  /** For "Every…": how many, as typed, and of what. Ignored for every other period. */
+  repeatCount: string;
+  repeatUnit: BudgetRepeatUnit;
   isActive: boolean;
 }
 
@@ -58,22 +61,35 @@ interface FormData {
  * its own (see utils/budgetPeriods). 'custom' is offered as "One-off" — a
  * budget that runs once from Starts to Ends — now that the form collects both
  * days; until it did, offering it would have created budgets whose period was
- * a guess.
+ * a guess. 'every' is "Every…": N weeks or months of the user's own (owner,
+ * 7 Nov 2026), the two fields beside it saying which.
  */
 const PERIOD_OPTIONS: ReadonlyArray<{ value: Budget['period']; label: string }> = [
   { value: 'weekly', label: 'Weekly' },
   { value: 'monthly', label: 'Monthly' },
   { value: 'quarterly', label: 'Quarterly' },
   { value: 'yearly', label: 'Yearly' },
+  { value: 'every', label: 'Every…' },
   { value: 'custom', label: 'One-off' }
 ];
 
-/** "month", "quarter" or "year" — the unit a repeating period's cycle is named by. */
-function cycleUnit(period: Budget['period']): string {
+/** The typed count as the interval it names, or null when it is not a whole number of at least one. */
+function repeatOf(period: Budget['period'], count: string, unit: BudgetRepeatUnit): BudgetRepeat | null {
+  if (period !== 'every') return null;
+  if (!/^\d+$/.test(count.trim())) return null;
+  const n = Number(count);
+  return n >= 1 ? { count: n, unit } : null;
+}
+
+/** "month", "quarter", "year", "2 months", "6 weeks" — the unit a repeating period's cycle is named by. */
+function cycleUnit(period: Budget['period'], repeat: BudgetRepeat | null): string {
   switch (period) {
     case 'monthly': return 'month';
     case 'quarterly': return 'quarter';
     case 'yearly': return 'year';
+    case 'every':
+      if (!repeat) return 'period';
+      return repeat.count === 1 ? repeat.unit : `${repeat.count} ${repeat.unit}s`;
     default: return 'period';
   }
 }
@@ -96,7 +112,12 @@ function localDay(iso: string): Date | null {
  * passed: a day typed here is chosen by definition. An end before the start
  * is left to the validation message rather than described.
  */
-function describeChoice(period: Budget['period'], startDate: string, endDate: string): string {
+function describeChoice(
+  period: Budget['period'],
+  startDate: string,
+  endDate: string,
+  repeat: BudgetRepeat | null
+): string {
   const start = localDay(startDate);
   const end = localDay(endDate);
   if (end && start && end < start) return '';
@@ -109,14 +130,23 @@ function describeChoice(period: Budget['period'], startDate: string, endDate: st
     const once = getBudgetPeriodWindow({ period, startDate, endDate, createdAt: null }, start);
     return `Runs once, ${describeBudgetWindow(once)}, and is then finished.`;
   }
+  // "Every…" with no sound count has no first period to name yet.
+  if (period === 'every' && !repeat) return '';
 
-  const unit = cycleUnit(period);
-  const first = getBudgetPeriodWindow({ period, startDate, endDate: endDate || null, createdAt: null }, start);
+  const source = {
+    period,
+    startDate,
+    createdAt: null,
+    repeatCount: repeat?.count ?? null,
+    repeatUnit: repeat?.unit ?? null,
+  };
+  const unit = cycleUnit(period, repeat);
+  const first = getBudgetPeriodWindow({ ...source, endDate: endDate || null }, start);
   const sentences = [`First ${unit}: ${describeBudgetWindow(first)}.`];
   if (end) {
     // Read the day after the end: the window is then the LAST cycle, cut there.
     const dayAfter = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
-    const last = getBudgetPeriodWindow({ period, startDate, endDate, createdAt: null }, dayAfter);
+    const last = getBudgetPeriodWindow({ ...source, endDate }, dayAfter);
     sentences.push(`Last ${unit}: ${describeBudgetWindow(last)}.`);
   }
   return sentences.join(' ');
@@ -164,15 +194,22 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
       period: budget?.period || 'monthly',
       startDate: seededStartDate,
       endDate: budget?.endDate ?? '',
+      repeatCount: budget?.repeatCount ? String(budget.repeatCount) : '',
+      repeatUnit: budget?.repeatUnit ?? 'month',
       isActive: budget?.isActive !== false
     },
     {
       onSubmit: async (data) => {
         const now = new Date();
+        const repeat = repeatOf(data.period, data.repeatCount, data.repeatUnit);
         const budgetData = {
           categoryId: data.categoryId,
           amount: parseMoneyInput(data.amount) ?? 0,
           period: data.period,
+          // The pair belongs to "Every…" alone; both engines refuse it on any
+          // other period, and null clears a stored one when the period moves.
+          repeatCount: repeat?.count ?? null,
+          repeatUnit: repeat?.unit ?? null,
           isActive: data.isActive,
           createdAt: budget?.createdAt || now,
           updatedAt: now,
@@ -237,6 +274,11 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
       e.preventDefault();
       return;
     }
+    if (formData.period === 'every' && !repeatOf('every', formData.repeatCount, formData.repeatUnit)) {
+      e.preventDefault();
+      setDatesError('Every how many? A whole number, one or more.');
+      return;
+    }
     if (formData.period === 'custom' && (!localDay(formData.startDate) || !localDay(formData.endDate))) {
       e.preventDefault();
       setDatesError('A one-off budget needs the day it starts and the day it ends.');
@@ -260,14 +302,21 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
         period: budget.period || 'monthly',
         startDate: seededStartDate,
         endDate: budget.endDate ?? '',
+        repeatCount: budget.repeatCount ? String(budget.repeatCount) : '',
+        repeatUnit: budget.repeatUnit ?? 'month',
         isActive: budget.isActive !== false
       });
     }
   }, [budget, setFormData, seededCategoryId, seededStartDate]);
 
   const choice = useMemo(
-    () => describeChoice(formData.period, formData.startDate, formData.endDate),
-    [formData.period, formData.startDate, formData.endDate]
+    () => describeChoice(
+      formData.period,
+      formData.startDate,
+      formData.endDate,
+      repeatOf(formData.period, formData.repeatCount, formData.repeatUnit)
+    ),
+    [formData.period, formData.startDate, formData.endDate, formData.repeatCount, formData.repeatUnit]
   );
 
 
@@ -352,6 +401,38 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
+            {/* EVERY… — the interval is the user's own (owner, 7 Nov 2026):
+                "every 2 months", "every 6 weeks". A whole number and a unit;
+                the cycles count from Starts. */}
+            {formData.period === 'every' && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-sm text-gray-700 dark:text-gray-300">Every</span>
+                {/* No native `min`: the browser's bubble would speak before the
+                    form's own sentence, as with Ends. onFormSubmit is the guard. */}
+                <input
+                  id="budget-repeat-count"
+                  type="number"
+                  inputMode="numeric"
+                  aria-label="Every how many"
+                  value={formData.repeatCount}
+                  onChange={(e) => {
+                    setDatesError('');
+                    updateField('repeatCount', e.target.value);
+                  }}
+                  className="w-20 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
+                />
+                <select
+                  id="budget-repeat-unit"
+                  aria-label="Weeks or months"
+                  value={formData.repeatUnit}
+                  onChange={(e) => updateField('repeatUnit', e.target.value === 'week' ? 'week' : 'month')}
+                  className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300/50 dark:border-gray-600/50 rounded-xl focus:border-transparent dark:text-white"
+                >
+                  <option value="week">weeks</option>
+                  <option value="month">months</option>
+                </select>
+              </div>
+            )}
           </div>
 
           {/* STARTS — the day the cycles count from (owner, 5 Nov 2026). A
@@ -378,7 +459,9 @@ export default function BudgetModal({ isOpen, onClose, budget, onEditExisting }:
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {formData.period === 'monthly'
                     ? 'A budget from the 15th runs 15th to 14th.'
-                    : 'A budget from 6 April runs with the tax year.'}
+                    : formData.period === 'every'
+                      ? 'The intervals count from this day.'
+                      : 'A budget from 6 April runs with the tax year.'}
                 </p>
               )}
             </div>

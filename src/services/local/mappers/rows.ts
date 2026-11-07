@@ -247,7 +247,8 @@ const BUDGET_PERIODS: Record<Budget['period'], true> = {
   weekly: true,
   yearly: true,
   custom: true,
-  quarterly: true
+  quarterly: true,
+  every: true
 };
 
 /**
@@ -284,6 +285,10 @@ export const toBudget = (row: Record<string, unknown>): Budget => {
     categoryId: textOr(value.categoryId, ''),
     amount: typeof value.amount === 'number' ? value.amount : 0,
     period: oneOf<Budget['period']>(value.period, BUDGET_PERIODS, 'custom'),
+    // The `every` pair: null, not undefined, when the row has none — the
+    // app's own type says a stated null is "no interval".
+    repeatCount: whole(value.repeatCount) ?? null,
+    repeatUnit: value.repeatUnit === 'week' || value.repeatUnit === 'month' ? value.repeatUnit : null,
     isActive: value.isActive === true,
     // Not in the table: stamped by the file's clock inside the write, and read
     // here off the row the crate answered with.

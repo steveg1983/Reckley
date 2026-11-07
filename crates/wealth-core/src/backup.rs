@@ -319,6 +319,9 @@ const BUDGETS: &[Column] = &[
             text("name"),
             money("amount", "amount_minor"),
             text("period"),
+            // The `every` period's interval: a whole number and a unit.
+            ordinal("repeat_count"),
+            text("repeat_unit"),
             text("category"),
             text("category_id"),
             date("start_date"),

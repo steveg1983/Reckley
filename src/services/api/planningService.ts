@@ -84,6 +84,9 @@ const budgetFromDb = (row: Row): Budget => ({
   categoryId: str(row.category) ?? '',
   amount: num(row.amount),
   period: (str(row.period) ?? 'monthly') as Budget['period'],
+  // The `every` pair; null for every other period, by CHECK.
+  repeatCount: typeof row.repeat_count === 'number' ? row.repeat_count : null,
+  repeatUnit: row.repeat_unit === 'week' || row.repeat_unit === 'month' ? row.repeat_unit : null,
   isActive: row.is_active !== false,
   createdAt: row.created_at ? new Date(String(row.created_at)) : new Date(),
   updatedAt: row.updated_at ? new Date(String(row.updated_at)) : new Date(),
@@ -106,6 +109,8 @@ const budgetToDb = (b: Partial<Budget>, userId?: string): Row => {
   if (b.categoryId !== undefined) row.category = b.categoryId;
   if (b.amount !== undefined) row.amount = b.amount;
   if (b.period !== undefined) row.period = b.period;
+  if (b.repeatCount !== undefined) row.repeat_count = b.repeatCount;
+  if (b.repeatUnit !== undefined) row.repeat_unit = b.repeatUnit;
   if (b.isActive !== undefined) row.is_active = b.isActive;
   if (b.spent !== undefined) row.spent = b.spent;
   if (b.startDate !== undefined) row.start_date = b.startDate;

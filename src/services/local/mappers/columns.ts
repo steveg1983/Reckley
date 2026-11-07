@@ -416,6 +416,10 @@ export const BUDGET_COLUMNS: readonly Column[] = [
   { key: 'name', field: 'name', kind: 'text' },
   { key: 'amount', field: 'amount', kind: 'money' },
   { key: 'period', field: 'period', kind: 'text' },
+  // The `every` period's interval (7 Nov 2026): a whole number of weeks or
+  // months. Both engines hold the pair to exactly that period by CHECK.
+  { key: 'repeat_count', field: 'repeatCount', kind: 'whole' },
+  { key: 'repeat_unit', field: 'repeatUnit', kind: 'text' },
   // The app calls it `categoryId`; the column that holds it is `category`.
   { key: 'category', field: 'categoryId', kind: 'text' },
   // Strings in the app's own type, like an account's `bankBalanceDate`.

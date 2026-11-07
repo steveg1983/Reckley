@@ -2131,6 +2131,32 @@ export function runDataPortContract(name: string, harness: DataPortContractHarne
         expect(await theirs.port.listBudgets()).toEqual([]);
       });
 
+      rule(['createBudget', 'updateBudget', 'listBudgets'], 'keeps an interval of the user’s own, and clears it when the period moves', async () => {
+        // ANY REPEAT INTERVAL (7 Nov 2026): 'every' carries its pair; a named
+        // rhythm carries none. Both engines hold that by CHECK, so the pair
+        // must travel whole on a create, and a stated null must CLEAR it on an
+        // update — `undefined` would leave the interval behind on a budget
+        // that is now monthly, and the table would refuse the row.
+        const { port } = await harness.create({ accounts: threeAccounts() });
+
+        const created = await port.createBudget(
+          aNewBudget('cat-everyday', 50, { period: 'every', repeatCount: 2, repeatUnit: 'month' })
+        );
+        expect(created).toMatchObject({ period: 'every', repeatCount: 2, repeatUnit: 'month' });
+        expect((await port.listBudgets())[0]).toMatchObject({ period: 'every', repeatCount: 2, repeatUnit: 'month' });
+
+        const moved = await port.updateBudget(created.id, { period: 'monthly', repeatCount: null, repeatUnit: null });
+        expect(moved).toMatchObject({ period: 'monthly', repeatCount: null, repeatUnit: null });
+
+        // "No interval" is the claim, not "a null": a column-backed engine
+        // answers null, the browser's store answers what it was given, which
+        // is nothing at all. Both are no interval.
+        const named = await port.createBudget(aNewBudget('cat-bills', 20));
+        expect(named.period).toBe('monthly');
+        expect(named.repeatCount ?? null).toBeNull();
+        expect(named.repeatUnit ?? null).toBeNull();
+      });
+
       rule(['updateBudget'], 'refuses to change a budget that is not there, and says which', async () => {
         // Not created-on-the-fly: an id that names nothing is a bug upstream
         // (a stale page, a double submit after a delete), and inventing a

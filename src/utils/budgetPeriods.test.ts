@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  describeBudgetRepeat,
   getBudgetPeriodLabel,
   getBudgetPeriodWindow,
   normaliseBudgetPeriod,
-  resolveBudgetAnchor
+  resolveBudgetAnchor,
+  resolveBudgetRepeat
 } from './budgetPeriods';
 
 /** Local date, written the way the windows are built. */
@@ -374,6 +376,71 @@ describe('getBudgetPeriodWindow — an end date is honoured by every period', ()
     expect(stamp(window.end)).toBe('2026-11-30 23:59:59.999');
     expect(window.ended).toBe(false);
     expect(window.notStarted).toBe(false);
+  });
+
+  /**
+   * ANY REPEAT INTERVAL (7 Nov 2026). `every` is the fortnight's and the
+   * month-stepped rule with the user's own N, captioned by the interval.
+   */
+  describe('every — an interval of the user’s own', () => {
+    it('every 2 months steps two months from the start, and is captioned by the interval', () => {
+      const window = getBudgetPeriodWindow(
+        { period: 'every', repeatCount: 2, repeatUnit: 'month', startDate: '2026-11-01', createdAt: new Date(2026, 10, 7) },
+        at(2027, 0, 15)
+      );
+      expect(window.label).toBe('Every 2 months');
+      expect(window.period).toBe('every');
+      expect(stamp(window.start)).toBe('2027-01-01 00:00:00.000');
+      expect(stamp(window.end)).toBe('2027-02-28 23:59:59.999');
+    });
+
+    it('every 6 weeks steps forty-two days from the start', () => {
+      const window = getBudgetPeriodWindow(
+        { period: 'every', repeatCount: 6, repeatUnit: 'week', startDate: '2026-11-01', createdAt: new Date(2026, 10, 7) },
+        at(2026, 11, 20)
+      );
+      expect(window.label).toBe('Every 6 weeks');
+      expect(stamp(window.start)).toBe('2026-12-13 00:00:00.000');
+      expect(stamp(window.end)).toBe('2027-01-23 23:59:59.999');
+    });
+
+    it('before its start it is the first interval, not yet begun; an end date still cuts it', () => {
+      const window = getBudgetPeriodWindow(
+        { period: 'every', repeatCount: 3, repeatUnit: 'week', startDate: '2026-12-01', endDate: '2026-12-10' },
+        at(2026, 10, 20)
+      );
+      expect(window.notStarted).toBe(true);
+      expect(stamp(window.start)).toBe('2026-12-01 00:00:00.000');
+      expect(stamp(window.end)).toBe('2026-12-10 23:59:59.999');
+    });
+
+    it('a count of one is said as the unit alone', () => {
+      expect(describeBudgetRepeat({ count: 1, unit: 'week' })).toBe('Every week');
+      expect(getBudgetPeriodLabel('every', { repeatCount: 1, repeatUnit: 'month' })).toBe('Every month');
+      expect(getBudgetPeriodLabel('every', { repeatCount: 4, repeatUnit: 'week' })).toBe('Every 4 weeks');
+    });
+
+    it('an unsound pair is read as every month, which the caption says', () => {
+      expect(resolveBudgetRepeat({ repeatCount: 0, repeatUnit: 'month' })).toBeNull();
+      expect(resolveBudgetRepeat({ repeatCount: 1.5, repeatUnit: 'month' })).toBeNull();
+      expect(resolveBudgetRepeat({ repeatCount: 2, repeatUnit: 'day' })).toBeNull();
+      expect(resolveBudgetRepeat({ repeatCount: 2, repeatUnit: 'month' })).toEqual({ count: 2, unit: 'month' });
+
+      const window = getBudgetPeriodWindow(
+        { period: 'every', repeatCount: null, repeatUnit: null, startDate: '2026-11-15', createdAt: new Date(2026, 10, 7) },
+        at(2026, 11, 20)
+      );
+      expect(window.label).toBe('Every month');
+      expect(getBudgetPeriodLabel('every')).toBe('Every month');
+      expect(stamp(window.start)).toBe('2026-12-15 00:00:00.000');
+      expect(stamp(window.end)).toBe('2027-01-14 23:59:59.999');
+    });
+
+    it('is its own period name, and the six named rhythms are untouched', () => {
+      expect(normaliseBudgetPeriod('every')).toBe('every');
+      expect(normaliseBudgetPeriod('monthly')).toBe('monthly');
+      expect(getBudgetPeriodLabel('biweekly')).toBe('Fortnightly');
+    });
   });
 
   describe('a one-off budget runs once', () => {

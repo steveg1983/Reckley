@@ -258,6 +258,8 @@ interface BudgetRow {
   name: string;
   amount: number | string;
   period: string;
+  repeat_count: number | null;
+  repeat_unit: string | null;
   category: string | null;
   category_id: string | null;
   start_date: string | null;
@@ -343,6 +345,8 @@ const toBudget = (row: BudgetRow): Budget => ({
   categoryId: row.category_id ?? row.category ?? '',
   amount: num(row.amount),
   period: row.period as Budget['period'],
+  repeatCount: row.repeat_count,
+  repeatUnit: row.repeat_unit === 'week' || row.repeat_unit === 'month' ? row.repeat_unit : null,
   isActive: row.is_active !== false,
   createdAt: new Date(row.created_at),
   updatedAt: new Date(row.updated_at ?? row.created_at),
@@ -570,7 +574,7 @@ export function createSupabasePort(
     async listBudgets() {
       const { data, error } = await supabase
         .from('budgets')
-        .select('id, name, amount, period, category, category_id, start_date, end_date, is_active, rollover, rollover_amount, alert_threshold, notes, created_at, updated_at')
+        .select('id, name, amount, period, repeat_count, repeat_unit, category, category_id, start_date, end_date, is_active, rollover, rollover_amount, alert_threshold, notes, created_at, updated_at')
         .eq('user_id', userId)
         .order('name');
       if (error) return fail('budgets', error);

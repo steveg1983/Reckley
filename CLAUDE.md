@@ -19,8 +19,8 @@
 | Supabase smoke | `npm run test:supabase-smoke` | ✅ | Logs saved to `logs/supabase-smoke/` |
 | Build parity | `npm run build` | ✅ | Mirrors Vercel’s `vite build` via `scripts/build-web.mjs` |
 | Desktop bundle | `npm run desktop:verify` | ✅ | Builds `src/desktop` → `apps/desktop/dist`, then PHASE3-PLAN §5’s two bundle greps **plus the one that is about weight rather than the cloud** (`xlsx`, 1 Sep 2026), then the size ratchet, then the mount run. REFUSES rather than skips when there is no build |
-| Desktop size | `npm run bundle:check:desktop` | ✅ | 3,870.1 KiB raw / 1,190.2 KiB gz; budgets 3909 / 1202 KiB. **Raw** is the gate — nothing is downloaded, the bytes are embedded in the binary. Binary size recorded, never gated. Budgets sit ~1 % above measured, which is tight ON PURPOSE: the big move was DOWN (−498.6 KiB raw, the spreadsheet writer, owner's ruling 1 Sep 2026 — "lose excel is fine as long as they can keep csv"), and leaving 4320 would have banked the win as silent permission. The last five moves were UP (5–7 Nov): +3.6 KiB for the budget cycle model, re-recorded with the +37.5 KiB that had drifted in unrecorded since 14 Oct — the second such re-recording, and the drift had left 2 KiB of headroom — then +5.8 KiB for the wizard's "Run these budgets from" and the editor's "Starts", then +2.8 KiB for the wizard's "Months I choose" guide window, then +2.1 KiB for the editor's "Ends" and the One-off period, then +3.9 KiB (7 Nov) for the Dashboard's "Key Budgets" cog. The next intended growth raises these two numbers in the commit that causes it; the header of `scripts/desktop-bundle-size.mjs` narrates every step. |
-| Desktop shell | `npm run desktop:check` | ✅ | clippy `-D warnings` + the shell crate's own 38 tests (`apps/desktop/src-tauri`). Was 12; licensing brought 26 — the offline verifier, the clock's high-water mark, the read allowlist held to the crate's own enum by asking serde to recite it, and a real ledger proving that an expired window is refused a write BY NAME while a read and the export both still answer |
+| Desktop size | `npm run bundle:check:desktop` | ✅ | 3,872.6 KiB raw / 1,191.0 KiB gz; budgets 3911 / 1203 KiB. **Raw** is the gate — nothing is downloaded, the bytes are embedded in the binary. Binary size recorded, never gated. Budgets sit ~1 % above measured, which is tight ON PURPOSE: the big move was DOWN (−498.6 KiB raw, the spreadsheet writer, owner's ruling 1 Sep 2026 — "lose excel is fine as long as they can keep csv"), and leaving 4320 would have banked the win as silent permission. The last six moves were UP (5–7 Nov): +3.6 KiB for the budget cycle model, re-recorded with the +37.5 KiB that had drifted in unrecorded since 14 Oct — the second such re-recording, and the drift had left 2 KiB of headroom — then +5.8 KiB for the wizard's "Run these budgets from" and the editor's "Starts", then +2.8 KiB for the wizard's "Months I choose" guide window, then +2.1 KiB for the editor's "Ends" and the One-off period, then +3.9 KiB (7 Nov) for the Dashboard's "Key Budgets" cog, then +2.5 KiB for the editor's "Every…" interval. The next intended growth raises these two numbers in the commit that causes it; the header of `scripts/desktop-bundle-size.mjs` narrates every step. |
+| Desktop shell | `npm run desktop:check` | ✅ | clippy `-D warnings` + the shell crate's own 39 tests (`apps/desktop/src-tauri`). Was 12; licensing brought 26 — the offline verifier, the clock's high-water mark, the read allowlist held to the crate's own enum by asking serde to recite it, and a real ledger proving that an expired window is refused a write BY NAME while a read and the export both still answer |
 | Desktop build | `npm run desktop:build` | ✅ | `vite` → `apps/desktop/dist`, then `cargo build --release` → ~20 MB arm64 (was 16.1 MB; the 0.1.1 updater brings an HTTP/TLS stack with it). The renderer must be built first: `generate_context!` embeds it. Since 0.1.1 a release build also emits `Reckley.app.tar.gz` + `.sig` — what an INSTALLED copy downloads, which is not the installer |
 
 ### The local edition's lanes
@@ -31,11 +31,11 @@ Every one of them refuses to run without what it needs rather than skipping.
 
 | Check | Command | Status | Notes |
 | --- | --- | --- | --- |
-| Ledger core | `cargo test --manifest-path crates/Cargo.toml --all-features` | ✅ | 530 tests, 26 suites. The money lints (`unwrap_used`, `panic`, `float_arithmetic`, …) are `deny` in `Cargo.toml`; clippy is what enforces them |
-| Contract | `npm run test:local-contract` | ✅ | 145 checks, 5 files — the real crate against real SQLite files through `DataPort` |
+| Ledger core | `cargo test --manifest-path crates/Cargo.toml --all-features` | ✅ | 533 tests, 26 suites. The money lints (`unwrap_used`, `panic`, `float_arithmetic`, …) are `deny` in `Cargo.toml`; clippy is what enforces them |
+| Contract | `npm run test:local-contract` | ✅ | 146 checks, 5 files — the real crate against real SQLite files through `DataPort` |
 | Admission | `npm run test:local-admission` | ✅ | 109 specs: the shipping TypeScript against the Rust port of it |
 | Constraint parity | `npm run test:local-sqlite` | ✅ | 67 specs, 16 declared divergences. **Needs `bash scripts/local-db/up.sh`** |
-| Verb parity | `npm run test:local-verbs` | ✅ | 505 specs, 29 declared divergences, 26 single-engine. Same cluster |
+| Verb parity | `npm run test:local-verbs` | ✅ | 507 specs, 29 declared divergences, 26 single-engine. Same cluster |
 
 **Where they run.** The desktop renderer trio, the Rust core suites, contract
 and admission are on **every PR**. The two differential lanes and
@@ -120,7 +120,7 @@ Latest Vercel preview: `wealthtracker-l514dsq11` (2025‑10‑29 21:33 UTC). B
   service or the web's choosing line. Checked at three altitudes: lint, two import-graph
   walks, and the bundle greps.
 - The renderer also has a **size** ratchet, because growth that is perfectly cloud-free
-  passes all three of those. 3,870.1 KiB raw today, budget 3909 — ~1 % of headroom,
+  passes all three of those. 3,872.6 KiB raw today, budget 3911 — ~1 % of headroom,
   because the last move was a deliberate 498.6 KiB DOWN and that slack was spent
   rather than banked. Intended growth raises the budget in the commit that causes it.
 - A seam may also be about **weight** rather than the cloud. `@spreadsheet` is the

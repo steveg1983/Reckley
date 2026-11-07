@@ -328,7 +328,8 @@ not. Seven suggestions were drawn from it; the owner answered each the same day.
 3. **Rollover modes** — carry a surplus, carry an overspend, or neither, per budget;
    where a surplus goes; a year's carry for yearly budgets. **Agreed.**
 4. **Any repeat interval** — every N weeks or months, not only the six named rhythms.
-   **Agreed.**
+   **Agreed — built as PR E (§8), with a real column and the first ledger‑file
+   upgrade.**
 5. **An end date, and one‑off budgets** — a project, a holiday, a wedding: an
    allowance that runs from a day to a day and then is finished. The model already
    honours `end_date` (§8); this is the asking and the showing. **Agreed — built as
@@ -416,3 +417,26 @@ group, select all / clear all, a "No budgets are selected" state with the way ba
 choice in `dashboardKeyBudgets` — a portable preference whose ids a restore follows, like
 the accounts'. Nothing chosen = the first three, never written. Only budgets running today
 are listed, because only those are on the card. "View All Budgets" is always there.
+
+**PR E (any repeat interval, 7 Nov)** — the second round's 4, by the owner's "Go" for a real
+column over the metadata blob. A new period value, **`every`**, with two columns,
+`repeat_count` and `repeat_unit` (week or month): "Every 2 months", "Every 6 weeks". The
+six named rhythms are untouched, so nothing stored changed. The cycle model steps the
+fortnight's or the month‑stepped rule by the user's own N from the start; the Budget page
+totals each interval on its own line (a rhythm is a window LABEL now, not a period name);
+the editor's period list gains **Every…** with a count and a unit beside it; the wizard
+leaves such rows alone as it does weekly ones. **The pair belongs to `every` alone**, by
+`budgets_repeat_check` in both engines — written IS‑NOT‑NULL‑first, because a CHECK that
+evaluates to NULL passes in Postgres and SQLite alike, and the first draft let an `every`
+row through with no interval; the crate's upgrade test caught it. **Cloud**: migration
+`20261107150000_budgets_repeat_every`, run by the owner BEFORE the deploy. **Local**: the
+first schema change since the desktop shipped, and the ledger file had no version and no
+upgrade step — a file got its schema on creation and never again. Now `schema.sql` stamps
+`PRAGMA user_version = 1`, and `wealth_core::upgrade::upgrade_schema` runs on every open
+(desktop and CLI): a version‑0 file has its budgets table REBUILT to the current DDL
+(lifted from `schema.sql` itself, not copied) inside one transaction, foreign keys off
+outside it and read back on after, the version stamped last — a crash mid‑step leaves the
+file at the version it was. Proven against the real version‑0 DDL: rows kept, index
+remade, the new CHECK live, a failed step leaving version 0. The differential lanes gain
+the stored‑whole `every` spec and the refused‑on‑a‑named‑rhythm spec; the contract lane the
+round‑trip and the clearing null.

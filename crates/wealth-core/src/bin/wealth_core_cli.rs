@@ -154,6 +154,9 @@ fn run() -> Result<Response, String> {
 
     let path = database.ok_or_else(|| "--db <path> is required".to_owned())?;
     let mut connection = db::open(&path).map_err(|error| error.to_string())?;
+    // As the desktop does on open: a file made by an earlier schema is brought
+    // to this one's shape before a verb reads it.
+    wealth_core::upgrade::upgrade_schema(&mut connection).map_err(|error| error.to_string())?;
 
     respond(dispatch(&mut connection, command))
 }
