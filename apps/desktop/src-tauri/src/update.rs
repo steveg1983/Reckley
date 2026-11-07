@@ -30,16 +30,21 @@
 //! to stderr and the program carries on exactly as it would have. The only
 //! thing a broken update path may cost is the update.
 //!
-//! # The signature, and what is still owed
+//! # The signature, and Apple's
 //!
 //! Every artefact is signed with the release keypair; the public half lives in
 //! `tauri.conf.json` and the private half only in the repository's Actions
 //! secrets, so an endpoint that served a hostile payload would be refused by
 //! the updater before a byte of it ran. That is separate from APPLE
-//! notarisation: the `.dmg` on the release page is notarised by hand, but the
-//! macOS update artefact is only ad-hoc signed, because CI has no Developer ID
-//! certificate yet. Putting one in `.github/workflows/desktop-release.yml`
-//! would sign both and retire the manual step — see that file's SIGNING note.
+//! notarisation, and CI does that too: `.github/workflows/desktop-release.yml`
+//! holds the Developer ID certificate, signs the `.app`, has Apple notarise it
+//! and staples the ticket BEFORE bundling it into both the `.dmg` and this
+//! updater's archive, so the two carry the same signed, notarised app. The
+//! 0.1.6 and 0.1.7 build logs show every step ("Notarizing Finished with
+//! status Accepted", "Stapling app"). Until this paragraph was corrected on
+//! 7 Nov 2026 it said the archive was only ad-hoc signed and the `.dmg`
+//! notarised by hand — true of 0.1.1 and 0.1.2, before the certificate was in
+//! Actions secrets. See that file's SIGNING note for the three signatures.
 
 use tauri::AppHandle;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
