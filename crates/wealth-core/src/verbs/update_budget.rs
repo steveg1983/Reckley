@@ -128,9 +128,17 @@ pub struct BudgetPatch {
     /// The limit.
     #[serde(default)]
     pub amount: Field<Money>,
-    /// `weekly` | `biweekly` | `monthly` | `quarterly` | `yearly` | `custom`.
+    /// `weekly` | `biweekly` | `monthly` | `quarterly` | `yearly` | `custom` | `every`.
     #[serde(default)]
     pub period: Field<String>,
+    /// For `every`: how many of `repeat_unit` one cycle is. A stated null
+    /// clears it — what the editor sends when the period moves to a named
+    /// rhythm — and the table's CHECK holds the pair to `every`.
+    #[serde(default)]
+    pub repeat_count: Field<i64>,
+    /// For `every`: `week` or `month`.
+    #[serde(default)]
+    pub repeat_unit: Field<String>,
     /// The category id, as TEXT. Renames the budget when `name` is not stated.
     #[serde(default)]
     pub category: Field<String>,
@@ -279,6 +287,8 @@ fn apply(
            name                  = CASE WHEN ?1  THEN ?2  ELSE name END,
            amount_minor          = CASE WHEN ?3  THEN ?4  ELSE amount_minor END,
            period                = CASE WHEN ?5  THEN ?6  ELSE period END,
+           repeat_count          = CASE WHEN ?27 THEN ?28 ELSE repeat_count END,
+           repeat_unit           = CASE WHEN ?29 THEN ?30 ELSE repeat_unit END,
            category              = CASE WHEN ?7  THEN ?8  ELSE category END,
            start_date            = CASE WHEN ?9  THEN ?10 ELSE start_date END,
            end_date              = CASE WHEN ?11 THEN ?12 ELSE end_date END,
@@ -317,6 +327,10 @@ fn apply(
             patch.notes.value(),
             now,
             command.id,
+            patch.repeat_count.is_present(),
+            patch.repeat_count.value(),
+            patch.repeat_unit.is_present(),
+            patch.repeat_unit.value(),
         ],
     )?)
 }

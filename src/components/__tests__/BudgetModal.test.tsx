@@ -409,6 +409,80 @@ describe('BudgetModal', () => {
       expect(screen.getByLabelText('Ends')).toHaveValue('2027-03-31');
     });
 
+    /**
+     * EVERY… — an interval of the user's own (owner, 7 Nov 2026): N weeks or
+     * months, counted from Starts. A whole number of at least one, or no save.
+     */
+    describe('Every… — an interval of the user’s own', () => {
+      it('asks how many and of what, names the first interval, and writes the pair', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        choosePeriod('every');
+        fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-01' } });
+        fireEvent.change(screen.getByLabelText('Every how many'), { target: { value: '2' } });
+        fireEvent.change(screen.getByLabelText('Weeks or months'), { target: { value: 'month' } });
+        expect(screen.getByTestId('budget-choice')).toHaveTextContent(
+          /^First 2 months: 1 Jan\s*[–-]\s*28 Feb 2027\.$/
+        );
+
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({
+          period: 'every',
+          repeatCount: 2,
+          repeatUnit: 'month',
+          startDate: '2027-01-01',
+        });
+      });
+
+      it('six weeks reads as six weeks', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        choosePeriod('every');
+        fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-01' } });
+        fireEvent.change(screen.getByLabelText('Every how many'), { target: { value: '6' } });
+        fireEvent.change(screen.getByLabelText('Weeks or months'), { target: { value: 'week' } });
+        expect(screen.getByTestId('budget-choice')).toHaveTextContent(
+          /^First 6 weeks: 1 Jan\s*[–-]\s*11 Feb 2027\.$/
+        );
+      });
+
+      it('refuses a count that is not a whole number of at least one, and writes nothing', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        choosePeriod('every');
+        fireEvent.change(screen.getByLabelText('Every how many'), { target: { value: '0' } });
+        expect(screen.queryByTestId('budget-choice')).not.toBeInTheDocument();
+
+        fillAndAdd();
+        expect(screen.getByRole('alert')).toHaveTextContent('Every how many? A whole number, one or more.');
+        expect(addBudget).not.toHaveBeenCalled();
+      });
+
+      it('a named rhythm writes no pair', () => {
+        renderWithProviders(<BudgetModal {...defaultProps} />);
+        fillAndAdd();
+        expect(addBudget.mock.calls[0][0]).toMatchObject({ period: 'monthly', repeatCount: null, repeatUnit: null });
+      });
+
+      it('a budget that already repeats every 3 weeks shows its pair', () => {
+        const every = {
+          id: 'b-1',
+          categoryId: 'det-groceries',
+          amount: 90,
+          period: 'every',
+          repeatCount: 3,
+          repeatUnit: 'week',
+          isActive: true,
+          spent: 0,
+          startDate: '2026-11-01',
+          createdAt: new Date('2026-11-07T10:00:00.000Z'),
+          updatedAt: new Date('2026-11-07T10:00:00.000Z'),
+        } satisfies Budget;
+
+        renderWithProviders(<BudgetModal {...defaultProps} budget={every} />);
+        expect(screen.getByDisplayValue('Every…')).toBeInTheDocument();
+        expect(screen.getByLabelText('Every how many')).toHaveValue(3);
+        expect(screen.getByLabelText('Weeks or months')).toHaveValue('week');
+      });
+    });
+
     describe('One-off — a budget that runs once', () => {
       it('is offered as a period, needs both days, and says so', () => {
         renderWithProviders(<BudgetModal {...defaultProps} />);

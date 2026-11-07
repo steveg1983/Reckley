@@ -317,13 +317,20 @@ function BudgetView() {
    */
   const rhythmTotals = useMemo(() => {
     const active = budgetsWithSpent.filter(b => b && b.isActive !== false && !b.window.ended);
-    const order: BudgetPeriodName[] = ['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly', 'custom'];
+    const order: BudgetPeriodName[] = ['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly', 'custom', 'every'];
     return order.flatMap(period => {
       const rows = active.filter(b => b.window.period === period);
       if (rows.length === 0) return [];
-      const budgeted = rows.reduce((sum, b) => sum.plus(b.effectiveAmount), toDecimal(0));
-      const spent = rows.reduce((sum, b) => sum.plus(toDecimal(b.spent || 0)), toDecimal(0));
-      return [{ period, label: rows[0].window.label, budgeted, spent, remaining: budgeted.minus(spent) }];
+      // A rhythm is a WINDOW LABEL, not a period name: "every 2 months" and
+      // "every 6 weeks" are both 'every' and are two rhythms, each its own
+      // line, in the order the labels read.
+      const labels = [...new Set(rows.map(b => b.window.label))].sort(compareText);
+      return labels.map(label => {
+        const ofLabel = rows.filter(b => b.window.label === label);
+        const budgeted = ofLabel.reduce((sum, b) => sum.plus(b.effectiveAmount), toDecimal(0));
+        const spent = ofLabel.reduce((sum, b) => sum.plus(toDecimal(b.spent || 0)), toDecimal(0));
+        return { period, label, budgeted, spent, remaining: budgeted.minus(spent) };
+      });
     });
   }, [budgetsWithSpent]);
 
@@ -355,7 +362,7 @@ function BudgetView() {
         {rhythmTotals.map(total => {
           const value = pick(total);
           return (
-            <div key={total.period} className="flex items-baseline justify-between gap-3">
+            <div key={total.label} className="flex items-baseline justify-between gap-3">
               <dt className="text-xs text-gray-500 dark:text-gray-400">{total.label}</dt>
               <dd className={`text-card font-bold tabular-nums ${colour(value)}`}>{formatCurrency(value)}</dd>
             </div>

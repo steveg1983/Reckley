@@ -298,6 +298,53 @@ describe('Budget page — what a card says has been spent', () => {
   });
 
   /**
+   * ANY REPEAT INTERVAL (owner, 7 Nov 2026). Two intervals are two rhythms:
+   * each is captioned by its interval and totalled on its own line.
+   */
+  describe('budgets that repeat every N weeks or months', () => {
+    const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const iso = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+    beforeEach(() => {
+      __setAppContextValue({
+        accounts: ACCOUNTS,
+        categories: CATEGORIES,
+        transactions: [txn({ id: 't-1', amount: -40 })],
+        transactionSplits: [],
+        budgets: [
+          budget({
+            id: 'bud-groceries', categoryId: 'det-groceries', amount: 200, period: 'every',
+            repeatCount: 2, repeatUnit: 'month', startDate: iso(firstOfThisMonth), createdAt: now, updatedAt: now
+          }),
+          budget({
+            id: 'bud-household', categoryId: 'det-household', amount: 120, period: 'every',
+            repeatCount: 6, repeatUnit: 'week', startDate: iso(firstOfThisMonth), createdAt: now, updatedAt: now
+          })
+        ]
+      });
+    });
+
+    it('captions each card by its interval, and counts this month’s spend in the interval begun this month', () => {
+      renderBudget();
+      const groceries = within(card('Groceries'));
+      expect(groceries.getByText(/^Every 2 months ·/)).toBeInTheDocument();
+      expect(groceries.getByText('£40.00 of £200.00')).toBeInTheDocument();
+      expect(within(card('Household')).getByText(/^Every 6 weeks ·/)).toBeInTheDocument();
+    });
+
+    it('totals each interval on its own line — two intervals are two rhythms', () => {
+      renderBudget();
+      expect(screen.queryByText('£320.00')).not.toBeInTheDocument();
+      const budgeted = screen.getByText('Total Budgeted').closest('div') as HTMLElement;
+      expect(within(budgeted).getByText('Every 2 months')).toBeInTheDocument();
+      expect(within(budgeted).getByText('£200.00')).toBeInTheDocument();
+      expect(within(budgeted).getByText('Every 6 weeks')).toBeInTheDocument();
+      expect(within(budgeted).getByText('£120.00')).toBeInTheDocument();
+    });
+  });
+
+  /**
    * A budget that has FINISHED (owner, 5 Nov 2026: end dates and one-off
    * budgets). It keeps its card — what the last period came to is worth
    * seeing — captioned as over, and it is left out of the live total: its

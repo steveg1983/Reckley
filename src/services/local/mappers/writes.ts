@@ -456,6 +456,8 @@ const BUDGET_CREATE_KEYS: readonly string[] = [
   'name',
   'amount',
   'period',
+  'repeat_count',
+  'repeat_unit',
   'category',
   'start_date',
   'end_date',

@@ -62,8 +62,13 @@ pub struct BudgetRow {
     pub name: String,
     /// The limit.
     pub amount: Money,
-    /// `weekly` | `monthly` | … — enumerated by CHECK in both engines.
+    /// `weekly` | `monthly` | … | `every` — enumerated by CHECK in both engines.
     pub period: String,
+    /// For `every`: how many of `repeat_unit` one cycle is. NULL on every other
+    /// period, by CHECK in both engines.
+    pub repeat_count: Option<i64>,
+    /// For `every`: `week` or `month`. NULL on every other period.
+    pub repeat_unit: Option<String>,
     /// A category id as text. No foreign key, so a merge that forgot this column
     /// would leave the dangling id the migration was written to stop.
     pub category: Option<String>,
@@ -106,8 +111,12 @@ pub struct ListedBudget {
     pub name: String,
     /// The limit.
     pub amount: Money,
-    /// `weekly` | `monthly` | … — enumerated by CHECK in both engines.
+    /// `weekly` | `monthly` | … | `every` — enumerated by CHECK in both engines.
     pub period: String,
+    /// For `every`: how many of `repeat_unit` one cycle is. NULL otherwise.
+    pub repeat_count: Option<i64>,
+    /// For `every`: `week` or `month`. NULL otherwise.
+    pub repeat_unit: Option<String>,
     /// The category id the app actually files a budget against: TEXT, because
     /// the default category ids were never uuids.
     pub category: Option<String>,
@@ -155,34 +164,37 @@ pub fn list_all(connection: &Connection, user_id: &str) -> CoreResult<Vec<Listed
     //   SEARCH budgets USING INDEX idx_budgets_user (user_id=?)
     //   USE TEMP B-TREE FOR ORDER BY
     let mut statement = connection.prepare(
-        "SELECT id, user_id, name, amount_minor, period, category, category_id,
-                start_date, end_date, spent_minor, rollover, rollover_amount_minor,
-                alert_threshold_bp, is_active, notes, metadata, created_at, updated_at
+        "SELECT id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
+                category, category_id, start_date, end_date, spent_minor, rollover,
+                rollover_amount_minor, alert_threshold_bp, is_active, notes, metadata,
+                created_at, updated_at
            FROM budgets
           WHERE user_id = ?1
           ORDER BY created_at, id",
     )?;
     let rows = statement.query_map(params![user_id], |record| {
-        let metadata_text: String = record.get(15)?;
+        let metadata_text: String = record.get(17)?;
         Ok(ListedBudget {
             id: record.get(0)?,
             user_id: record.get(1)?,
             name: record.get(2)?,
             amount: Money::from_minor(record.get(3)?),
             period: record.get(4)?,
-            category: record.get(5)?,
-            category_id: record.get(6)?,
-            start_date: record.get(7)?,
-            end_date: record.get(8)?,
-            spent: Money::from_minor(record.get(9)?),
-            rollover: record.get::<_, i64>(10)? != 0,
-            rollover_amount: Money::from_minor(record.get(11)?),
-            alert_threshold: hundredths_to_decimal_string(record.get(12)?),
-            is_active: record.get::<_, i64>(13)? != 0,
-            notes: record.get(14)?,
+            repeat_count: record.get(5)?,
+            repeat_unit: record.get(6)?,
+            category: record.get(7)?,
+            category_id: record.get(8)?,
+            start_date: record.get(9)?,
+            end_date: record.get(10)?,
+            spent: Money::from_minor(record.get(11)?),
+            rollover: record.get::<_, i64>(12)? != 0,
+            rollover_amount: Money::from_minor(record.get(13)?),
+            alert_threshold: hundredths_to_decimal_string(record.get(14)?),
+            is_active: record.get::<_, i64>(15)? != 0,
+            notes: record.get(16)?,
             metadata: serde_json::from_str(&metadata_text).unwrap_or(serde_json::Value::Null),
-            created_at: record.get(16)?,
-            updated_at: record.get(17)?,
+            created_at: record.get(18)?,
+            updated_at: record.get(19)?,
         })
     })?;
 
@@ -215,35 +227,38 @@ pub fn read_listed(
 ) -> CoreResult<Option<ListedBudget>> {
     Ok(connection
         .query_row(
-            "SELECT id, user_id, name, amount_minor, period, category, category_id,
-                    start_date, end_date, spent_minor, rollover, rollover_amount_minor,
-                    alert_threshold_bp, is_active, notes, metadata, created_at, updated_at
+            "SELECT id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
+                    category, category_id, start_date, end_date, spent_minor, rollover,
+                    rollover_amount_minor, alert_threshold_bp, is_active, notes, metadata,
+                    created_at, updated_at
                FROM budgets
               WHERE id = ?1
                 AND (?2 IS NULL OR user_id = ?2)",
             params![id, user_id],
             |record| {
-                let metadata_text: String = record.get(15)?;
+                let metadata_text: String = record.get(17)?;
                 Ok(ListedBudget {
                     id: record.get(0)?,
                     user_id: record.get(1)?,
                     name: record.get(2)?,
                     amount: Money::from_minor(record.get(3)?),
                     period: record.get(4)?,
-                    category: record.get(5)?,
-                    category_id: record.get(6)?,
-                    start_date: record.get(7)?,
-                    end_date: record.get(8)?,
-                    spent: Money::from_minor(record.get(9)?),
-                    rollover: record.get::<_, i64>(10)? != 0,
-                    rollover_amount: Money::from_minor(record.get(11)?),
-                    alert_threshold: hundredths_to_decimal_string(record.get(12)?),
-                    is_active: record.get::<_, i64>(13)? != 0,
-                    notes: record.get(14)?,
+                    repeat_count: record.get(5)?,
+                    repeat_unit: record.get(6)?,
+                    category: record.get(7)?,
+                    category_id: record.get(8)?,
+                    start_date: record.get(9)?,
+                    end_date: record.get(10)?,
+                    spent: Money::from_minor(record.get(11)?),
+                    rollover: record.get::<_, i64>(12)? != 0,
+                    rollover_amount: Money::from_minor(record.get(13)?),
+                    alert_threshold: hundredths_to_decimal_string(record.get(14)?),
+                    is_active: record.get::<_, i64>(15)? != 0,
+                    notes: record.get(16)?,
                     metadata: serde_json::from_str(&metadata_text)
                         .unwrap_or(serde_json::Value::Null),
-                    created_at: record.get(16)?,
-                    updated_at: record.get(17)?,
+                    created_at: record.get(18)?,
+                    updated_at: record.get(19)?,
                 })
             },
         )
@@ -266,9 +281,10 @@ pub fn read_owned(
 ) -> CoreResult<Option<BudgetRow>> {
     Ok(connection
         .query_row(
-            "SELECT id, user_id, name, amount_minor, period, category, category_id,
-                    start_date, end_date, spent_minor, rollover, rollover_amount_minor,
-                    alert_threshold_bp, is_active, notes, metadata, created_at, updated_at
+            "SELECT id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
+                    category, category_id, start_date, end_date, spent_minor, rollover,
+                    rollover_amount_minor, alert_threshold_bp, is_active, notes, metadata,
+                    created_at, updated_at
                FROM budgets
               WHERE id = ?1
                 AND (?2 IS NULL OR user_id = ?2)",
@@ -284,9 +300,10 @@ pub fn read_owned(
 /// [`crate::error::CoreError`] if the row is absent or the read fails.
 pub fn read(connection: &Connection, id: &str) -> CoreResult<BudgetRow> {
     Ok(connection.query_row(
-        "SELECT id, user_id, name, amount_minor, period, category, category_id,
-                start_date, end_date, spent_minor, rollover, rollover_amount_minor,
-                alert_threshold_bp, is_active, notes, metadata, created_at, updated_at
+        "SELECT id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
+                category, category_id, start_date, end_date, spent_minor, rollover,
+                rollover_amount_minor, alert_threshold_bp, is_active, notes, metadata,
+                created_at, updated_at
            FROM budgets
           WHERE id = ?1",
         params![id],
@@ -294,31 +311,33 @@ pub fn read(connection: &Connection, id: &str) -> CoreResult<BudgetRow> {
     )?)
 }
 
-/// One record of that eighteen-column SELECT as a [`BudgetRow`].
+/// One record of that twenty-column SELECT as a [`BudgetRow`].
 ///
 /// Written once because two readers use the identical column list, and a second
 /// copy is how an added column comes to be read at the wrong index by one of
 /// them.
 fn row_of(record: &rusqlite::Row<'_>) -> rusqlite::Result<BudgetRow> {
-    let metadata_text: String = record.get(15)?;
+    let metadata_text: String = record.get(17)?;
     Ok(BudgetRow {
         id: record.get(0)?,
         user_id: record.get(1)?,
         name: record.get(2)?,
         amount: Money::from_minor(record.get(3)?),
         period: record.get(4)?,
-        category: record.get(5)?,
-        category_id: record.get(6)?,
-        start_date: record.get(7)?,
-        end_date: record.get(8)?,
-        spent: Money::from_minor(record.get(9)?),
-        rollover: record.get::<_, i64>(10)? != 0,
-        rollover_amount: Money::from_minor(record.get(11)?),
-        alert_threshold_bp: record.get(12)?,
-        is_active: record.get::<_, i64>(13)? != 0,
-        notes: record.get(14)?,
+        repeat_count: record.get(5)?,
+        repeat_unit: record.get(6)?,
+        category: record.get(7)?,
+        category_id: record.get(8)?,
+        start_date: record.get(9)?,
+        end_date: record.get(10)?,
+        spent: Money::from_minor(record.get(11)?),
+        rollover: record.get::<_, i64>(12)? != 0,
+        rollover_amount: Money::from_minor(record.get(13)?),
+        alert_threshold_bp: record.get(14)?,
+        is_active: record.get::<_, i64>(15)? != 0,
+        notes: record.get(16)?,
         metadata: serde_json::from_str(&metadata_text).unwrap_or(serde_json::Value::Null),
-        created_at: record.get(16)?,
-        updated_at: record.get(17)?,
+        created_at: record.get(18)?,
+        updated_at: record.get(19)?,
     })
 }

@@ -71,6 +71,20 @@
  * that branch — the old open-ended and missing-dates fallbacks stay, stated in
  * the code, for rows older builds wrote.
  *
+ * ── ANY REPEAT INTERVAL (7 Nov 2026, the owner's "4") ─────────────────────
+ *
+ * The period `every` repeats every N weeks or months: `repeat_count` and
+ * `repeat_unit` on the row say which, and both engines' CHECKs hold them to
+ * exactly that period. The cycle is the fortnight's or the month-stepped
+ * cycle's rule with N in place of 2 or 1, 3, 12 — nothing new is counted,
+ * only counted in the user's own step — anchored on the start date (every
+ * such row is written after the cycle model shipped, so its start is chosen),
+ * and bounded by the end date like every other period. The caption is the
+ * interval itself: "Every 2 months", "Every 6 weeks". A row whose pair is
+ * missing or unsound (nothing writes one, but a reader must answer) is read
+ * as every month. The six named rhythms are untouched: a monthly budget is
+ * still 'monthly', not 'every 1 month', so nothing stored changed.
+ *
  * BOUNDARIES: windows are inclusive and run to the LAST MILLISECOND of the end
  * day. The old code ended a month at `new Date(y, m + 1, 0)` — local midnight —
  * which dropped the final day of every month for anyone west of the row's
@@ -84,9 +98,16 @@
  */
 
 import { toDateMs } from './dateBoundary.js';
+import type { BudgetRepeatUnit } from '../types/index.js';
 
 /** Every period a budget can be measured over. */
-export type BudgetPeriodName = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
+export type BudgetPeriodName = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom' | 'every';
+
+/** An `every` budget's interval: how many of which unit one cycle is. */
+export interface BudgetRepeat {
+  count: number;
+  unit: BudgetRepeatUnit;
+}
 
 /**
  * The day the cycle model shipped. A budget created on or after this day
@@ -113,6 +134,34 @@ export interface BudgetPeriodSource {
    * default (see the header), and anchors a fortnightly budget with no start.
    */
   createdAt?: string | Date | null;
+  /** For `every`: how many of the unit one cycle is (`budgets.repeat_count`). */
+  repeatCount?: number | null;
+  /** For `every`: 'week' or 'month' (`budgets.repeat_unit`). */
+  repeatUnit?: string | null;
+}
+
+/**
+ * An `every` budget's interval as stored, or null when the pair is missing or
+ * unsound — a count that is not a whole number of at least one, or a unit
+ * that is neither week nor month. Nothing writes such a row; a reader still
+ * has to answer for one.
+ */
+export function resolveBudgetRepeat(
+  source: Pick<BudgetPeriodSource, 'repeatCount' | 'repeatUnit'>
+): BudgetRepeat | null {
+  const { repeatCount: count, repeatUnit: unit } = source;
+  if (typeof count !== 'number' || !Number.isInteger(count) || count < 1) return null;
+  if (unit !== 'week' && unit !== 'month') return null;
+  return { count, unit };
+}
+
+/** What an `every` budget with no sound pair is read as. */
+const EVERY_FALLBACK: BudgetRepeat = { count: 1, unit: 'month' };
+
+/** "Every 2 months", "Every 6 weeks", "Every month" — the interval as a caption. */
+export function describeBudgetRepeat(repeat: BudgetRepeat): string {
+  if (repeat.count === 1) return `Every ${repeat.unit}`;
+  return `Every ${repeat.count} ${repeat.unit}s`;
 }
 
 export interface BudgetPeriodWindow {
@@ -145,6 +194,9 @@ const PERIOD_LABELS: Record<BudgetPeriodName, string> = {
   // The owner's word for a budget that runs once (5 Nov 2026). "Custom" said
   // nothing about what the budget did; this says it does not repeat.
   custom: 'One-off',
+  // The caption an `every` budget wears when its pair is unsound — the
+  // interval it is then read as. A sound one is captioned by its interval.
+  every: describeBudgetRepeat(EVERY_FALLBACK),
 };
 
 /** Days in a fortnight — the biweekly step. */
@@ -181,14 +233,26 @@ export function normaliseBudgetPeriod(period: string | null | undefined): Budget
       return 'yearly';
     case 'custom':
       return 'custom';
+    case 'every':
+      return 'every';
     default:
       return 'monthly';
   }
 }
 
-/** The caption a card shows for a period — "Fortnightly", "Quarterly", … */
-export function getBudgetPeriodLabel(period: string | null | undefined): string {
-  return PERIOD_LABELS[normaliseBudgetPeriod(period)];
+/**
+ * The caption a card shows for a period — "Fortnightly", "Quarterly", … — and
+ * for `every`, the interval itself when the row is given: "Every 2 months".
+ */
+export function getBudgetPeriodLabel(
+  period: string | null | undefined,
+  source?: Pick<BudgetPeriodSource, 'repeatCount' | 'repeatUnit'>
+): string {
+  const name = normaliseBudgetPeriod(period);
+  if (name === 'every' && source) {
+    return describeBudgetRepeat(resolveBudgetRepeat(source) ?? EVERY_FALLBACK);
+  }
+  return PERIOD_LABELS[name];
 }
 
 /** Local start of the given calendar day. */
@@ -300,18 +364,19 @@ export function resolveBudgetAnchor(budget: BudgetPeriodSource): string | null {
   return isCreationDay ? null : isoOf(start);
 }
 
-/** A window from its day parts, with the two flags. */
+/** A window from its day parts, with the two flags; `label` only for an interval of the user's own. */
 function windowOf(
   start: DayParts,
   end: DayParts,
   period: BudgetPeriodName,
-  flags: { notStarted: boolean; ended: boolean } = { notStarted: false, ended: false }
+  flags: { notStarted: boolean; ended: boolean } = { notStarted: false, ended: false },
+  label: string = PERIOD_LABELS[period]
 ): BudgetPeriodWindow {
   return {
     start: startOfDay(start.year, start.month, start.day),
     end: endOfDay(end.year, end.month, end.day),
     period,
-    label: PERIOD_LABELS[period],
+    label,
     ...flags,
   };
 }
@@ -339,13 +404,14 @@ function weekContaining(day: DayParts): Cycle {
 }
 
 /**
- * The fortnight containing a day, counted from the anchor — or the FIRST
- * fortnight when the day is before it, not a phantom one behind it.
+ * The cycle of `length` days containing a day, counted from the anchor — or
+ * the FIRST cycle when the day is before it, not a phantom one behind it. A
+ * fortnight is this with 14; "every 6 weeks" is this with 42.
  */
-function fortnightContaining(anchor: DayParts, day: DayParts): Cycle {
-  const index = Math.max(0, Math.floor(daysBetween(anchor, day) / FORTNIGHT_DAYS));
-  const start = partsOf(new Date(anchor.year, anchor.month, anchor.day + index * FORTNIGHT_DAYS));
-  return { start, end: partsOf(new Date(start.year, start.month, start.day + FORTNIGHT_DAYS - 1)) };
+function daysCycleContaining(anchor: DayParts, length: number, day: DayParts): Cycle {
+  const index = Math.max(0, Math.floor(daysBetween(anchor, day) / length));
+  const start = partsOf(new Date(anchor.year, anchor.month, anchor.day + index * length));
+  return { start, end: partsOf(new Date(start.year, start.month, start.day + length - 1)) };
 }
 
 /** The month-stepped cycle containing a day, counted from the anchor. */
@@ -380,25 +446,32 @@ function boundedWindow(
   period: BudgetPeriodName,
   endDate: string | Date | null | undefined,
   today: DayParts,
-  startsOn: DayParts | null
+  startsOn: DayParts | null,
+  label?: string
 ): BudgetPeriodWindow {
   const stated = toDayParts(endDate);
   const last = stated && (startsOn === null || compareDays(stated, startsOn) >= 0) ? stated : null;
 
   if (last && compareDays(today, last) > 0) {
     const cycle = cycleOf(last);
-    return windowOf(cycle.start, compareDays(last, cycle.end) < 0 ? last : cycle.end, period, {
-      notStarted: false,
-      ended: true,
-    });
+    return windowOf(
+      cycle.start,
+      compareDays(last, cycle.end) < 0 ? last : cycle.end,
+      period,
+      { notStarted: false, ended: true },
+      label
+    );
   }
 
   const cycle = cycleOf(today);
   const end = last && compareDays(last, cycle.end) < 0 ? last : cycle.end;
-  return windowOf(cycle.start, end, period, {
-    notStarted: startsOn !== null && compareDays(today, startsOn) < 0,
-    ended: false,
-  });
+  return windowOf(
+    cycle.start,
+    end,
+    period,
+    { notStarted: startsOn !== null && compareDays(today, startsOn) < 0, ended: false },
+    label
+  );
 }
 
 /**
@@ -412,6 +485,9 @@ function boundedWindow(
  * - monthly / quarterly / yearly: the cycle containing `now`, counted from the
  *   budget's anchor (see the header) — or, for a legacy row with none, the
  *   calendar month, quarter and year.
+ * - every: the cycle of N weeks or N months containing `now`, counted from
+ *   the budget's start — the fortnight's and the month-stepped rule with the
+ *   user's own N.
  * - custom ("One-off"): the stored start/end dates, once. A custom budget
  *   missing them falls back to the current month — stated in the code rather
  *   than silently inherited, and still captioned as itself so the card never
@@ -433,7 +509,19 @@ export function getBudgetPeriodWindow(
 
     case 'biweekly': {
       const anchor = toDayParts(budget.startDate) ?? toDayParts(budget.createdAt) ?? weekContaining(today).start;
-      return boundedWindow(day => fortnightContaining(anchor, day), period, budget.endDate, today, anchor);
+      return boundedWindow(day => daysCycleContaining(anchor, FORTNIGHT_DAYS, day), period, budget.endDate, today, anchor);
+    }
+
+    case 'every': {
+      // The user's own step, from the start they chose (see the header). A
+      // row with no start takes its creation day, as the fortnight does.
+      const repeat = resolveBudgetRepeat(budget) ?? EVERY_FALLBACK;
+      const anchor = toDayParts(budget.startDate) ?? toDayParts(budget.createdAt) ?? today;
+      const cycleOf =
+        repeat.unit === 'week'
+          ? (day: DayParts): Cycle => daysCycleContaining(anchor, repeat.count * 7, day)
+          : (day: DayParts): Cycle => monthsCycleContaining(anchor, repeat.count, day);
+      return boundedWindow(cycleOf, period, budget.endDate, today, anchor, describeBudgetRepeat(repeat));
     }
 
     case 'monthly':

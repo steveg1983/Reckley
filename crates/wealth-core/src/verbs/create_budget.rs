@@ -162,10 +162,18 @@ pub struct BudgetDraft {
     /// is refused by the TABLE — which is where the cloud refuses it too.
     #[serde(default)]
     pub amount: Option<Money>,
-    /// `weekly` | `biweekly` | `monthly` | `quarterly` | `yearly` | `custom`,
-    /// enumerated by CHECK in both engines. `NOT NULL`, no default.
+    /// `weekly` | `biweekly` | `monthly` | `quarterly` | `yearly` | `custom` |
+    /// `every`, enumerated by CHECK in both engines. `NOT NULL`, no default.
     #[serde(default)]
     pub period: Option<String>,
+    /// For `every`: how many of `repeat_unit` one cycle is. Both engines hold
+    /// the pair to that period by CHECK (`budgets_repeat_check`), so a pair on
+    /// a named rhythm, or a missing one on `every`, is refused by the table.
+    #[serde(default)]
+    pub repeat_count: Option<i64>,
+    /// For `every`: `week` or `month`.
+    #[serde(default)]
+    pub repeat_unit: Option<String>,
     /// The category id the app files a budget against — TEXT, because the
     /// default category ids were never uuids. `budgetFromDb` reads this column
     /// and never `category_id`, and says so.
@@ -266,11 +274,12 @@ pub fn create_budget(
 
     transaction.execute(
         "INSERT INTO budgets (
-           id, user_id, name, amount_minor, period, category, start_date, end_date,
+           id, user_id, name, amount_minor, period, repeat_count, repeat_unit,
+           category, start_date, end_date,
            spent_minor, rollover, rollover_amount_minor, alert_threshold_bp,
            is_active, notes, created_at, updated_at
          ) VALUES (
-           ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+           ?1, ?2, ?3, ?4, ?5, ?15, ?16, ?6, ?7, ?8,
            0, ?9, ?10, ?11, ?12, ?13, ?14, ?14
          )",
         params![
@@ -292,6 +301,8 @@ pub fn create_budget(
             i64::from(is_active),
             command.budget.notes,
             now,
+            command.budget.repeat_count,
+            null_if_empty(command.budget.repeat_unit.as_deref()),
         ],
     )?;
 

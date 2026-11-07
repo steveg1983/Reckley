@@ -245,6 +245,7 @@ pub mod error;
 pub mod money;
 pub mod row;
 pub mod scaled;
+pub mod upgrade;
 pub mod verbs;
 pub mod wire;
 

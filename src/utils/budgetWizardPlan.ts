@@ -270,6 +270,8 @@ export function budgetPeriodSuffix(period: string | null | undefined): string {
     case 'annual':
     case 'annually': return '/yr';
     case 'custom': return '';
+    // An interval of the user's own has no one-word suffix; the card says it in full.
+    case 'every': return '';
     default: return '/mo';
   }
 }
