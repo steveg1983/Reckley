@@ -284,50 +284,61 @@ describe('BudgetModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add Budget' }));
     };
 
-    it('a new budget starts on the 1st of this month, says its first period, and writes that day', () => {
+    /**
+     * ONE FROM DATE AND ONE TO DATE (owner, 7 Nov 2026 evening): a repeating
+     * budget's dates are the set's. The form shows them, asks for none, and
+     * writes them on every save — so a drifted card is healed by its next
+     * edit. Only a one-off has days of its own.
+     */
+    it('with no other budgets, a new one runs from the 1st of this month, says so, and asks for no date', () => {
       renderWithProviders(<BudgetModal {...defaultProps} />);
-      expect(screen.getByLabelText('Starts')).toHaveValue(firstOfThisMonth());
+      expect(screen.queryByLabelText('Starts')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Ends')).not.toBeInTheDocument();
+      expect(screen.getByTestId('budget-set-dates')).toHaveTextContent(/^Runs with your other budgets from \d{1,2} \w{3} \d{4}\. To change that for all of them, use Set up budgets\.$/);
       expect(screen.getByText(/^First month: /)).toBeInTheDocument();
 
       fillAndAdd();
-      expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: firstOfThisMonth() });
+      expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: firstOfThisMonth(), endDate: null });
     });
 
-    it('a budget from the 15th says it runs 15th to 14th', () => {
+    it('a new budget inherits the day the other budgets run from — the 15th runs 15th to 14th', () => {
+      const payday = {
+        id: 'b-pay', categoryId: 'sub-food', amount: 300, period: 'monthly', isActive: true, spent: 0,
+        startDate: '2026-11-15', createdAt: new Date('2026-11-07T10:00:00.000Z'), updatedAt: new Date('2026-11-07T10:00:00.000Z'),
+      } satisfies Budget;
+      __setAppContextValue({ budgets: [payday] });
       renderWithProviders(<BudgetModal {...defaultProps} />);
-      fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-15' } });
-      expect(screen.getByText(/First month: 15 Jan\s*–\s*14 Feb 2027/)).toBeInTheDocument();
+      expect(screen.getByTestId('budget-set-dates')).toHaveTextContent('Runs with your other budgets from 15 Nov 2026.');
+      expect(screen.getByText(/First month: 15 Nov\s*–\s*14 Dec 2026/)).toBeInTheDocument();
 
       fillAndAdd();
-      expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: '2027-01-15' });
+      expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: '2026-11-15', endDate: null });
     });
 
-    it('a weekly budget has no start to give', () => {
+    it('a weekly budget has no start to share, only the end', () => {
       renderWithProviders(<BudgetModal {...defaultProps} />);
       fireEvent.change(screen.getByDisplayValue('Monthly'), { target: { value: 'weekly' } });
-      expect(screen.queryByLabelText('Starts')).not.toBeInTheDocument();
+      expect(screen.getByTestId('budget-set-dates')).toHaveTextContent('Runs with your other budgets, week by week.');
 
       fillAndAdd();
       expect(addBudget.mock.calls[0][0]).not.toHaveProperty('startDate');
+      expect(addBudget.mock.calls[0][0]).toMatchObject({ endDate: null });
     });
 
-    it('a budget written before the cycle model shows the calendar start it is measured from today', () => {
-      // The 29 Oct shape: start = creation day, yearly, so it keeps the
-      // calendar year until re-dated — and that is the day the form shows.
-      const legacy = {
-        id: 'b-1',
-        categoryId: 'det-groceries',
-        amount: 1200,
-        period: 'yearly',
-        isActive: true,
-        spent: 0,
-        startDate: '2026-10-29',
-        createdAt: new Date('2026-10-29T18:03:11.000Z'),
-        updatedAt: new Date('2026-10-29T18:03:11.000Z'),
-      } satisfies Budget;
+    it('saving a budget that drifted from the set brings it back to the set’s dates', () => {
+      // The owner's trap (7 Nov): one card from 1 December among a set from 1 November.
+      const november = (id: string, categoryId: string): Budget => ({
+        id, categoryId, amount: 100, period: 'yearly', isActive: true, spent: 0,
+        startDate: '2026-11-01', endDate: '2027-10-31',
+        createdAt: new Date('2026-11-07T10:00:00.000Z'), updatedAt: new Date('2026-11-07T10:00:00.000Z'),
+      });
+      const drifted = { ...november('b-drift', 'det-groceries'), startDate: '2026-12-01', endDate: null };
+      __setAppContextValue({ budgets: [november('b-1', 'sub-food'), november('b-2', 'det-payslip'), drifted] });
 
-      renderWithProviders(<BudgetModal {...defaultProps} budget={legacy} />);
-      expect(screen.getByLabelText('Starts')).toHaveValue(`${new Date().getFullYear()}-01-01`);
+      renderWithProviders(<BudgetModal {...defaultProps} budget={drifted} />);
+      expect(screen.getByTestId('budget-set-dates')).toHaveTextContent('Runs with your other budgets from 1 Nov 2026 until 31 Oct 2027.');
+      fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+      expect(updateBudget).toHaveBeenCalledWith('b-drift', expect.objectContaining({ startDate: '2026-11-01', endDate: '2027-10-31' }));
     });
   });
 
@@ -347,20 +358,18 @@ describe('BudgetModal', () => {
       fireEvent.change(screen.getByDisplayValue('Monthly'), { target: { value } });
     };
 
-    it('a repeating budget has no end unless one is given, and writes none', () => {
-      renderWithProviders(<BudgetModal {...defaultProps} />);
-      expect(screen.getByLabelText('Ends')).toHaveValue('');
-      expect(screen.getByText('Optional — leave blank to keep the budget running.')).toBeInTheDocument();
+    /** The set's end, shared by every repeating budget (7 Nov 2026 evening). */
+    const endingSet = {
+      id: 'b-set', categoryId: 'sub-food', amount: 300, period: 'monthly', isActive: true, spent: 0,
+      startDate: '2027-01-01', endDate: '2027-06-30',
+      createdAt: new Date('2026-11-10T10:00:00.000Z'), updatedAt: new Date('2026-11-10T10:00:00.000Z'),
+    } satisfies Budget;
 
-      fillAndAdd();
-      // null, not undefined: an end cleared here must clear the stored one.
-      expect(addBudget.mock.calls[0][0]).toMatchObject({ endDate: null });
-    });
-
-    it('an end date names the last period beside the first, and is written', () => {
+    it('a repeating budget takes the set’s end, names the last period beside the first, and writes it', () => {
+      __setAppContextValue({ budgets: [endingSet] });
       renderWithProviders(<BudgetModal {...defaultProps} />);
-      fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-01' } });
-      fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2027-06-30' } });
+      expect(screen.queryByLabelText('Ends')).not.toBeInTheDocument();
+      expect(screen.getByTestId('budget-set-dates')).toHaveTextContent('Runs with your other budgets from 1 Jan 2027 until 30 Jun 2027.');
       expect(screen.getByTestId('budget-choice')).toHaveTextContent(
         /^First month: 1\s*[–-]\s*31 Jan 2027\. Last month: 1\s*[–-]\s*30 Jun 2027\.$/
       );
@@ -369,8 +378,9 @@ describe('BudgetModal', () => {
       expect(addBudget.mock.calls[0][0]).toMatchObject({ startDate: '2027-01-01', endDate: '2027-06-30' });
     });
 
-    it('an end before the start is refused, and nothing is written', () => {
+    it('a one-off ending before it starts is refused, and nothing is written', () => {
       renderWithProviders(<BudgetModal {...defaultProps} />);
+      choosePeriod('custom');
       fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-06-01' } });
       fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2027-01-31' } });
       expect(screen.queryByTestId('budget-choice')).not.toBeInTheDocument();
@@ -380,10 +390,11 @@ describe('BudgetModal', () => {
       expect(addBudget).not.toHaveBeenCalled();
     });
 
-    it('a weekly budget takes an end date too, and says when it stops', () => {
+    it('a weekly budget takes the set’s end too, and says when it stops', () => {
+      __setAppContextValue({ budgets: [endingSet] });
       renderWithProviders(<BudgetModal {...defaultProps} />);
       choosePeriod('weekly');
-      fireEvent.change(screen.getByLabelText('Ends'), { target: { value: '2027-06-30' } });
+      expect(screen.getByTestId('budget-set-dates')).toHaveTextContent('Runs with your other budgets until 30 Jun 2027.');
       expect(screen.getByTestId('budget-choice')).toHaveTextContent('Runs until 30 Jun 2027.');
 
       fillAndAdd();
@@ -391,22 +402,24 @@ describe('BudgetModal', () => {
       expect(addBudget.mock.calls[0][0]).not.toHaveProperty('startDate');
     });
 
-    it('a budget that already has an end shows it', () => {
-      const ending = {
+    it('a one-off that already has its days shows them', () => {
+      const once = {
         id: 'b-1',
         categoryId: 'det-groceries',
         amount: 300,
-        period: 'monthly',
+        period: 'custom',
         isActive: true,
         spent: 0,
-        startDate: '2026-11-01',
-        endDate: '2027-03-31',
+        startDate: '2026-12-01',
+        endDate: '2027-01-31',
         createdAt: new Date('2026-11-10T10:00:00.000Z'),
         updatedAt: new Date('2026-11-10T10:00:00.000Z'),
       } satisfies Budget;
 
-      renderWithProviders(<BudgetModal {...defaultProps} budget={ending} />);
-      expect(screen.getByLabelText('Ends')).toHaveValue('2027-03-31');
+      renderWithProviders(<BudgetModal {...defaultProps} budget={once} />);
+      expect(screen.getByLabelText('Starts')).toHaveValue('2026-12-01');
+      expect(screen.getByLabelText('Ends')).toHaveValue('2027-01-31');
+      expect(screen.queryByTestId('budget-set-dates')).not.toBeInTheDocument();
     });
 
     /**
@@ -567,10 +580,16 @@ describe('BudgetModal', () => {
     });
 
     describe('Every… — an interval of the user’s own', () => {
-      it('asks how many and of what, names the first interval, and writes the pair', () => {
+      /** The set runs from 1 January 2027: what the intervals count from (7 Nov 2026 evening). */
+      const fromNewYear = {
+        id: 'b-set', categoryId: 'sub-food', amount: 300, period: 'monthly', isActive: true, spent: 0,
+        startDate: '2027-01-01', createdAt: new Date('2026-11-10T10:00:00.000Z'), updatedAt: new Date('2026-11-10T10:00:00.000Z'),
+      } satisfies Budget;
+
+      it('asks how many and of what, names the first interval from the set’s start, and writes the pair', () => {
+        __setAppContextValue({ budgets: [fromNewYear] });
         renderWithProviders(<BudgetModal {...defaultProps} />);
         choosePeriod('every');
-        fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-01' } });
         fireEvent.change(screen.getByLabelText('Every how many'), { target: { value: '2' } });
         fireEvent.change(screen.getByLabelText('Weeks or months'), { target: { value: 'month' } });
         expect(screen.getByTestId('budget-choice')).toHaveTextContent(
@@ -587,9 +606,9 @@ describe('BudgetModal', () => {
       });
 
       it('six weeks reads as six weeks', () => {
+        __setAppContextValue({ budgets: [fromNewYear] });
         renderWithProviders(<BudgetModal {...defaultProps} />);
         choosePeriod('every');
-        fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2027-01-01' } });
         fireEvent.change(screen.getByLabelText('Every how many'), { target: { value: '6' } });
         fireEvent.change(screen.getByLabelText('Weeks or months'), { target: { value: 'week' } });
         expect(screen.getByTestId('budget-choice')).toHaveTextContent(

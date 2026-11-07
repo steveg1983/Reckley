@@ -121,7 +121,8 @@ import {
   type SpendWindowKind,
 } from './categorySpendSummary';
 import { getDateLocale } from './dateFormatter';
-import { resolveBudgetAnchor } from './budgetPeriods';
+import { toDateMs } from './dateBoundary';
+import { normaliseBudgetPeriod, resolveBudgetAnchor } from './budgetPeriods';
 import type { Budget, BudgetPaceShape, Category, Transaction, TransactionSplit } from '../types';
 import { compareNames } from './localeFormat';
 
@@ -292,6 +293,85 @@ export interface ExistingBudget {
    * start would move.
    */
   anchor: string | null;
+  /** The day it stops, or null for none — what "until" compares against. */
+  endDate: string | null;
+}
+
+/**
+ * ── ONE FROM DATE AND ONE TO DATE (owner, 7 Nov 2026 evening) ──────────────
+ *
+ * "The user should have the option to change the full budget from x date to
+ * x date, but not individual categories." A start on every card let one
+ * budget drift to a different year from the rest — Bank Charges from
+ * 1 December among a set from 1 November — and the totals then added a year
+ * from December to a year from November. So the dates belong to the SET: the
+ * wizard's "Run these budgets from" (and, since this ruling, "until") is the
+ * one place they are chosen, and it moves every repeating budget, never
+ * offering to; the single editor shows the set's dates and writes them on a
+ * save, so a drifted row is healed by the next edit; a new budget inherits
+ * them. A ONE-OFF keeps its own two days — a holiday is not the budget
+ * year — and a weekly budget has no start to share, only the end. The
+ * 5 Nov ruling about a payday on the 15th still holds: the whole set runs
+ * from the 15th.
+ */
+export interface BudgetSetDates {
+  /** ISO day every repeating budget runs from. */
+  startDate: string;
+  /** ISO day they all stop, or null for none. */
+  endDate: string | null;
+}
+
+/**
+ * The set's dates, read off the budgets themselves: the start most of the
+ * active repeating budgets run from (a legacy row keeping the calendar has
+ * no say), the end most of them have (none counts as a vote for none), the
+ * most recently edited breaking a tie. A login with no such budget runs from
+ * the 1st of this month with no end — the 5 Nov default.
+ */
+export function budgetSetDates(budgets: readonly Budget[], now: Date): BudgetSetDates {
+  const recentFirst = [...budgets]
+    .filter(budget => budget.isActive !== false)
+    .filter(budget => {
+      const period = normaliseBudgetPeriod(budget.period);
+      return period !== 'custom';
+    })
+    .sort((a, b) => toDateMs(b.updatedAt) - toDateMs(a.updatedAt));
+
+  const vote = <T extends string | null>(values: T[]): T | undefined => {
+    const counts = new Map<T, number>();
+    for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+    let best: T | undefined;
+    let bestCount = 0;
+    for (const value of values) {
+      const count = counts.get(value) ?? 0;
+      if (count > bestCount) {
+        best = value;
+        bestCount = count;
+      }
+    }
+    return best;
+  };
+
+  const starts = recentFirst
+    .filter(budget => normaliseBudgetPeriod(budget.period) !== 'weekly')
+    .map(budget => resolveBudgetAnchor(budget))
+    .filter((anchor): anchor is string => anchor !== null);
+  const ends = recentFirst.map(budget => (typeof budget.endDate === 'string' && budget.endDate !== '' ? budget.endDate : null));
+
+  return {
+    startDate: vote(starts) ?? isoDayOf(new Date(now.getFullYear(), now.getMonth(), 1)),
+    endDate: vote(ends) ?? null,
+  };
+}
+
+/** "1 Nov 2026" — a set date, in the app's locale. */
+export function describeSetDay(iso: string): string {
+  const [year, month1, day] = iso.split('-').map(Number);
+  return new Date(year, month1 - 1, day).toLocaleDateString(getDateLocale(), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 /** One line of the grid: a category, what it cost, and what is budgeted on it. */
@@ -353,6 +433,7 @@ export function indexExistingBudgets(budgets: Budget[]): Map<string, ExistingBud
       period: wizardPeriodOf(budget.period),
       storedPeriod: budget.period,
       anchor: resolveBudgetAnchor(budget),
+      endDate: typeof budget.endDate === 'string' && budget.endDate !== '' ? budget.endDate : null,
     });
   }
   return byCategory;
@@ -654,6 +735,8 @@ export interface BudgetUpsert {
   monthly: DecimalInstance;
   /** The day the budget's cycles are counted from — the chosen "run from". Absent only while none is chosen. */
   startDate?: string;
+  /** The day it stops — the chosen "until", null for none. Present whenever `startDate` is. */
+  endDate?: string | null;
   /**
    * 'once' for a NEW budget on a category the window shows paid in one go —
    * the wizard's proposal (owner, 7 Nov 2026). Absent for an edit: a stored
@@ -670,11 +753,11 @@ export interface BudgetRemoval {
 }
 
 /**
- * A stored budget the save is NOT otherwise touching, whose cycles run from a
- * different day than the one chosen. Moving it is a separate, explicit act —
- * step 3 offers it with a count and the days it would move from, and the
- * wizard writes these only when that offer is taken. Nothing inherits a start
- * silently.
+ * A stored budget the save is NOT otherwise touching, whose dates differ from
+ * the set's chosen ones. It IS moved — the dates belong to the set (the
+ * ruling in the header above `budgetSetDates`) — and step 3 says so with the
+ * count and the days they run from today, so the move is visible. Until
+ * 7 Nov this was an offer; a set with one drifted card was the result.
  */
 export interface BudgetRedate {
   budgetId: string;
@@ -695,10 +778,12 @@ export interface BudgetWritePlan {
   upserts: BudgetUpsert[];
   removals: BudgetRemoval[];
   rejections: BudgetRejection[];
-  /** Budgets the save does not touch that a chosen start would move — offered, never assumed. */
-  redatable: BudgetRedate[];
+  /** Budgets the save does not otherwise touch, moved to the set's dates — said, never silent. */
+  redated: BudgetRedate[];
   /** The chosen "run from", carried so the confirmation and the write name one day. */
   startDate: string | null;
+  /** The chosen "until", null for none. */
+  endDate: string | null;
   /** How many categories carry a budget once this plan is applied. */
   budgetedCount: number;
   /** The per-month total of every budget that will exist afterwards. */
@@ -728,23 +813,24 @@ export interface BudgetWritePlan {
  * it will still exist afterwards and pretending otherwise would understate
  * what the user is committing to.
  *
- * `startDate` — the chosen "run from" — goes on every row the save writes.
- * A row the save would NOT otherwise write (untouched, or re-typed to the
- * same money) whose cycles run from a different day is listed in `redatable`
- * instead: moving it is offered in step 3, and the wizard writes it only when
- * the offer is taken.
+ * `startDate` and `endDate` — the chosen "run from" and "until" — go on every
+ * row the save writes. A row the save would NOT otherwise write (untouched,
+ * or re-typed to the same money) whose dates differ is listed in `redated`
+ * and moved too: the dates belong to the set. A one-off keeps its own days;
+ * a weekly budget has no start to move, only an end.
  */
 export function planBudgetWrites(
   rows: WizardRow[],
   entries: WizardEntries,
   mode: BudgetMode,
-  options: { startDate?: string | null } = {}
+  options: { startDate?: string | null; endDate?: string | null } = {}
 ): BudgetWritePlan {
   const startDate = options.startDate ?? null;
+  const endDate = options.endDate ?? null;
   const upserts: BudgetUpsert[] = [];
   const removals: BudgetRemoval[] = [];
   const rejections: BudgetRejection[] = [];
-  const redatable: BudgetRedate[] = [];
+  const redated: BudgetRedate[] = [];
   let monthlyTotal = ZERO;
   let spentTotal = ZERO;
   let budgetedCount = 0;
@@ -756,10 +842,14 @@ export function planBudgetWrites(
     spentTotal = spentTotal.plus(row.annual);
   };
 
-  /** A budget left as it is, whose start the chosen day would move. */
-  const offerRedate = (row: WizardRow, existing: ExistingBudget): void => {
-    if (startDate === null || existing.anchor === startDate) return;
-    redatable.push({
+  /** A budget left as it is, moved to the set's dates when its own differ. */
+  const redate = (row: WizardRow, existing: ExistingBudget): void => {
+    if (startDate === null) return;
+    const stored = normaliseBudgetPeriod(existing.storedPeriod);
+    if (stored === 'custom') return;
+    const startDiffers = stored !== 'weekly' && existing.anchor !== startDate;
+    if (!startDiffers && existing.endDate === endDate) return;
+    redated.push({
       budgetId: existing.id,
       categoryId: row.category.id,
       categoryName: row.category.name,
@@ -780,11 +870,13 @@ export function planBudgetWrites(
     const raw = entry === undefined ? undefined : entryInMode(entry, mode);
     const existing = row.existing;
 
-    // A stored period the wizard cannot express: untouchable, but real, and
-    // its money still counts towards what the user is agreeing to.
+    // A stored period the wizard cannot express: its money is untouchable,
+    // but real, and still counts towards what the user is agreeing to — and
+    // its DATES are the set's, like every other repeating budget's.
     if (existing !== null && existing.period === null) {
       budgetedCount += 1;
       spentTotal = spentTotal.plus(row.annual);
+      redate(row, existing);
       continue;
     }
 
@@ -794,7 +886,7 @@ export function planBudgetWrites(
     if (raw === undefined) {
       if (existing !== null && existing.period !== null) {
         willBudget(row, monthlyEquivalent(existing.amount, existing.period));
-        offerRedate(row, existing);
+        redate(row, existing);
       }
       continue;
     }
@@ -831,7 +923,7 @@ export function planBudgetWrites(
     if (existing !== null && existing.period !== null) {
       const before = monthlyEquivalent(existing.amount, existing.period);
       if (before.minus(monthly).abs().lessThan(SAME_MONEY)) {
-        offerRedate(row, existing);
+        redate(row, existing);
         continue;
       }
     }
@@ -843,7 +935,7 @@ export function planBudgetWrites(
       amount,
       period: mode,
       monthly,
-      ...(startDate !== null ? { startDate } : {}),
+      ...(startDate !== null ? { startDate, endDate } : {}),
       // Proposed from the evidence, for a budget that does not exist yet.
       ...(existing === null && row.paidOnce !== null ? { paceShape: 'once' as const } : {}),
     });
@@ -854,8 +946,9 @@ export function planBudgetWrites(
     upserts,
     removals,
     rejections,
-    redatable,
+    redated,
     startDate,
+    endDate,
     budgetedCount,
     monthlyTotal: monthlyTotal.toDecimalPlaces(2),
     annualTotal,

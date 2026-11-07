@@ -348,6 +348,16 @@ not. Seven suggestions were drawn from it; the owner answered each the same day.
    budget's own page. **Agreed — built as PR G (§8), on the card itself: a budget has no
    page of its own, and a fold under the card is where the question is asked.**
 
+### The evening's ruling (7 Nov 2026): one from date and one to date
+
+Testing the editor after PR H, the owner: "The budget runs from Nov 26 to end of Oct 27.
+When editing one budget I can change the date of that one budget. I don't think we should be
+able to do that, it could get messy. The user should have the option to change the full budget
+from x date to x date, but not individual categories." Asked whether "Ends" should also come
+off repeating budgets, leaving only the one‑off with dates: **"yes, one from and one to date."**
+So the dates belong to the SET — built as PR J (§8). The 5 Nov payday ruling still holds: the
+whole set runs from the 15th.
+
 **Order after the custom guide window (§6, 4):** 5, then 4, then 3, then 7 — each
 shippable alone; 5 first because the model already does the work and it is the
 smallest ask, 3 before 7 because the history should show the carries once they exist.
@@ -532,3 +542,18 @@ holds it to the two things it can: not itself, and only a mode that carries a su
 restore's remapper rewrites it with the rest (`ENTITY_REFERENCES.budgets`). **Cloud**:
 migration `20261107223000_budgets_rollover_to` (column + CHECK), run by the owner BEFORE
 the deploy. **Local**: schema version 4, the column left NULL by the introspecting copy.
+
+**PR J (one from date and one to date, 7 Nov, evening)** — the owner's ruling above, after
+testing: a start on every card let one budget drift to a different year from the rest, and the
+totals then added a year from December to a year from November. Now **the dates belong to the
+set.** `budgetSetDates` reads them off the budgets themselves (the start most of the active
+repeating budgets run from, the end most have, the most recently edited breaking a tie; a login
+with none runs from the 1st of this month with no end). The wizard's **Run these budgets from**
+gains **until**, optional, and the pair moves EVERY repeating budget — including the ones the save
+is not otherwise touching, said in step 3 with a count and where they run from today, never
+offered (the 5 Nov "offered, never assumed" is reversed by this ruling); a cleared until clears
+an end they had. The single editor loses **Starts** and **Ends** for a repeating budget: it shows
+the set's dates in a sentence that points at Set up budgets, and writes them on every save, so a
+drifted card is healed by its next edit; a new budget inherits them. The two exceptions: a
+**one‑off** keeps its own two days (a holiday is not the budget year), and a **weekly** budget
+shares the end alone, having no start. No schema change on either engine.
