@@ -6,8 +6,17 @@ import fs from 'fs'
 import tailwindcss from 'tailwindcss'
 import autoprefixer from 'autoprefixer'
 
+// WHICH BUILD THIS IS, for the About card on /settings (7 Nov 2026). The web
+// has no version number, because it deploys on every merge, so it is the
+// commit Vercel built, short form. Unset outside Vercel, and then the card
+// says nothing rather than a number nobody chose. See src/lib/appRelease.ts.
+const deployedCommit = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7)
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __RECKLEY_RELEASE__: JSON.stringify(deployedCommit ? { kind: 'build', value: deployedCommit } : null),
+  },
   css: {
     postcss: {
       plugins: [

@@ -4,6 +4,7 @@ import PageTip from '../components/PageTip';
 // about the hosted SERVICE rather than about the ledger, and a device edition
 // has neither. See src/editions/service.ts.
 import { SubscriptionStatus, SignOutPanel } from '@service';
+import { releaseLine } from '../lib/appRelease';
 
 /**
  * Settings — the calmest page in the app, which it was not.
@@ -36,6 +37,7 @@ export default function Settings() {
   // settings that DO work — budget alerts and large-transaction warnings —
   // live on App Settings, and the accessibility features themselves are
   // always on rather than optional.
+  const release = releaseLine();
   return (
     <PageWrapper title="Settings">
 
@@ -73,7 +75,12 @@ export default function Settings() {
         <h2 className="text-page font-semibold text-gray-900 dark:text-white">
           Reckley
         </h2>
-        <p className="mt-1 text-body text-gray-500 dark:text-gray-400">Version 1.0</p>
+        {/* What the build was stamped with: the desktop's own version, the
+            web's deployed commit, or no line at all. It said "Version 1.0" in
+            both until 7 Nov 2026, which was neither — see lib/appRelease.ts. */}
+        {release && (
+          <p className="mt-1 text-body text-gray-500 dark:text-gray-400">{release}</p>
+        )}
 
         {/* House voice, per the Reports gallery ("Where you stand, and how you
             got there"), which is the best writing in the product. What was

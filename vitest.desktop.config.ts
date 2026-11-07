@@ -45,9 +45,14 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
+import desktopRenderer from './apps/desktop/vite.config';
 
 export default defineConfig({
   plugins: [react()],
+  // THE SHIPPED BUILD'S STAMP, borrowed rather than restated (7 Nov 2026): the
+  // Settings case asserts the window says the version `tauri.conf.json` names,
+  // and only the renderer's own `define` can make that a claim about the build.
+  define: desktopRenderer.define,
   resolve: {
     alias: {
       '@data': path.resolve(process.cwd(), './src/services/local/deviceDataPort'),
