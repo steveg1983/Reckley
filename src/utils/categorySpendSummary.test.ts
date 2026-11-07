@@ -9,12 +9,15 @@
 import { describe, it, expect } from 'vitest';
 import {
   MAX_CUSTOM_MONTHS,
+  PAID_ONCE_MIN_MONTHS,
   clampCustomWindow,
   groupSubtotals,
+  paidOnceIn,
   spendWindow,
   summariseCategorySpend,
   twinOf,
 } from './categorySpendSummary';
+import { toDecimal } from './decimal';
 import type { Category, Transaction, TransactionSplit } from '../types';
 
 const CATEGORIES: Category[] = [
@@ -218,6 +221,50 @@ describe('summariseCategorySpend — refunds, splits and unfiled money', () => {
     expect(s.byCategory.get('det-shop')?.annual.toNumber()).toBe(100);
     expect(s.unfiled.toNumber()).toBe(75);   // the credit is not unfiled SPENDING
     expect(s.unfiledRows).toBe(1);
+  });
+});
+
+/**
+ * PAID IN ONE GO (owner, 7 Nov 2026): the window's own evidence that a
+ * category is a lump — most of its spending in one month — which the wizard
+ * proposes as the budget's pace shape. A rule, not a flag.
+ */
+describe('summariseCategorySpend — a category paid in one go', () => {
+  it('names the month that held nearly all of it', () => {
+    const summary = summariseCategorySpend(
+      [
+        txn({ id: 'premium', date: '2026-03-15', amount: -480, category: 'det-energy' }),
+        txn({ id: 'top-up', date: '2026-05-02', amount: -20, category: 'det-energy' }),
+        txn({ id: 'weekly', date: '2026-03-16', amount: -50 }),
+      ],
+      [], CATEGORIES, { now: NOW }
+    );
+    expect(summary.byCategory.get('det-energy')?.paidOnce).toBe('2026-03');
+    expect(summary.byCategory.get('det-shop')?.paidOnce).toBe('2026-03');
+  });
+
+  it('says nothing for spending spread through the year', () => {
+    const spread = Array.from({ length: 12 }, (_, index) =>
+      txn({ id: `m-${index}`, date: `${index < 5 ? 2025 : 2026}-${String(((index + 7) % 12) + 1).padStart(2, '0')}-10`, amount: -50 })
+    );
+    expect(summariseCategorySpend(spread, [], CATEGORIES, { now: NOW }).byCategory.get('det-shop')?.paidOnce).toBeNull();
+  });
+
+  it('needs a window long enough to tell a lump from a short window', () => {
+    const custom = { fromMonth: '2026-05', toMonth: '2026-07' };
+    const once = [txn({ id: 'bill', date: '2026-06-10', amount: -300 })];
+    expect(summariseCategorySpend(once, [], CATEGORIES, { now: NOW, kind: 'custom', custom }).byCategory.get('det-shop')?.paidOnce).toBeNull();
+    const longer = { fromMonth: '2026-02', toMonth: '2026-07' };
+    expect(summariseCategorySpend(once, [], CATEGORIES, { now: NOW, kind: 'custom', custom: longer }).byCategory.get('det-shop')?.paidOnce).toBe('2026-06');
+  });
+
+  it('the rule itself: four fifths in one month, exactly, is enough; less is not', () => {
+    const month = (pairs: Array<[string, number]>): Map<string, ReturnType<typeof toDecimal>> =>
+      new Map(pairs.map(([key, amount]) => [key, toDecimal(amount)]));
+    expect(paidOnceIn(month([['2026-03', 80], ['2026-04', 20]]), toDecimal(100), 12)).toBe('2026-03');
+    expect(paidOnceIn(month([['2026-03', 79], ['2026-04', 21]]), toDecimal(100), 12)).toBeNull();
+    expect(paidOnceIn(month([['2026-03', 100]]), toDecimal(100), PAID_ONCE_MIN_MONTHS - 1)).toBeNull();
+    expect(paidOnceIn(month([]), toDecimal(0), 12)).toBeNull();
   });
 });
 

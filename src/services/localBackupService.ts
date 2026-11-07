@@ -1,7 +1,7 @@
 import { storageAdapter, STORAGE_KEYS } from './storageAdapter';
 import { browserAbsence } from './backup/browserCoverage';
 import { toDecimal } from '../utils/decimal';
-import { normaliseRolloverMode } from '../utils/budgetPeriods';
+import { normalisePaceShape, normaliseRolloverMode } from '../utils/budgetPeriods';
 import { preferences, type PreferencesDocument } from './preferencesService';
 import {
   BACKUP_ENTITIES,
@@ -439,7 +439,7 @@ function splitFromRow(row: BackupRow): Record<string, unknown> {
 
 const BUDGET_CARRIED = new Set<string>([
   'id', 'categoryId', 'amount', 'period', 'isActive', 'createdAt', 'updatedAt',
-  'name', 'spent', 'startDate', 'endDate', 'rolloverMode',
+  'name', 'spent', 'startDate', 'endDate', 'rolloverMode', 'paceShape',
   'alertThreshold', 'notes',
 ]);
 
@@ -459,6 +459,7 @@ function budgetToRow(app: Record<string, unknown>): BackupRow {
   put(row, 'start_date', dateColumn(app.startDate));
   put(row, 'end_date', dateColumn(app.endDate));
   put(row, 'rollover_mode', text(app.rolloverMode));
+  put(row, 'pace_shape', text(app.paceShape));
   put(row, 'alert_threshold', numeric(app.alertThreshold));
   put(row, 'notes', text(app.notes));
   put(row, 'created_at', timestampColumn(app.createdAt));
@@ -482,6 +483,7 @@ function budgetFromRow(row: BackupRow): Record<string, unknown> {
     // instead: both are dropped here, as the cloud's restore drops a key
     // that is no longer a column, and the budget reads as starting afresh.
     rolloverMode: normaliseRolloverMode(row.rollover_mode),
+    paceShape: normalisePaceShape(row.pace_shape),
     alertThreshold: numeric(row.alert_threshold),
     notes: text(row.notes),
     createdAt: text(row.created_at),

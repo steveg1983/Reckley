@@ -114,7 +114,7 @@
  */
 
 import { toDateMs } from './dateBoundary.js';
-import type { BudgetRepeatUnit, BudgetRolloverMode } from '../types/index.js';
+import type { BudgetPaceShape, BudgetRepeatUnit, BudgetRolloverMode } from '../types/index.js';
 
 /** Every period a budget can be measured over. */
 export type BudgetPeriodName = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom' | 'every';
@@ -585,6 +585,11 @@ export function getBudgetPeriodWindow(
 export function normaliseRolloverMode(value: unknown): BudgetRolloverMode {
   if (value === 'surplus' || value === 'overspend' || value === 'both') return value;
   return 'none';
+}
+
+/** A stored pace shape as one of the two, 'even' for anything else (the column's CHECK admits only the two). */
+export function normalisePaceShape(value: unknown): BudgetPaceShape {
+  return value === 'once' ? 'once' : 'even';
 }
 
 /**

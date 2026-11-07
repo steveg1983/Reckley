@@ -93,7 +93,7 @@ import type {
 } from '../../../types';
 import type { AccountBalanceSnapshot } from '../../port/dataPort';
 import { field, instant, isRecord, moneyOr, oneOf, strings, text, textOr, whole } from './values';
-import { normaliseRolloverMode } from '../../../utils/budgetPeriods';
+import { normalisePaceShape, normaliseRolloverMode } from '../../../utils/budgetPeriods';
 
 /**
  * A listed account.
@@ -300,6 +300,7 @@ export const toBudget = (row: Record<string, unknown>): Budget => {
     startDate: text(value.startDate),
     endDate: text(value.endDate),
     rolloverMode: normaliseRolloverMode(value.rolloverMode),
+    paceShape: normalisePaceShape(value.paceShape),
     alertThreshold: typeof value.alertThreshold === 'number' ? value.alertThreshold : undefined,
     notes: text(value.notes)
   };

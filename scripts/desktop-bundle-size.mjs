@@ -353,15 +353,27 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3898 / 1201
  * (+39.1 KiB raw, +1.01%; +12.2 KiB gzip, +1.03%).
+ *
+ * ── RE-RECORDED 2026-11-07, A FOURTH TIME: "PAID IN ONE GO" ────────────────
+ *
+ *     + Rollover modes        3858.9 KiB raw   1188.8 KiB gzip
+ *     + Paid in one go        3861.0 KiB raw   1189.3 KiB gzip   +2.1 / +0.5
+ *
+ * Intended: the editor's "Paid" select, the wizard's "paid once, in …" word
+ * on a row, and the card's "not yet paid" / "paid" in place of a pace a lump
+ * cannot have (owner, 7 Nov 2026). Desktop surfaces all.
+ *
+ * Budgets reset to the standing rule, ~1% above measured: 3900 / 1201
+ * (+39.0 KiB raw, +1.01%; +11.7 KiB gzip, +0.98% — the gzip budget holds).
  */
-const BASELINE_TOTAL_RAW_KIB = 3858.9;
-const BASELINE_TOTAL_GZIP_KIB = 1188.8;
+const BASELINE_TOTAL_RAW_KIB = 3861.0;
+const BASELINE_TOTAL_GZIP_KIB = 1189.3;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that
 // slack deliberately rather than banking it, so this is tight ON PURPOSE and
 // intended growth is expected to raise it in the commit that causes it.
-const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3898);
+const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3900);
 const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1201);
 
 const isReport = process.argv.includes('--report');

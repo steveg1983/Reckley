@@ -47,7 +47,7 @@ export default {
 
   state: [
     budgetsOwnedBy(USER, '1'),
-    budgetShape(NEW, 'Car wash:30.00:every:c0000000-0000-0000-0000-000000000003:2026-11-01:-:0.00:none:80.00:active:-'),
+    budgetShape(NEW, 'Car wash:30.00:every:c0000000-0000-0000-0000-000000000003:2026-11-01:-:0.00:none:even:80.00:active:-'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

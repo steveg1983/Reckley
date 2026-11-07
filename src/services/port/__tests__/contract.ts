@@ -2177,6 +2177,23 @@ export function runDataPortContract(name: string, harness: DataPortContractHarne
         expect(unsaid.rolloverMode ?? 'none').toBe('none');
       });
 
+      rule(['createBudget', 'updateBudget', 'listBudgets'], 'keeps how a budget’s money lands, as the word it is', async () => {
+        // PACE SHAPE (7 Nov 2026): 'even' or 'once' on the row; 'even' for a
+        // budget that never said — the column's default on one engine, the
+        // absence of the key on the browser's store.
+        const { port } = await harness.create({ accounts: threeAccounts() });
+
+        const lump = await port.createBudget(aNewBudget('cat-everyday', 480, { period: 'yearly', paceShape: 'once' }));
+        expect(lump.paceShape).toBe('once');
+        expect((await port.listBudgets())[0].paceShape).toBe('once');
+
+        const spread = await port.updateBudget(lump.id, { paceShape: 'even' });
+        expect(spread.paceShape).toBe('even');
+
+        const unsaid = await port.createBudget(aNewBudget('cat-bills', 20));
+        expect(unsaid.paceShape ?? 'even').toBe('even');
+      });
+
       rule(['updateBudget'], 'refuses to change a budget that is not there, and says which', async () => {
         // Not created-on-the-fly: an id that names nothing is a bug upstream
         // (a stale page, a double submit after a delete), and inventing a

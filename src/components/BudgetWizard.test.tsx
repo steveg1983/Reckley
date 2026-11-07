@@ -856,6 +856,31 @@ describe('what it writes', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save budgets' }));
   };
 
+  it('writes a budget on a category paid in one go with that shape, and says so on the row (7 Nov 2026)', async () => {
+    // One premium in the last complete month and nothing else: the window's
+    // evidence that Insurance is a lump. The grid says so, and the NEW budget
+    // is written paid in one go; the spread category beside it is not.
+    const now = new Date();
+    const anchor = new Date(now.getFullYear(), now.getMonth(), 0);
+    renderWizard([], {
+      categories: [{ id: 'det-insurance', name: 'Insurance', type: 'expense', level: 'detail', parentId: 'grp-food' }],
+      transactions: [{
+        id: 'premium', accountId: 'acc-1', description: 'Synthetic premium', amount: -480,
+        type: 'expense', category: 'det-insurance', date: new Date(anchor.getFullYear(), anchor.getMonth(), 10),
+      }],
+    });
+    chooseMonthly();
+    expect(screen.getByTestId('paid-once')).toHaveTextContent(/^paid once, in \w+ \d{4}$/);
+    fireEvent.change(boxFor('Insurance'), { target: { value: '40' } });
+    fireEvent.change(boxFor('Food Shopping'), { target: { value: '90' } });
+    reviewAndSave();
+
+    await waitFor(() => expect(addBudget).toHaveBeenCalledTimes(2));
+    expect(addBudget).toHaveBeenCalledWith(expect.objectContaining({ categoryId: 'det-insurance', paceShape: 'once' }));
+    const shop = addBudget.mock.calls.map(call => call[0] as { categoryId: string; paceShape?: string }).find(b => b.categoryId === 'det-shop');
+    expect(shop?.paceShape).toBeUndefined();
+  });
+
   it('creates a budget on the category, in the chosen rhythm', async () => {
     renderWizard();
     chooseMonthly();

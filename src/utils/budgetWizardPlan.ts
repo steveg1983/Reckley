@@ -122,7 +122,7 @@ import {
 } from './categorySpendSummary';
 import { getDateLocale } from './dateFormatter';
 import { resolveBudgetAnchor } from './budgetPeriods';
-import type { Budget, Category, Transaction, TransactionSplit } from '../types';
+import type { Budget, BudgetPaceShape, Category, Transaction, TransactionSplit } from '../types';
 import { compareNames } from './localeFormat';
 
 /** The wizard reads its window types from here, as it reads everything else. */
@@ -309,6 +309,13 @@ export interface WizardRow {
   monthly: DecimalInstance;
   /** How many rows made the figure up: evidence it is not one freak charge. */
   rows: number;
+  /**
+   * The month (YYYY-MM) that held nearly all of the window's spending, when
+   * one did — the evidence this category is PAID IN ONE GO (owner, 7 Nov
+   * 2026). The grid says so, and a budget created from the row is written
+   * with that pace shape; the editor can change it. See categorySpendSummary.
+   */
+  paidOnce: string | null;
   existing: ExistingBudget | null;
   /** True when this row takes typing. False for a parent shown only as a subtotal. */
   editable: boolean;
@@ -377,6 +384,13 @@ export function describeAnchor(existing: Pick<ExistingBudget, 'anchor' | 'period
 // that starts on the 29th, and every product in the field defaults to a
 // period boundary. Someone paid on the 15th chooses the 15th under "Another
 // date", and their months then run 15th to 14th.
+
+/** "paid once, in March 2026" — the grid's word on a row the window shows paid in one go. */
+export function describePaidOnce(month: string): string {
+  const named = new Intl.DateTimeFormat(getDateLocale(), { month: 'long', year: 'numeric' })
+    .format(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1));
+  return `paid once, in ${named}`;
+}
 
 export type RunFromKind = 'this-month' | 'next-month' | 'next-calendar-year' | 'next-tax-year' | 'custom';
 
@@ -471,6 +485,7 @@ export function buildWizardRows(
         annual: spend?.annual ?? ZERO,
         monthly: spend?.monthly ?? ZERO,
         rows: spend?.rows ?? 0,
+        paidOnce: spend?.paidOnce ?? null,
         existing: existingByCategory.get(category.id) ?? null,
         editable: true,
       };
@@ -639,6 +654,13 @@ export interface BudgetUpsert {
   monthly: DecimalInstance;
   /** The day the budget's cycles are counted from — the chosen "run from". Absent only while none is chosen. */
   startDate?: string;
+  /**
+   * 'once' for a NEW budget on a category the window shows paid in one go —
+   * the wizard's proposal (owner, 7 Nov 2026). Absent for an edit: a stored
+   * budget's shape is the user's, set in the editor, and the wizard does not
+   * second-guess it.
+   */
+  paceShape?: BudgetPaceShape;
 }
 
 export interface BudgetRemoval {
@@ -822,6 +844,8 @@ export function planBudgetWrites(
       period: mode,
       monthly,
       ...(startDate !== null ? { startDate } : {}),
+      // Proposed from the evidence, for a budget that does not exist yet.
+      ...(existing === null && row.paidOnce !== null ? { paceShape: 'once' as const } : {}),
     });
   }
 

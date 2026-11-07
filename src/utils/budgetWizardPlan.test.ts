@@ -17,6 +17,7 @@ import {
   budgetHistoryWindow,
   budgetPeriodSuffix,
   describeAnchor,
+  describePaidOnce,
   runFromDate,
   runFromOptions,
   buildWizardRows,
@@ -746,6 +747,44 @@ describe('runFromOptions / runFromDate — the choices and the day each means', 
     expect(runFromDate('custom', new Date(2026, 10, 5), '2027-07-15')).toBe('2027-07-15');
     expect(runFromDate('custom', new Date(2026, 10, 5), '')).toBeNull();
     expect(runFromDate('custom', new Date(2026, 10, 5), '15/07/2027')).toBeNull();
+  });
+});
+
+/**
+ * PAID IN ONE GO (owner, 7 Nov 2026): a row the window shows as a lump says
+ * so, and a NEW budget made from it is written with the shape; a stored
+ * budget's shape is the user's and is left alone.
+ */
+describe('paid in one go — proposed from the evidence', () => {
+  const anchor = lastCompleteMonth();
+  const lump: Transaction = {
+    id: 'lump', accountId: 'acc-1', description: 'Synthetic premium', amount: -600,
+    type: 'expense', category: 'det-quiet', date: new Date(anchor.getFullYear(), anchor.getMonth(), 10),
+  };
+  const month = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`;
+  const rowsWithLump = (budgets: Budget[] = []): WizardRow[] =>
+    buildWizardRows(summariseForWizard([...TRANSACTIONS, lump], [], CATEGORIES, new Date()), CATEGORIES, budgets);
+
+  it('the row names the month, and a spread category names none', () => {
+    const rows = rowsWithLump();
+    expect(rowFor(rows, 'det-quiet').paidOnce).toBe(month);
+    expect(rowFor(rows, 'det-shop').paidOnce).toBeNull();
+    expect(describePaidOnce('2026-03')).toBe('paid once, in March 2026');
+  });
+
+  it('a new budget on the row is written in one go; a spread one is not', () => {
+    const plan = planBudgetWrites(rowsWithLump(), typedIn('monthly', { 'det-quiet': '50', 'det-shop': '95' }), 'monthly');
+    const byCategory = new Map(plan.upserts.map(u => [u.categoryId, u]));
+    expect(byCategory.get('det-quiet')?.paceShape).toBe('once');
+    expect(byCategory.get('det-shop')?.paceShape).toBeUndefined();
+  });
+
+  it('a stored budget keeps its own shape — the wizard does not second-guess it', () => {
+    const rows = rowsWithLump([budget({ id: 'b-1', categoryId: 'det-quiet', amount: 20, paceShape: 'even' })]);
+    const plan = planBudgetWrites(rows, typedIn('monthly', { 'det-quiet': '50' }), 'monthly');
+    expect(plan.upserts).toHaveLength(1);
+    expect(plan.upserts[0].budgetId).toBe('b-1');
+    expect(plan.upserts[0].paceShape).toBeUndefined();
   });
 });
 

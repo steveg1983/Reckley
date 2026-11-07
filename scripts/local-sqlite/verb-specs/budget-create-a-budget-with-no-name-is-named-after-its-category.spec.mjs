@@ -37,7 +37,7 @@ export default {
   result: { id: NEW, name: WEEKLY_SHOP, amount: '50.00' },
 
   state: [
-    budgetShape(NEW, 'c0000000-0000-0000-0000-000000000003:50.00:weekly:c0000000-0000-0000-0000-000000000003:2024-02-01:-:0.00:none:80.00:active:-'),
+    budgetShape(NEW, 'c0000000-0000-0000-0000-000000000003:50.00:weekly:c0000000-0000-0000-0000-000000000003:2024-02-01:-:0.00:none:even:80.00:active:-'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

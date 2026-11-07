@@ -51,6 +51,7 @@ export default {
     spent: '0.00',
     end_date: null,
     rollover_mode: 'none',
+    pace_shape: 'even',
     alert_threshold: '80.00',
     is_active: true,
     category_id: null,
@@ -58,7 +59,7 @@ export default {
 
   state: [
     budgetsOwnedBy(USER, '1'),
-    budgetShape(NEW, 'Food:70.10:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:none:80.00:active:Watch the takeaways'),
+    budgetShape(NEW, 'Food:70.10:monthly:c0000000-0000-0000-0000-000000000003:2024-01-01:-:0.00:none:even:80.00:active:Watch the takeaways'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

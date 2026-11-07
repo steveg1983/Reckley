@@ -313,7 +313,8 @@ not. Seven suggestions were drawn from it; the owner answered each the same day.
    basis for the forecast"*: the budgets are year one, the forecast owns everything
    after. Nothing here changes `docs/forecast-direction.md`; that file carries the
    same ruling from its side.
-2. **Lumpy categories and the pace — plan proposed, awaiting the owner.** The owner
+2. **Lumpy categories and the pace — approved 7 Nov ("give the user the option"), built as
+   PR H (§8).** The owner
    asked how PocketSmith labels an expense a "bill": a flag on each transaction, or a
    tidy‑up screen like our payee clean‑up? Neither, and we propose neither. In
    PocketSmith a "bill" is a *repeating* item — its forecast calendar is built from
@@ -478,3 +479,21 @@ than by a per‑version list, so a file is brought from whatever it is to the cu
 in one rebuild, and a current file merely stamped low (which the desktop shell's own test
 makes) loses nothing. Proven against the real version‑0 and version‑1 DDL. The renderer
 went DOWN 13.7 KiB and the ratchet followed it. Owed from this item: where a surplus goes.
+
+**PR H (paid in one go, 7 Nov)** — the second round's 2, by the owner's word the same
+evening: a per‑budget option. One word on the row, `pace_shape`: **even** (spread across the
+period, the default) or **once**. **The evidence is the window's own**: `paidOnceIn` in
+`categorySpendSummary` names the month that held at least four fifths of a category's
+spending, over a window of at least six months (a shorter one would call every bill a
+lump); the wizard's grid says "paid once, in March 2026" on such a row and writes a NEW
+budget made from it as `once` — never an existing one, whose shape is the user's. The
+editor's **Paid** select (Spread across the period / In one go) is where it is changed, with
+a sentence saying what each means. **On the card** a `once` budget's pace line says "not yet
+paid" until the payment lands and "paid" after, in neutral ink, and never "£x under the
+pace" — eleven months of which on an insurance budget said nothing true. No transaction
+carries a flag; no screen exists to set one. **Cloud**: migration
+`20261107213000_budgets_pace_shape` (add column + CHECK, nothing dropped), run by the owner
+BEFORE the deploy; until it runs the app reads budgets fine and refuses a save of the
+shape. **Local**: schema version 3; the introspecting rebuild leaves the new column to its
+default. Owed from the PocketSmith round: "last time in March" on the not‑yet‑paid line —
+the past periods fold (#622) answers it for now.

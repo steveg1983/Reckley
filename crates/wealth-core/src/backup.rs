@@ -331,6 +331,8 @@ const BUDGETS: &[Column] = &[
             // before carries `rollover` and `rollover_amount` instead, and
             // both are unknown keys now — ignored, as the cloud ignores them.
             text("rollover_mode"),
+            // How the money lands over the period (7 Nov 2026).
+            text("pace_shape"),
             Column { key: "alert_threshold", column: "alert_threshold_bp", kind: Kind::Scaled(2) },
             flag("is_active"),
             text("notes"),

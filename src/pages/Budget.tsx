@@ -650,7 +650,14 @@ function BudgetView() {
                   nothing paces nothing, so it carries only the time gone. */}
               <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                 <span>{budget.pace.text}</span>
-                {budget.effectiveAmount.greaterThan(0) && (
+                {/* PAID IN ONE GO (owner, 7 Nov 2026): a lump has no pace
+                    to be behind — eleven months of "£x under the pace" on
+                    an insurance budget said nothing true. It is unpaid or
+                    paid, and neither needs colour; the figures above say
+                    whether the payment fitted the allowance. */}
+                {budget.paceShape === 'once' ? (
+                  <span data-testid="budget-lump">{budget.spent > 0 ? 'paid' : 'not yet paid'}</span>
+                ) : budget.effectiveAmount.greaterThan(0) && (
                   <span className={budget.paceDifference.greaterThan(0) ? 'text-red-600 dark:text-red-400' : ''}>
                     {budget.paceDifference.abs().lessThan(1)
                       ? 'on pace'

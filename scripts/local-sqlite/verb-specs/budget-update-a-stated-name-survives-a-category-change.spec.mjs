@@ -30,7 +30,7 @@ export default {
   result: { id: EXISTING_BUDGET, category: OUTGOINGS, name: '' },
 
   state: [
-    budgetShape(EXISTING_BUDGET, ':100.00:monthly:c0000000-0000-0000-0000-000000000002:2024-01-01:-:0.00:none:80.00:active:-'),
+    budgetShape(EXISTING_BUDGET, ':100.00:monthly:c0000000-0000-0000-0000-000000000002:2024-01-01:-:0.00:none:even:80.00:active:-'),
     balanceIdentityHolds('a0000000-0000-0000-0000-000000000001'),
   ],
 };

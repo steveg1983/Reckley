@@ -597,6 +597,45 @@ describe('Budget page — a budget that carries what the last period left', () =
 });
 
 /**
+ * PAID IN ONE GO (owner, 7 Nov 2026). A lump has no pace to be behind: the
+ * card says "not yet paid" until the payment lands and "paid" after, in
+ * neutral ink, and never "£x under the pace".
+ */
+describe('Budget page — a budget paid in one go', () => {
+  const iso = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  beforeEach(() => {
+    __setAppContextValue({
+      accounts: ACCOUNTS,
+      categories: CATEGORIES,
+      transactions: [txn({ id: 'premium', amount: -480, category: 'det-household' })],
+      transactionSplits: [],
+      budgets: [
+        budget({ id: 'bud-groceries', categoryId: 'det-groceries', amount: 600, period: 'yearly', paceShape: 'once', startDate: iso(new Date(now.getFullYear(), now.getMonth(), 1)), createdAt: now, updatedAt: now }),
+        budget({ id: 'bud-household', categoryId: 'det-household', amount: 500, period: 'yearly', paceShape: 'once', startDate: iso(new Date(now.getFullYear(), now.getMonth(), 1)), createdAt: now, updatedAt: now })
+      ]
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    __resetAppContextValue();
+  });
+
+  it('reads as not yet paid, then paid — never behind the pace', () => {
+    renderBudget();
+    const groceries = within(card('Groceries'));
+    expect(groceries.getByTestId('budget-lump')).toHaveTextContent('not yet paid');
+    expect(groceries.queryByText(/under the pace/)).not.toBeInTheDocument();
+    const household = within(card('Household'));
+    expect(household.getByTestId('budget-lump')).toHaveTextContent(/^paid$/);
+    expect(household.getByText('£480.00 of £500.00')).toBeInTheDocument();
+    expect(household.queryByText(/over the pace/)).not.toBeInTheDocument();
+  });
+});
+
+/**
  * THE WIZARD HAS AN ADDRESS (owner, 1 Sep 2026).
  *
  * "Set budgets from your real year" is the last step of the dashboard's history

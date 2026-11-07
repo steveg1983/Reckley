@@ -2657,6 +2657,8 @@ export function listedBudget(fields) {
     spent: '0.00',
     // What the end of each cycle does (20261107203000): a word, 'none' unless said.
     rollover_mode: 'none',
+    // How the money lands (20261107213000): 'even' unless said.
+    pace_shape: 'even',
     alert_threshold: '80.00',
     is_active: true,
     notes: null,
@@ -3505,7 +3507,7 @@ export const strangersGoal = {
 
 /**
  * One budget as one canonical string: `name:amount:period:category:start:end:
- * spent:rolloverMode:threshold:active:notes`.
+ * spent:rolloverMode:paceShape:threshold:active:notes`.
  *
  * Money and the threshold both render as two-place decimals from an INTEGER
  * column on one engine and a `numeric` on the other, which is the whole reason
@@ -3531,7 +3533,7 @@ export function budgetShape(budgetId, expect) {
                  || ':' || COALESCE(b.category, '-')
                  || ':' || COALESCE(${asText('b.start_date')}, '-')
                  || ':' || COALESCE(${asText('b.end_date')}, '-')
-                 || ':' || ${spent} || ':' || b.rollover_mode
+                 || ':' || ${spent} || ':' || b.rollover_mode || ':' || b.pace_shape
                  || ':' || ${threshold}
                  || ':' || ${flag('is_active', 'active', 'paused')}
                  || ':' || COALESCE(b.notes, '-')`;
