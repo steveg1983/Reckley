@@ -19,6 +19,24 @@ import { isNativeShell } from './nativeShell';
  * module's static imports are the Supabase client and a logger, both of
  * which every cloud page already has.
  *
+ * ── THE PLUGIN IS NEVER HANDED TO A PROMISE BARE ────────────────────────────
+ *
+ * A Capacitor plugin is a Proxy: ANY property read on it becomes a call to
+ * a native method of that name. A promise that resolves to such an object
+ * first asks it for `then`, to see whether it is a thenable — the proxy
+ * answers with a function, the promise calls it, iOS replies
+ * `"PushNotifications.then()" is not implemented on ios`, and because the
+ * proxy's `then` never calls the resolve or reject it was given, the outer
+ * promise NEVER SETTLES. Returning the plugin from an async function did
+ * exactly that: every `await loadPlugin()` in this file hung forever, no
+ * permission prompt was ever shown, the settings card said "Registering this
+ * phone…" without end, and `push_devices` stayed empty for every person
+ * from the first TestFlight build (11 Sep 2026) until 9 Nov, when the
+ * owner's phone — its persisted error log holding that one message twice
+ * per launch — gave the cause. The loader therefore boxes the plugin in a
+ * plain object, which has no `then`, and the regression test fakes the
+ * plugin as the same kind of Proxy so a bare hand-over fails the suite.
+ *
  * ── PERMISSION IS ASKED ONCE, BY iOS ────────────────────────────────────────
  *
  * The first `requestPermissions()` shows Apple's own prompt; after that the
@@ -43,8 +61,11 @@ export type RegistrationOutcome =
 
 type PushPlugin = typeof import('@capacitor/push-notifications')['PushNotifications'];
 
-const loadPlugin = async (): Promise<PushPlugin> =>
-  (await import('@capacitor/push-notifications')).PushNotifications;
+/** The plugin, BOXED — see "never handed to a promise bare" above. */
+const loadPlugin = async (): Promise<{ plugin: PushPlugin }> => {
+  const { PushNotifications } = await import('@capacitor/push-notifications');
+  return { plugin: PushNotifications };
+};
 
 /**
  * The token iOS answers `register()` with, or the reason it did not.
@@ -88,7 +109,7 @@ export async function registerThisPhone(databaseUserId: string): Promise<Registr
   if (!client) return { kind: 'failed', message: 'No cloud session to register with' };
 
   try {
-    const plugin = await loadPlugin();
+    const { plugin } = await loadPlugin();
 
     let permission = await plugin.checkPermissions();
     if (permission.receive === 'prompt' || permission.receive === 'prompt-with-rationale') {
@@ -134,7 +155,7 @@ export async function registerThisPhone(databaseUserId: string): Promise<Registr
 export async function notificationPermission(): Promise<'granted' | 'denied' | 'prompt' | 'unknown'> {
   if (!isNativeShell()) return 'unknown';
   try {
-    const plugin = await loadPlugin();
+    const { plugin } = await loadPlugin();
     const permission = await plugin.checkPermissions();
     if (permission.receive === 'granted') return 'granted';
     if (permission.receive === 'denied') return 'denied';
@@ -155,7 +176,7 @@ export function listenForNotificationTaps(onUrl: (url: string) => void): () => v
   let removed = false;
   let remove: (() => Promise<void>) | null = null;
   void loadPlugin()
-    .then((plugin) =>
+    .then(({ plugin }) =>
       plugin.addListener('pushNotificationActionPerformed', (action) => {
         const url = action.notification.data?.url;
         if (typeof url === 'string' && url.startsWith('/')) onUrl(url);
