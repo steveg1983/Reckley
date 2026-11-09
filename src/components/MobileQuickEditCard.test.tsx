@@ -96,6 +96,77 @@ describe('the phone card editor — the register editor, stacked', () => {
     expect(mocks.updateTransaction.mock.calls[0][1]).toMatchObject({ description: 'Sweep to Private', needsReview: false });
   });
 
+  describe('a run on a phone — the next row is shown whole', () => {
+    // No category yet, and nothing the app suggested: the row a category
+    // landing would have thrown the list open over.
+    const unfiled: Transaction = { ...source, id: 'unfiled', description: 'CARD PAYMENT 4021', category: '' } as Transaction;
+
+    it('lands Save & Next in the description, whichever field was last touched', async () => {
+      const onNext = vi.fn();
+      render(
+        <QuickEditRowProvider transaction={source} onDismiss={vi.fn()} onNext={onNext} run="description-first">
+          <MobileQuickEditCard transaction={source} onFullEditor={vi.fn()} />
+        </QuickEditRowProvider>
+      );
+      // The person was last in the category box…
+      fireEvent.focus(screen.getByRole('combobox', { name: 'Category' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save & Next' }));
+
+      // …and the next row still opens on its description, nothing unfolded.
+      await waitFor(() => expect(onNext).toHaveBeenCalledWith({ field: 'description', openCalendar: false }));
+    });
+
+    it('the desktop run still lands where the person was', async () => {
+      const onNext = vi.fn();
+      render(
+        <QuickEditRowProvider transaction={source} onDismiss={vi.fn()} onNext={onNext}>
+          <MobileQuickEditCard transaction={source} onFullEditor={vi.fn()} />
+        </QuickEditRowProvider>
+      );
+      fireEvent.focus(screen.getByRole('combobox', { name: 'Category' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save & Next' }));
+
+      await waitFor(() => expect(onNext).toHaveBeenCalledWith({ field: 'category', openCalendar: false }));
+    });
+
+    it('opens the category list on Return in the description, not before', () => {
+      render(
+        <QuickEditRowProvider transaction={unfiled} onDismiss={vi.fn()} onNext={vi.fn()} run="description-first">
+          <MobileQuickEditCard transaction={unfiled} onFullEditor={vi.fn()} />
+        </QuickEditRowProvider>
+      );
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+
+      fireEvent.keyDown(screen.getByLabelText('Transaction description'), { key: 'Enter' });
+
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    });
+
+    it('Return on a row carrying a suggestion goes to Confirm, list closed', () => {
+      render(
+        <QuickEditRowProvider transaction={source} onDismiss={vi.fn()} onNext={vi.fn()} run="description-first">
+          <MobileQuickEditCard transaction={source} onFullEditor={vi.fn()} />
+        </QuickEditRowProvider>
+      );
+      fireEvent.keyDown(screen.getByLabelText('Transaction description'), { key: 'Enter' });
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Confirm' })).toHaveFocus();
+    });
+
+    it('the desktop Enter still hands over Save & Next', () => {
+      render(
+        <QuickEditRowProvider transaction={unfiled} onDismiss={vi.fn()} onNext={vi.fn()}>
+          <MobileQuickEditCard transaction={unfiled} onFullEditor={vi.fn()} />
+        </QuickEditRowProvider>
+      );
+      fireEvent.keyDown(screen.getByLabelText('Transaction description'), { key: 'Enter' });
+
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save & Next' })).toHaveFocus();
+    });
+  });
+
   it('hands over to the full editor on request', () => {
     const onFullEditor = vi.fn();
     render(

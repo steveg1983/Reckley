@@ -271,6 +271,25 @@ export interface QuickEditRowProviderProps {
    */
   moveOnAfterSave?: boolean;
   /**
+   * How a run walks the list.
+   *
+   * 'same-field' (the default, the desktop's): Save & Next lands in the field
+   * the user was last in, and a landing on Category opens the list with the
+   * cursor in its search — "type, Enter, Enter" down a statement.
+   *
+   * 'description-first' (the phone card's): Save & Next ALWAYS lands in the
+   * description, nothing opened, and Return in the description is what opens
+   * the category list. On a phone the on-screen keyboard has already taken
+   * half the screen; a category list thrown open on arrival took most of the
+   * rest, over the date and the description of a row the person had not yet
+   * read (the owner, on the iPhone Duo, 9 Nov 2026: "You may wish to change
+   * the description first but you are forced with this big drop down taking
+   * up a lot of the screen space"). So the row is shown whole, the cursor sits
+   * in the field most likely to want tidying, and the list comes when asked
+   * for — by Return, or by a tap on the category box as always.
+   */
+  run?: 'same-field' | 'description-first';
+  /**
    * Stop editing — Escape, the ×, or a finished Save — leaving the row itself
    * highlighted.
    *
@@ -305,6 +324,7 @@ export function QuickEditRowProvider({
   focusRequest,
   onFocusRequestHandled,
   moveOnAfterSave = false,
+  run = 'same-field',
   children,
 }: QuickEditRowProviderProps): React.JSX.Element {
   const {
@@ -616,11 +636,15 @@ export function QuickEditRowProvider({
    */
   const finishSave = useCallback((advance: boolean): void => {
     if ((advance || moveOnAfterSave) && onNext) {
-      onNext({ field: lastFieldRef.current ?? 'date', openCalendar: false });
+      // The phone's run lands in the description whatever field was last
+      // touched — see the `run` prop. resolveField falls through to the next
+      // offered field if the description column is switched off.
+      const field = run === 'description-first' ? 'description' : lastFieldRef.current ?? 'date';
+      onNext({ field, openCalendar: false });
       return;
     }
     onDismiss();
-  }, [onNext, onDismiss, moveOnAfterSave]);
+  }, [onNext, onDismiss, moveOnAfterSave, run]);
 
   /**
    * The row's three fields as the user has them, checked — or null with the
@@ -840,8 +864,21 @@ export function QuickEditRowProvider({
       e.preventDefault();
       e.stopPropagation();
     }
+    // The phone's run: Return in the description goes ON to the category —
+    // the list opens with the cursor in its search, or the cursor lands on
+    // Confirm / Save & Next where a suggestion or a proposed transfer is
+    // already in the box (applyFocusRequest's own rules, unchanged). The
+    // desktop's Enter still hands over Save & Next.
+    if (
+      run === 'description-first' &&
+      e.target === descriptionRef.current &&
+      fields.includes('category')
+    ) {
+      applyFocusRequest({ field: 'category', openCalendar: false });
+      return;
+    }
     focusRunButton();
-  }, [transferPrompt, onDismiss, focusRunButton]);
+  }, [transferPrompt, onDismiss, focusRunButton, run, fields, applyFocusRequest]);
 
   /**
    * A chosen category hands the cursor to Save & Next.
