@@ -3805,6 +3805,10 @@ export default function AccountTransactions() {
         transaction={quickEditRow}
         fields={isPhoneLayout ? phoneQuickEditFields : quickEditFields}
         onNext={isPhoneLayout ? phoneQuickEditNext : quickEditNext}
+        // A phone's Save & Next shows the next row whole, cursor in the
+        // description, and opens the category list only on Return or a tap —
+        // see the prop's note.
+        run={isPhoneLayout ? 'description-first' : 'same-field'}
         // The To Review list drops a row as it is filed, so a plain Save or a
         // Confirm there moves on to the next row (see the prop's note).
         moveOnAfterSave={reviewOnly}
