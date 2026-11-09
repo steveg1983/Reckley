@@ -403,15 +403,33 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3910 / 1204
  * (+38.9 KiB raw, +1.00%; +12.1 KiB gzip, +1.02%).
+ *
+ * ── RE-RECORDED 2026-11-09: THE IPHONE DUO'S BARS, AND A DRIFT CAUGHT SMALL ─
+ *
+ *     + One from, one to      3871.1 KiB raw   1191.9 KiB gzip
+ *     main at 73153766        3872.0 KiB raw   1192.3 KiB gzip   +0.9 / +0.4
+ *     + bars at lg, the pill  3872.0 KiB raw   1192.4 KiB gzip   +0.0 / +0.1
+ *
+ * The +0.9 is #628 and #629 (the signed-out Welcome paying the Duo's side
+ * insets, the phone header in the desktop bar's navy): inside the budget, so
+ * neither was asked to say what it was — the third such line in this file,
+ * caught at under a kilobyte this time rather than 37.5. The +0.0 / +0.1 is
+ * this commit's: the two bars swap at `lg` instead of `md`, the fold of the
+ * desktop bar's labels to icons goes because no width that drew it remains,
+ * and the bottom pill gains a cap and auto margins — what the pill gained,
+ * the fold gave back (owner, 9 Nov 2026). Layout is every desktop surface.
+ *
+ * Budgets reset to the standing rule, ~1% above measured: 3911 / 1204
+ * (+39.0 KiB raw, +1.01%; +11.6 KiB gzip, +0.97% — the gzip budget holds).
  */
-const BASELINE_TOTAL_RAW_KIB = 3871.1;
-const BASELINE_TOTAL_GZIP_KIB = 1191.9;
+const BASELINE_TOTAL_RAW_KIB = 3872.0;
+const BASELINE_TOTAL_GZIP_KIB = 1192.4;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that
 // slack deliberately rather than banking it, so this is tight ON PURPOSE and
 // intended growth is expected to raise it in the commit that causes it.
-const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3910);
+const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3911);
 const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1204);
 
 const isReport = process.argv.includes('--report');
