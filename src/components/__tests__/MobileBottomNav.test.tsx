@@ -34,6 +34,11 @@ describe('MobileBottomNav', () => {
     const pill = screen.getByRole('navigation', { name: 'Mobile navigation' });
     expect(pill.style.left).toBe('calc(0.5rem + var(--wt-side-inset-left, 0px))');
     expect(pill.style.right).toBe('calc(0.5rem + var(--wt-side-inset-right, 0px))');
+    // Above phone width the pill stops growing and centres (the opened Duo
+    // held upright, 9 Nov 2026) — a cap and auto margins inside that box.
+    expect(pill.style.maxWidth).toBe('26rem');
+    expect(pill.style.marginLeft).toBe('auto');
+    expect(pill.style.marginRight).toBe('auto');
   });
 
   it('offers no slot for the retired global transactions list', () => {

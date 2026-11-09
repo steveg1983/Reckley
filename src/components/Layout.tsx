@@ -83,7 +83,10 @@ export default function Layout(): React.JSX.Element {
   }, []);
 
   const focusSearch = useCallback(() => {
-    if (window.innerWidth <= 768) {
+    // The same edge the two bars swap at (lg, 1024px) — see the header
+    // comments on both. Below it the phone's search sheet is the one on
+    // screen; above it the desktop bar's field is.
+    if (window.innerWidth < 1024) {
       openMobileSearch();
     } else {
       desktopSearchRef.current?.focusInput();
@@ -324,12 +327,19 @@ export default function Layout(): React.JSX.Element {
       <nav
         ref={desktopNavRef}
         id="main-navigation"
-        className="hidden md:block fixed top-0 left-0 right-0 z-40 bg-[#1a2332] shadow-md"
+        // From `lg` (1024px) up, and no sooner. Between `md` and `lg` — the
+        // iPhone Duo opened and held wide (951px), an iPad held upright
+        // (768px) — this bar was a row of icons (owner, 9 Nov 2026: "there
+        // are a lot of icons running along the top header... it looks quite
+        // cluttered"), so those widths get the phone's header and its
+        // slide-out menu instead. The phone header below is `lg:hidden` to
+        // match: exactly one bar is ever displayed.
+        className="hidden lg:block fixed top-0 left-0 right-0 z-40 bg-[#1a2332] shadow-md"
         // Sits BELOW the demo banner rather than under it. The banner publishes
         // its measured height into this variable while demo mode is on, and
         // removes it otherwise — so outside demo mode this resolves to 0px and
         // is exactly the `top-0` it overrides. The status-bar inset rides with
-        // it: on a desktop it is 0px, and this bar is `md:` up anyway, but the
+        // it: on a desktop it is 0px, and this bar is `lg:` up anyway, but the
         // two offsets belong together wherever chrome is pinned to the top.
         style={{ top: TOP_CHROME_OFFSET }}
         role="navigation"
@@ -471,7 +481,7 @@ export default function Layout(): React.JSX.Element {
 
           {/* Right side: Search + Notifications + User */}
           <div className="flex items-center gap-3 shrink-0 ml-4">
-            <div className="w-44 lg:w-72 [&_input]:!py-0.5 [&_input]:!text-sm [&_input]:!h-7 [&_input]:!min-h-0 [&>div>div]:!border-0 [&>div>div]:!shadow-none [&>div>div]:!bg-transparent [&>div>div]:!rounded-none">
+            <div className="w-72 [&_input]:!py-0.5 [&_input]:!text-sm [&_input]:!h-7 [&_input]:!min-h-0 [&>div>div]:!border-0 [&>div>div]:!shadow-none [&>div>div]:!bg-transparent [&>div>div]:!rounded-none">
               <div className="bg-white/10 rounded-lg border border-white/20 focus-within:bg-white/20 transition-colors overflow-hidden">
                 <GlobalSearch
                   ref={desktopSearchRef}
@@ -546,10 +556,14 @@ export default function Layout(): React.JSX.Element {
           width, and the bell — painted for the navy bar and mounted here too
           — becomes visible on the phone, where white/60 on white had hidden
           it. The shell's status bar is set to light content to match
-          (Info.plist UIStatusBarStyle). */}
+          (Info.plist UIStatusBarStyle).
+          Shown up to `lg`, not `md`: the opened Duo and an upright iPad get
+          this header and the slide-out menu rather than the desktop bar's
+          row of icons (owner, 9 Nov 2026). The desktop bar above is
+          `hidden lg:block` to match. */}
       <header
         ref={mobileHeaderRef}
-        className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#1a2332] shadow-md"
+        className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-[#1a2332] shadow-md"
         // The status bar's room as well as the banner's — see TOP_CHROME_OFFSET.
         // This header carries the identity menu, so getting it wrong took the
         // only way to sign out on a phone behind the battery indicator.
@@ -610,7 +624,7 @@ export default function Layout(): React.JSX.Element {
       {isMobileSearchVisible && (
         <div
           data-testid="mobile-search-container"
-          className="md:hidden px-4 pb-3 bg-white dark:bg-gray-800 shadow-sm"
+          className="lg:hidden px-4 pb-3 bg-white dark:bg-gray-800 shadow-sm"
         >
           <GlobalSearch
             ref={mobileSearchRef}
@@ -626,7 +640,7 @@ export default function Layout(): React.JSX.Element {
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
         <div 
-          className="md:hidden fixed inset-0 z-40 bg-black bg-opacity-50" 
+          className="lg:hidden fixed inset-0 z-40 bg-black bg-opacity-50" 
           onClick={toggleMobileMenu}
           role="dialog"
           aria-modal="true"
@@ -714,11 +728,11 @@ export default function Layout(): React.JSX.Element {
                       44. The same trap as the `position` line in that block's
                       own header comment. Used height = max(height, min-height)
                       = max(48, 44), so h-12 lands 48 on <a> and <button> rows
-                      alike; md:h-auto hands the desktop back its own size. */}
+                      alike; lg:h-auto hands the desktop back its own size. */}
                   <Link
                     to={isDemoModeRoutingEnabled ? '/accounts?demo=true' : '/accounts'}
                     onClick={toggleMobileMenu}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 md:py-2 rounded-lg transition-colors h-12 md:h-auto bg-secondary text-white dark:text-gray-300 hover:bg-secondary dark:hover:bg-gray-800/50"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 lg:py-2 rounded-lg transition-colors h-12 lg:h-auto bg-secondary text-white dark:text-gray-300 hover:bg-secondary dark:hover:bg-gray-800/50"
                   >
                     <WalletIcon size={18} />
                     <span className="flex-1 text-sm text-left">Accounts</span>
@@ -782,7 +796,7 @@ export default function Layout(): React.JSX.Element {
                   <Link
                     to={isDemoModeRoutingEnabled ? '/forecast?demo=true' : '/forecast'}
                     onClick={toggleMobileMenu}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 md:py-2 rounded-lg transition-colors h-12 md:h-auto bg-secondary text-white dark:text-gray-300 hover:bg-secondary dark:hover:bg-gray-800/50"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 lg:py-2 rounded-lg transition-colors h-12 lg:h-auto bg-secondary text-white dark:text-gray-300 hover:bg-secondary dark:hover:bg-gray-800/50"
                   >
                     <TargetIcon size={18} />
                     <span className="flex-1 text-sm text-left">Plan</span>
@@ -823,7 +837,7 @@ export default function Layout(): React.JSX.Element {
                     type="button"
                     onClick={() => setManageExpanded(!manageExpanded)}
                     aria-expanded={manageExpanded}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 md:py-2 rounded-lg transition-colors h-12 md:h-auto bg-secondary text-white dark:text-gray-300 hover:bg-secondary dark:hover:bg-gray-800/50"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 lg:py-2 rounded-lg transition-colors h-12 lg:h-auto bg-secondary text-white dark:text-gray-300 hover:bg-secondary dark:hover:bg-gray-800/50"
                   >
                     <SettingsIcon size={18} />
                     <span className="flex-1 text-sm text-left">Manage</span>
@@ -859,7 +873,7 @@ export default function Layout(): React.JSX.Element {
                   <Link
                     to={isDemoModeRoutingEnabled ? '/settings?demo=true' : '/settings'}
                     onClick={() => setSettingsExpanded(!settingsExpanded)}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 md:py-2 rounded-lg transition-colors h-12 md:h-auto bg-secondary text-white dark:text-gray-300 hover:bg-secondary dark:hover:bg-gray-800/50"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 lg:py-2 rounded-lg transition-colors h-12 lg:h-auto bg-secondary text-white dark:text-gray-300 hover:bg-secondary dark:hover:bg-gray-800/50"
                   >
                     <SettingsIcon size={18} />
                     <span className="flex-1 text-sm text-left">Settings</span>
@@ -890,12 +904,12 @@ export default function Layout(): React.JSX.Element {
         // flex row. (Their history: min-w-0 once stopped a non-wrapping row
         // from inflating the layout viewport to 1438px; as a block, main is
         // simply the container's width and cannot be squeezed by siblings.)
-        className="mt-16 md:mt-12"
+        className="mt-16 lg:mt-12"
         // The headers moved down by the status bar and the banner, so the
         // content below them has to as well — otherwise the first card slides
         // under a header that is now lower than the margin above assumes.
         // Padding rather than margin because the margin is responsive
-        // (mt-16/md:mt-12) and this offset has to add to whichever of the two
+        // (mt-16/lg:mt-12) and this offset has to add to whichever of the two
         // applies, not replace it.
         style={{ paddingTop: TOP_CHROME_OFFSET }}
         role="main"
