@@ -66,6 +66,13 @@ describe('the signed-out front door', () => {
     expect(ground.style.paddingLeft).toBe('var(--wt-side-inset-left, 0px)');
     expect(ground.style.paddingRight).toBe('var(--wt-side-inset-right, 0px)');
   });
+
+  it("gives its header the status bar's room, as Layout's headers have", () => {
+    renderWelcome();
+    // In the shell on a plain iPhone the web view reaches the top edge and
+    // this header drew Sign in under the Dynamic Island (9 Nov 2026).
+    expect(screen.getByRole('banner').style.paddingTop).toBe('calc(18px + var(--wt-status-bar-inset, 0px))');
+  });
 });
 
 /**
