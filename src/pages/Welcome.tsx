@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { SignInButton, SignUpButton, useAuth } from '@clerk/clerk-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ReckleyLockup } from '../components/brand/ReckleyLockup';
+import { SAFE_AREA_TOP, SIDE_INSET_LEFT, SIDE_INSET_RIGHT } from '../components/layout/chromeOffsets';
 
 /**
  * THE LANDING PAGE — Claude Design's 29 Aug 2026 handover, ported section by
@@ -188,11 +189,29 @@ export default function Welcome(): React.JSX.Element {
   const year = new Date().getFullYear();
 
   return (
-    <div className={`min-h-screen ${DARK_GROUND} text-[#f1f3f7] antialiased`}>
+    <div
+      className={`min-h-screen ${DARK_GROUND} text-[#f1f3f7] antialiased`}
+      /* This page is mounted outside Layout, so it pays the side insets itself
+         — the iPhone Duo bills its camera pill as a safe-area inset down the
+         whole right edge when closed (84px, 9 Nov 2026), and the header's
+         Sign in sat under it. The ground pads, as Layout's does; the dark
+         ground shows in the column beside the lighter sections, which is the
+         convention Apple's own Settings follows. 0px everywhere else. */
+      style={{ paddingLeft: SIDE_INSET_LEFT, paddingRight: SIDE_INSET_RIGHT }}
+    >
       {/* Signed-out header — wordmark and the two account actions, nothing
           else (handover §5.1). Create an account yields to the hero CTA below
           640px rather than crowding the bar (§6). */}
-      <header className={`flex items-center justify-between px-6 sm:px-12 py-[18px] border-b border-[#1e2838] sticky top-0 ${DARK_GROUND} z-10`}>
+      <header
+        className={`flex items-center justify-between px-6 sm:px-12 py-[18px] border-b border-[#1e2838] sticky top-0 ${DARK_GROUND} z-10`}
+        /* The status bar's room, as Layout's headers pay it. In the shell on
+           a plain iPhone the web view reaches the screen's top edge, and
+           this header — the only one outside Layout — drew the lockup and
+           Sign in under the Dynamic Island (iPhone 17 simulator, 9 Nov
+           2026). 0px in a browser tab and on the closed Duo, which has no
+           top inset. */
+        style={{ paddingTop: `calc(18px + ${SAFE_AREA_TOP})` }}
+      >
         {/* The horizontal lockup at its 96px minimum. The identity handover
             drew this header navy-on-white; the landing has been on its dark
             ground since August, and a one-colour mark takes the header's
