@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { WifiOffIcon } from './icons';
+import { SIDE_INSET_MARGINS } from './layout/chromeOffsets';
 
 export default function OfflineIndicator(): React.JSX.Element | null {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -31,6 +32,7 @@ export default function OfflineIndicator(): React.JSX.Element | null {
 
   return (
     <div
+      style={SIDE_INSET_MARGINS}
       className={`fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-auto z-50 transition-all duration-300 ${
         isOffline ? 'translate-y-0' : showBanner ? 'translate-y-0' : 'translate-y-full'
       }`}

@@ -32,6 +32,59 @@ offline page lives there for the no-network case. App Store *review* (later —
 TestFlight does not care) will want the assets bundled instead, which means
 CORS work on the API and a second deploy pipeline.
 
+## The iPhone Duo — what the fold actually reports (9 Nov 2026)
+
+Measured with a scratch probe in `SceneDelegate` (never committed), as UIKit's
+`safeAreaInsets` and as the web view's own `env()` — the two agreed every time.
+The closed row is the Xcode 27.2 simulator's; the two open rows were measured
+on the owner's Duo (iOS 27.3) and, where the simulator could be put in the same
+state, it gave the same numbers.
+
+| state | window (pt) | safe-area insets t / r / b / l |
+| --- | --- | --- |
+| closed, upright | 466 × 678 | 0 / **84** / 34 / 0 |
+| open, held wide | 951 × 669 | 0 / **84** / 34 / 0 |
+| open, held upright | 669 × 951 | **82** / 0 / 34 / 0 |
+
+The camera and the vertical status pill live in one corner of the inner
+display, and iOS bills them as a safe-area inset along the WHOLE edge the pill
+sits on — the full height of the right edge when closed. Apple's own Settings
+leaves that entire column to the pill and its Back button, so that is the
+convention. There is no top inset at all when closed (the status bar is a
+2pt-tall frame), so nothing keyed on `safe-area-inset-top` saw the pill, and
+the app drew its header's right-hand controls under it.
+
+What follows from the table:
+
+- **The web pays the sides now.** `--wt-side-inset-left/right` in `index.css`
+  (from `env()`, never zeroed) and `SIDE_INSET_*` / `sidePadding` in
+  `components/layout/chromeOffsets.ts`. Every fixed bar pads its content by
+  them and keeps its background full-bleed; every floating card steps in by a
+  margin. 0px on every other device, so the change is invisible there.
+- **No native work was needed for the pill.** The web view is full-bleed and
+  honest (window width equal to the screen's, `env()` right 84px), so a web
+  deploy fixes the installed build 6 too. The iOS 27.2 SDK has a hinge API
+  (`UIHingeInteraction`: closed / partially open / fully open, plus the angle)
+  and nothing for the pill; the web has neither and needs neither.
+- **The open display lands in the `md` breakpoint** (951px wide), where the
+  desktop top bar is drawn — and five labelled items, the brand and the
+  right-hand cluster overlapped there (also an iPad held upright). The item
+  labels fold to icons below `lg` and the search field narrows.
+- **A build made with the iOS 27.1+ SDK fills the inner display**; older
+  builds are letterboxed. Build 6 was made with Xcode 27.1, build 7 onward with
+  27.2 (the active Xcode since 9 Nov; it dropped Simulator.app for Device Hub).
+- **Device Hub reads the daemons that were running when it opened.** After
+  `xcode-select -s`, kill `CoreSimulatorService`, `CoreDeviceService` and
+  `remotepairingd` (or restart) or it lists the OLD Xcode's simulators as
+  "unavailable", shows none of the new runtime's, and will not pair a phone —
+  while each Add Device still quietly creates and boots a device behind it.
+- `xcrun devicectl device capture screenshot` captures the PRIMARY display,
+  which on the Duo is the outer one — black whenever the phone is open. Pass
+  `--display-unique-id` of the active display from
+  `devicectl device info displays` (the inner one listed itself as
+  `123-456-789`) and the inner screen comes back. `devicectl device copy from
+  --domain-type appDataContainer` is how the probe's log came off the phone.
+
 ## Associated Domains — why a password would not save
 
 iOS will not offer to save or fill a credential in an app's web view, and will

@@ -85,3 +85,31 @@ export const STICKY_UNDER_APP_BAR =
  * rows live behind the pill.
  */
 export const BOTTOM_CHROME_OFFSET = 'var(--wt-bottom-nav-clearance, 0px)';
+
+/**
+ * What the LEFT and RIGHT edges of the window have already been spent on —
+ * the iPhone Duo's status-pill column (the ruling and the measurements live
+ * on `--wt-side-inset-*` in index.css). 0px on every other phone and on
+ * every desktop, so nothing here changes until a device pays one.
+ *
+ * Two shapes, by what the element is:
+ * - a fixed BAR (header, nav, banner, sheet) keeps `left-0 right-0` so its
+ *   background runs under the pill, and pads its content by these;
+ * - a floating CARD (toast, tip, the pill nav) keeps its own `right-4` and
+ *   steps in by these with a margin — so "4 from the edge" keeps meaning
+ *   4 from the edge a finger can use.
+ */
+export const SIDE_INSET_LEFT = 'var(--wt-side-inset-left, 0px)';
+export const SIDE_INSET_RIGHT = 'var(--wt-side-inset-right, 0px)';
+
+/** The floating-card shape, ready to spread into an inline style. */
+export const SIDE_INSET_MARGINS = {
+  marginLeft: SIDE_INSET_LEFT,
+  marginRight: SIDE_INSET_RIGHT,
+} as const;
+
+/** The bar shape: a Tailwind spacing already paid (e.g. `'1rem'` for `px-4`) plus the inset. */
+export const sidePadding = (spacing: string): { paddingLeft: string; paddingRight: string } => ({
+  paddingLeft: `calc(${spacing} + ${SIDE_INSET_LEFT})`,
+  paddingRight: `calc(${spacing} + ${SIDE_INSET_RIGHT})`,
+});

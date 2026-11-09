@@ -903,6 +903,27 @@ button.rounded-full:focus-visible,
     --wt-home-indicator-inset: 0px;
   }
 
+  /* THE SIDE INSETS, which no phone paid in portrait until the iPhone Duo
+     (measured 9 Nov 2026 in the Xcode 27.2 simulator, and on the owner's
+     Duo running iOS 27.3). The Duo's inner display keeps its camera and a
+     vertical status pill in one corner, and iOS hands that to apps as a
+     safe-area inset along the WHOLE edge the pill sits on: closed, an 84px
+     right inset running the full height of the screen — Apple's own
+     Settings leaves that entire column to the pill and its Back button;
+     opened and held upright, the same hardware is reported as an 82px top
+     inset instead, which --wt-status-bar-inset above already pays. The web
+     view measured honest (window width equal to the screen's, env() right
+     84px), so these two are simply what the left and right edges cost,
+     named so a fixed bar pads its CONTENT by them and keeps its background
+     full-bleed, and a floating card steps in by them with a margin.
+     NOT zeroed for installed apps like the pair above: that zeroing exists
+     because iOS draws its own bars at the top and bottom there, and it
+     draws none at the sides. */
+  :root {
+    --wt-side-inset-left: env(safe-area-inset-left, 0px);
+    --wt-side-inset-right: env(safe-area-inset-right, 0px);
+  }
+
   @media (max-width: 767px) {
     /* The clearance as a NAME, not only a class: the floating pill hides the
        last hundred pixels of anything scrollable, and the page gutter below

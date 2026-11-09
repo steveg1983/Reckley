@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { XIcon, CheckCircleIcon, AlertCircleIcon } from '../icons';
 import { InfoIcon } from '../icons/InfoIcon';
+import { SAFE_AREA_TOP, SIDE_INSET_MARGINS } from '../layout/chromeOffsets';
 
 export interface ToastMessage {
   id: string;
@@ -139,6 +140,9 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps): Reac
   return (
     <div
       className="fixed top-4 right-4 z-50 space-y-3"
+      // Clear of the status bar and of the iPhone Duo's pill column; both 0px
+      // on a desktop, where top-4 right-4 is the whole story.
+      style={{ ...SIDE_INSET_MARGINS, marginTop: SAFE_AREA_TOP }}
       role="region"
       aria-label="Notifications"
       aria-live="polite"

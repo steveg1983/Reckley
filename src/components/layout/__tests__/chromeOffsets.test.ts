@@ -24,9 +24,42 @@ import {
   APP_BAR_HEIGHT_VAR,
   DEMO_BANNER_OFFSET,
   SAFE_AREA_TOP,
+  SIDE_INSET_LEFT,
+  SIDE_INSET_MARGINS,
+  SIDE_INSET_RIGHT,
   STICKY_UNDER_APP_BAR,
-  TOP_CHROME_OFFSET
+  TOP_CHROME_OFFSET,
+  sidePadding
 } from '../chromeOffsets';
+
+describe('what the sides of the window cost (the iPhone Duo, 9 Nov 2026)', () => {
+  // The Duo is the first phone to pay a safe-area inset at a SIDE in
+  // portrait: its status pill is an 84px right inset running the full height
+  // of the closed screen. Each name here is a variable index.css fills from
+  // env(), so a browser that pays nothing resolves every one to 0px.
+  it('names the two edges and leaves them for the browser to resolve', () => {
+    expect(SIDE_INSET_LEFT).toBe('var(--wt-side-inset-left, 0px)');
+    expect(SIDE_INSET_RIGHT).toBe('var(--wt-side-inset-right, 0px)');
+  });
+
+  it('index.css fills both names from env(), and from nothing else', () => {
+    const css = readFileSync(join(__dirname, '../../../index.css'), 'utf8');
+    expect(css).toMatch(/--wt-side-inset-left:\s*env\(safe-area-inset-left,\s*0px\)/);
+    expect(css).toMatch(/--wt-side-inset-right:\s*env\(safe-area-inset-right,\s*0px\)/);
+    // The top/bottom pair is zeroed for installed apps because iOS draws its
+    // own bars there. It draws none at the sides, so a rule zeroing these
+    // would put the Duo's chrome back under the pill.
+    expect(css).not.toMatch(/--wt-side-inset-(left|right):\s*0px/);
+  });
+
+  it('gives a floating card margins and a bar paddings, both from the same names', () => {
+    expect(SIDE_INSET_MARGINS).toEqual({ marginLeft: SIDE_INSET_LEFT, marginRight: SIDE_INSET_RIGHT });
+    expect(sidePadding('1rem')).toEqual({
+      paddingLeft: `calc(1rem + ${SIDE_INSET_LEFT})`,
+      paddingRight: `calc(1rem + ${SIDE_INSET_RIGHT})`
+    });
+  });
+});
 
 describe('where a page may park its own chrome', () => {
   it('adds up all three things above it, rather than naming a number', () => {

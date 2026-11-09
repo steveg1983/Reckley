@@ -36,7 +36,14 @@ import KeyboardSequenceIndicator from './KeyboardSequenceIndicator';
 import MobileBottomNav from './MobileBottomNav';
 import ViewportDebugOverlay from './ViewportDebugOverlay';
 import { isDemoModeRuntimeAllowed } from '../utils/runtimeMode';
-import { APP_BAR_HEIGHT_VAR, TOP_CHROME_OFFSET, BOTTOM_CHROME_OFFSET } from './layout/chromeOffsets';
+import {
+  APP_BAR_HEIGHT_VAR,
+  TOP_CHROME_OFFSET,
+  BOTTOM_CHROME_OFFSET,
+  SIDE_INSET_LEFT,
+  SIDE_INSET_RIGHT,
+  sidePadding,
+} from './layout/chromeOffsets';
 
 /*
  * The top-of-window offsets live in `layout/chromeOffsets.ts` rather than here.
@@ -276,7 +283,14 @@ export default function Layout(): React.JSX.Element {
     // position:fixed on every BUTTON, dropping the w-14 floating + into
     // normal flow beside main. That rule is fixed too — block layout stays
     // because main's width should never be negotiable in the first place.
-    <div className="min-h-screen bg-[#f8f9fb] dark:bg-gray-900">
+    <div
+      className="min-h-screen bg-[#f8f9fb] dark:bg-gray-900"
+      // The page's own content steps in from the iPhone Duo's status-pill
+      // column (0px everywhere else); the ground still paints to the glass.
+      // Fixed chrome is positioned against the window, not this box, so each
+      // fixed piece pays the same insets itself — see chromeOffsets.
+      style={{ paddingLeft: SIDE_INSET_LEFT, paddingRight: SIDE_INSET_RIGHT }}
+    >
       {/* Whatever this edition starts once and never speaks to again, drawing
           nothing. In a browser it is the scheduled bank-feed refresh (on
           sign-in / daily at a set time — the schedule lives in Settings, and
@@ -328,7 +342,7 @@ export default function Layout(): React.JSX.Element {
           className="absolute left-0 right-0 bottom-full bg-[#1a2332]"
           style={{ height: TOP_CHROME_OFFSET }}
         />
-        <div className="px-4 flex items-center h-12">
+        <div className="flex items-center h-12" style={sidePadding('1rem')}>
           {/* Brand — the horizontal lockup, light on the navy bar (identity
               handover §5). 96px is the lockup's minimum width, and at 96 the
               mark itself stands 21px, the size the handover names for here. */}
@@ -457,7 +471,7 @@ export default function Layout(): React.JSX.Element {
 
           {/* Right side: Search + Notifications + User */}
           <div className="flex items-center gap-3 shrink-0 ml-4">
-            <div className="w-72 [&_input]:!py-0.5 [&_input]:!text-sm [&_input]:!h-7 [&_input]:!min-h-0 [&>div>div]:!border-0 [&>div>div]:!shadow-none [&>div>div]:!bg-transparent [&>div>div]:!rounded-none">
+            <div className="w-44 lg:w-72 [&_input]:!py-0.5 [&_input]:!text-sm [&_input]:!h-7 [&_input]:!min-h-0 [&>div>div]:!border-0 [&>div>div]:!shadow-none [&>div>div]:!bg-transparent [&>div>div]:!rounded-none">
               <div className="bg-white/10 rounded-lg border border-white/20 focus-within:bg-white/20 transition-colors overflow-hidden">
                 <GlobalSearch
                   ref={desktopSearchRef}
@@ -548,7 +562,7 @@ export default function Layout(): React.JSX.Element {
           className="absolute left-0 right-0 bottom-full bg-white dark:bg-gray-800"
           style={{ height: TOP_CHROME_OFFSET }}
         />
-        <div className="flex items-center justify-between p-4">
+        <div className="flex items-center justify-between py-4" style={sidePadding('1rem')}>
           <button
             onClick={toggleMobileMenu}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -621,7 +635,7 @@ export default function Layout(): React.JSX.Element {
             // of top chrome that didn't, so its "Reckley" title sat
             // behind the clock. Padding, not `top`, because the panel's
             // background should still reach the physical top of the screen.
-            style={{ paddingTop: TOP_CHROME_OFFSET }}
+            style={{ paddingTop: TOP_CHROME_OFFSET, paddingLeft: SIDE_INSET_LEFT }}
             onClick={e => e.stopPropagation()}
             role="navigation"
             aria-label="Mobile navigation menu"

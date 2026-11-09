@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSwipeGestures } from '../hooks/useSwipeGestures';
 import { XIcon } from './icons';
+import { SIDE_INSET_LEFT, SIDE_INSET_RIGHT } from './layout/chromeOffsets';
 
 interface BottomSheetProps {
   isOpen: boolean;
@@ -179,6 +180,9 @@ export function BottomSheet({
   if (!isVisible) return null;
 
   const sheetStyles = {
+    // In from the iPhone Duo's status-pill column (0px elsewhere).
+    left: SIDE_INSET_LEFT,
+    right: SIDE_INSET_RIGHT,
     transform: `translateY(${isOpen && !isAnimating ? dragOffset : isOpen ? 0 : currentHeight}px)`,
     height: snapPoints.length > 0 ? currentHeight : height === 'auto' ? 'auto' : currentHeight,
     maxHeight: height === 'auto' ? '90vh' : undefined,

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { XIcon } from './icons';
 import { pageTipStorageKey } from '../utils/pageTips';
 import { CONSENT_CHANGED_EVENT, getConsent } from '../utils/consent';
+import { SIDE_INSET_MARGINS } from './layout/chromeOffsets';
 
 interface PageTipProps {
   id: string;
@@ -62,7 +63,7 @@ export default function PageTip({ id, title, description }: PageTipProps): React
   // hidden control for another. Desktop is unchanged: bottom-right, over the
   // content, where there is nothing to clear.
   return createPortal(
-    <div className="fixed bottom-36 left-3 right-3 z-40 md:bottom-4 md:left-auto md:right-4 md:max-w-lg">
+    <div className="fixed bottom-36 left-3 right-3 z-40 md:bottom-4 md:left-auto md:right-4 md:max-w-lg" style={SIDE_INSET_MARGINS}>
       <div className="bg-[#1a2332] text-white p-4 rounded-xl shadow-xl border border-white/10">
         <div className="flex items-start gap-3">
           <div className="flex-1">
