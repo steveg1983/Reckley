@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { XIcon } from '../icons';
+import { sidePadding } from '../layout/chromeOffsets';
 
 interface ModalProps {
   isOpen: boolean;
@@ -207,7 +208,9 @@ export function Modal({
           events, and treating the last one as the whole gesture is what makes a
           control unusable in ways no test that fires `click` can see. */}
       <div
-        className="modal-viewport fixed inset-0 z-50 flex items-start justify-center px-4 pt-16 overflow-y-auto"
+        className="modal-viewport fixed inset-0 z-50 flex items-start justify-center pt-16 overflow-y-auto"
+        // px-4, plus the iPhone Duo's status-pill column — see chromeOffsets.
+        style={sidePadding('1rem')}
         onPointerDown={closeOnBackdrop ? (e) => { pressedOnBackdrop.current = e.target === e.currentTarget; } : undefined}
         onClick={closeOnBackdrop ? (e) => {
           if (e.target === e.currentTarget && pressedOnBackdrop.current) onClose();

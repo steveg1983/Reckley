@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getConsent, setConsent } from '../utils/consent';
 import { enableAnalyticsConsent } from '../lib/sentry';
+import { sidePadding } from './layout/chromeOffsets';
 
 export default function ConsentBanner(): React.JSX.Element | null {
   const [choiceMade, setChoiceMade] = useState(() => getConsent() !== null);
@@ -38,7 +39,7 @@ export default function ConsentBanner(): React.JSX.Element | null {
       // tap, so nothing is trapped behind it.
       className="fixed bottom-0 inset-x-0 z-[60] bg-[#1a2332] text-white shadow-2xl border-t border-white/10"
     >
-      <div className="max-w-5xl mx-auto px-4 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+      <div className="max-w-5xl mx-auto py-4 flex flex-col sm:flex-row sm:items-center gap-4" style={sidePadding('1rem')}>
         <p className="text-sm flex-1 text-white/90">
           We use strictly necessary cookies to sign you in and keep the app working.
           With your permission we also use session-diagnostics (Sentry) to find and

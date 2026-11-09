@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { HomeIcon, WalletIcon, BarChart3Icon, CheckCircleIcon, TagIcon, PlusIcon, XIcon, SearchIcon } from './icons';
+import { SIDE_INSET_LEFT, SIDE_INSET_RIGHT } from './layout/chromeOffsets';
 
 interface MobileNavItem {
   to: string;
@@ -93,7 +94,7 @@ export default function MobileBottomNav(): React.JSX.Element {
               exactly one of the two modes this panel has. */}
           <div
             className="absolute bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-2 min-w-[200px]"
-            style={{ right: '0.75rem', bottom: 'calc(4.875rem + var(--wt-home-indicator-inset, 0px))' }}
+            style={{ right: `calc(0.75rem + ${SIDE_INSET_RIGHT})`, bottom: 'calc(4.875rem + var(--wt-home-indicator-inset, 0px))' }}
           >
             {/* The add-transaction modal is Layout's and is opened by an
                 app-wide parameter, so this points at a page that still exists
@@ -143,8 +144,9 @@ export default function MobileBottomNav(): React.JSX.Element {
       <nav
         className="md:hidden fixed z-50 rounded-full bg-white/95 dark:bg-gray-800/95 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.18)] border border-black/5 dark:border-white/10"
         style={{
-          left: '0.5rem',
-          right: '0.5rem',
+          // …plus the iPhone Duo's status-pill column, 0px everywhere else.
+          left: `calc(0.5rem + ${SIDE_INSET_LEFT})`,
+          right: `calc(0.5rem + ${SIDE_INSET_RIGHT})`,
           // 0.125rem: halved from 0.75 on 30 Aug ("moving the pill down a
           // bit"), and halved again 31 Aug when the owner asked for the same
           // thing once more — "the pill can also sit lower". Still floating,

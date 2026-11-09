@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, ReactNode } from 'react';
 import { XIcon } from './icons';
 import { useFocusManager } from './common/useFocusManager';
+import { SIDE_INSET_LEFT, SIDE_INSET_RIGHT } from './layout/chromeOffsets';
 
 interface MobileBottomSheetProps {
   isOpen: boolean;
@@ -136,6 +137,10 @@ export function MobileBottomSheet({
         ref={sheetRef}
         className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 rounded-t-2xl shadow-2xl z-50 transition-transform"
         style={{
+          // In from the iPhone Duo's status-pill column (0px elsewhere); the
+          // dimmed backdrop behind shows through that strip, as it does above.
+          left: SIDE_INSET_LEFT,
+          right: SIDE_INSET_RIGHT,
           height: `${currentHeight}px`,
           transform: isOpen ? 'translateY(0)' : 'translateY(100%)',
           transition: isDragging ? 'none' : 'transform 0.3s ease-out, height 0.3s ease-out'

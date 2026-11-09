@@ -28,6 +28,14 @@ describe('MobileBottomNav', () => {
     expect(labels).toEqual(['Home', 'Accounts', 'Find', 'Reconcile', 'Categorise']);
   });
 
+  it('steps its pill in from the iPhone Duo\'s status-pill column', () => {
+    // 0px everywhere else: the variable only pays out where env() does.
+    renderAt('/dashboard');
+    const pill = screen.getByRole('navigation', { name: 'Mobile navigation' });
+    expect(pill.style.left).toBe('calc(0.5rem + var(--wt-side-inset-left, 0px))');
+    expect(pill.style.right).toBe('calc(0.5rem + var(--wt-side-inset-right, 0px))');
+  });
+
   it('offers no slot for the retired global transactions list', () => {
     renderAt('/dashboard');
 

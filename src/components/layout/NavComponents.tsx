@@ -80,9 +80,16 @@ export function TopNavItem({ to, icon: Icon, label }: { to: string; icon: React.
           : 'text-white/70 hover:text-white hover:bg-white/10'
       }`}
       aria-current={isActive ? 'page' : undefined}
+      // The label folds to its icon below `lg`: at 951px (an iPhone Duo
+      // opened, an iPad held upright) five labelled items, the brand and the
+      // right-hand cluster overlapped one another in the bar (measured 9 Nov
+      // 2026 — "Dashboard" drawn through "Accounts"). The name stays on the
+      // link for a screen reader and as a tooltip whichever way it renders.
+      aria-label={label}
+      title={label}
     >
       <Icon size={16} />
-      <span>{label}</span>
+      <span className="hidden lg:inline">{label}</span>
     </Link>
   );
 }
@@ -178,9 +185,13 @@ export function TopNavDropdown({
             isActive || isOpen ? 'text-white font-medium' : 'text-white/70 hover:text-white'
           }`}
           aria-current={isActive ? 'page' : undefined}
+          // Folds to its icon below `lg`, as TopNavItem does and for the same
+          // measured reason; the chevron beside it keeps its own name.
+          aria-label={label}
+          title={label}
         >
           <Icon size={16} />
-          <span>{label}</span>
+          <span className="hidden lg:inline">{label}</span>
         </Link>
         <button
           type="button"

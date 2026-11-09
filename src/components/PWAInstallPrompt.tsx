@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 import { XIcon } from './icons';
+import { SIDE_INSET_MARGINS } from './layout/chromeOffsets';
 
 export default function PWAInstallPrompt() {
   const { isInstallable, isInstalled, installApp } = usePWAInstall();
@@ -49,7 +50,7 @@ export default function PWAInstallPrompt() {
   }
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm z-50 animate-fadeIn">
+    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm z-50 animate-fadeIn" style={SIDE_INSET_MARGINS}>
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-600 p-4">
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center">

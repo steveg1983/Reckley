@@ -36,23 +36,29 @@ const readFacts = (): string[] => {
     String((window.navigator as Navigator & { standalone?: boolean }).standalone)
   );
   line('installed-app class', () => String(doc.classList.contains('wt-installed-app')));
-  line('env safe-area top / bottom', () => {
+  line('env safe-area top / right / bottom / left', () => {
     // A probe, because env() cannot be read off a variable that a rule may
     // have overridden — the probe reports what the DEVICE pays, the vars
-    // below report what the app decided to do with it.
+    // below report what the app decided to do with it. All four edges: the
+    // iPhone Duo pays its status pill as a RIGHT inset when closed (84px,
+    // 9 Nov 2026), the first phone to pay a side in portrait.
     const probe = document.createElement('div');
     probe.style.cssText =
       'position:fixed;top:0;left:0;height:0;width:0;visibility:hidden;pointer-events:none;' +
-      'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
+      'padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) ' +
+      'env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
     document.body.appendChild(probe);
     const style = getComputedStyle(probe);
-    const answer = `${style.paddingTop} / ${style.paddingBottom}`;
+    const answer = `${style.paddingTop} / ${style.paddingRight} / ${style.paddingBottom} / ${style.paddingLeft}`;
     probe.remove();
     return answer;
   });
   const docStyle = getComputedStyle(doc);
   line('--wt-status-bar-inset', () => docStyle.getPropertyValue('--wt-status-bar-inset').trim() || '(unset)');
   line('--wt-home-indicator-inset', () => docStyle.getPropertyValue('--wt-home-indicator-inset').trim() || '(unset)');
+  line('--wt-side-inset-left / right', () =>
+    `${docStyle.getPropertyValue('--wt-side-inset-left').trim() || '(unset)'} / ${docStyle.getPropertyValue('--wt-side-inset-right').trim() || '(unset)'}`
+  );
   line('viewport / screen', () =>
     `${window.innerWidth}×${window.innerHeight} / ${window.screen.width}×${window.screen.height}`
   );
