@@ -39,7 +39,19 @@ const config: CapacitorConfig = {
     url: 'https://www.reckley.co.uk',
   },
   ios: {
-    contentInset: 'automatic',
+    // 'never', which is Capacitor's own default. 'automatic' (set when the
+    // shell was born, #438, with no reason recorded) becomes
+    // scrollView.contentInsetAdjustmentBehavior = .automatic, and UIKit then
+    // adds the status bar's height to the web view's content inset the first
+    // time the page is pulled past its top — the WHOLE layout viewport,
+    // fixed and sticky chrome included, drops by that height and the shell's
+    // background shows above it. Measured 9 Nov 2026 on the owner's Duo
+    // (open, upright: 66pt) and on the iPhone 17 simulator (59pt), on the
+    // production build; a white header on a light ground had hidden it, the
+    // navy one made it plain. The app pays the status bar itself through
+    // env(safe-area-inset-top) (--wt-status-bar-inset), which is unaffected
+    // by this setting, so nothing else has to change.
+    contentInset: 'never',
   },
   plugins: {
     // A push that arrives while the app is OPEN is still shown as a banner
