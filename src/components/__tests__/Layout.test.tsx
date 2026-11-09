@@ -106,6 +106,21 @@ describe('Layout', () => {
     expect(navElements.length).toBeGreaterThan(0);
   });
 
+  it('swaps the desktop bar for the phone header at lg, and at the same edge for both', () => {
+    renderWithProviders(<Layout />);
+    // The opened iPhone Duo (951px) and an upright iPad (768px) sit between
+    // md and lg, and the desktop bar there was a row of icons (owner, 9 Nov
+    // 2026). They get the phone header and its slide-out menu instead. The
+    // two classes have to name the same breakpoint or both bars (or neither)
+    // would show across a band of widths.
+    const desktopBar = screen.getByRole('navigation', { name: 'Main navigation' });
+    expect(desktopBar.className).toContain('hidden lg:block');
+    expect(desktopBar.className).not.toMatch(/\bmd:block\b/);
+    const phoneHeader = screen.getByRole('banner');
+    expect(phoneHeader.className).toContain('lg:hidden');
+    expect(phoneHeader.className).not.toMatch(/\bmd:hidden\b/);
+  });
+
   it('focuses desktop search input when Ctrl+K is pressed', async () => {
     renderWithProviders(<Layout />);
 

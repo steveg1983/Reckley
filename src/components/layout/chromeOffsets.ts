@@ -53,8 +53,8 @@ export const TOP_CHROME_OFFSET = `calc(${SAFE_AREA_TOP} + ${DEMO_BANNER_OFFSET})
  * `Layout.tsx`), for the same reason and by the same means as the demo banner
  * publishes its own height: the bar is the only thing that knows.
  *
- * Only one of the two bars is displayed at a time (`hidden md:block` against
- * `md:hidden`), so the hidden one measures 0 and the larger of the pair is
+ * Only one of the two bars is displayed at a time (`hidden lg:block` against
+ * `lg:hidden`), so the hidden one measures 0 and the larger of the pair is
  * whichever is on screen. That is what lets a consumer survive a breakpoint
  * change without knowing where the breakpoint is.
  */

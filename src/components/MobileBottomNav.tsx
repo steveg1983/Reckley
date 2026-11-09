@@ -46,6 +46,15 @@ const mobileNavItems: MobileNavItem[] = [
   { to: '/accounts?focus=review', icon: TagIcon, label: 'Categorise' },
 ];
 
+/**
+ * The widest the floating pill gets. 26rem (416px) holds the five labelled
+ * destinations and the + with the air they have on a 390px phone, where the
+ * pill is 374px wide; above a 432px window it stops growing and centres.
+ * The quick-actions menu's horizontal anchor is derived from this, so the
+ * two cannot disagree.
+ */
+const PILL_MAX_WIDTH = '26rem';
+
 export default function MobileBottomNav(): React.JSX.Element {
   const location = useLocation();
   const [showQuickActions, setShowQuickActions] = useState(false);
@@ -94,7 +103,16 @@ export default function MobileBottomNav(): React.JSX.Element {
               exactly one of the two modes this panel has. */}
           <div
             className="absolute bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-2 min-w-[200px]"
-            style={{ right: `calc(0.75rem + ${SIDE_INSET_RIGHT})`, bottom: 'calc(4.875rem + var(--wt-home-indicator-inset, 0px))' }}
+            // Horizontally it sits 0.25rem inside the pill's right edge. When
+            // the pill is capped at PILL_MAX_WIDTH and centred, that edge is
+            // no longer the window's: it moves in by half of whatever the
+            // window has to spare, so the menu moves with it or floats away
+            // from the + it belongs to. 0px to spare on a phone, where the
+            // max() is the old number exactly.
+            style={{
+              right: `calc(0.75rem + ${SIDE_INSET_RIGHT} + max(0px, (100% - ${PILL_MAX_WIDTH} - 1rem - ${SIDE_INSET_LEFT} - ${SIDE_INSET_RIGHT}) / 2))`,
+              bottom: 'calc(4.875rem + var(--wt-home-indicator-inset, 0px))'
+            }}
           >
             {/* The add-transaction modal is Layout's and is opened by an
                 app-wide parameter, so this points at a page that still exists
@@ -147,6 +165,17 @@ export default function MobileBottomNav(): React.JSX.Element {
           // …plus the iPhone Duo's status-pill column, 0px everywhere else.
           left: `calc(0.5rem + ${SIDE_INSET_LEFT})`,
           right: `calc(0.5rem + ${SIDE_INSET_RIGHT})`,
+          // A WIDTH OF ITS OWN above phone width. On the iPhone Duo opened and
+          // held upright (669px) the pill ran edge to edge and read as a bar
+          // again (owner, 9 Nov 2026: "it can be made smaller and hover over
+          // the page behind"). Capped here and centred by the auto margins
+          // inside the left/right box, so the side insets still count. At or
+          // below PILL_MAX_WIDTH plus the two 0.5rem gaps — every phone — this
+          // changes nothing. Inline, like its neighbours, for the reason the
+          // header comment gives.
+          maxWidth: PILL_MAX_WIDTH,
+          marginLeft: 'auto',
+          marginRight: 'auto',
           // 0.125rem: halved from 0.75 on 30 Aug ("moving the pill down a
           // bit"), and halved again 31 Aug when the owner asked for the same
           // thing once more — "the pill can also sit lower". Still floating,
