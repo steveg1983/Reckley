@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { SignInButton, SignUpButton, useAuth } from '@clerk/clerk-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ReckleyLockup } from '../components/brand/ReckleyLockup';
+import { SIDE_INSET_LEFT, SIDE_INSET_RIGHT } from '../components/layout/chromeOffsets';
 
 /**
  * THE LANDING PAGE — Claude Design's 29 Aug 2026 handover, ported section by
@@ -188,7 +189,16 @@ export default function Welcome(): React.JSX.Element {
   const year = new Date().getFullYear();
 
   return (
-    <div className={`min-h-screen ${DARK_GROUND} text-[#f1f3f7] antialiased`}>
+    <div
+      className={`min-h-screen ${DARK_GROUND} text-[#f1f3f7] antialiased`}
+      /* This page is mounted outside Layout, so it pays the side insets itself
+         — the iPhone Duo bills its camera pill as a safe-area inset down the
+         whole right edge when closed (84px, 9 Nov 2026), and the header's
+         Sign in sat under it. The ground pads, as Layout's does; the dark
+         ground shows in the column beside the lighter sections, which is the
+         convention Apple's own Settings follows. 0px everywhere else. */
+      style={{ paddingLeft: SIDE_INSET_LEFT, paddingRight: SIDE_INSET_RIGHT }}
+    >
       {/* Signed-out header — wordmark and the two account actions, nothing
           else (handover §5.1). Create an account yields to the hero CTA below
           640px rather than crowding the bar (§6). */}

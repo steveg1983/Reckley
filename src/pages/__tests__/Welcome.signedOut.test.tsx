@@ -55,6 +55,17 @@ describe('the signed-out front door', () => {
     const heading = screen.getByRole('heading', { level: 1 });
     expect(heading.closest('.min-h-screen')).not.toBeNull();
   });
+
+  it('pays the side insets itself, being outside the Layout that pays them for every other page', () => {
+    renderWelcome();
+    // The iPhone Duo bills its camera pill as a safe-area inset down the
+    // whole right edge when closed (84px, 9 Nov 2026); the header's Sign in
+    // was drawn under it because this page is mounted outside Layout.
+    const ground = screen.getByRole('heading', { level: 1 }).closest<HTMLElement>('.min-h-screen');
+    if (!ground) throw new Error('the page lost its ground');
+    expect(ground.style.paddingLeft).toBe('var(--wt-side-inset-left, 0px)');
+    expect(ground.style.paddingRight).toBe('var(--wt-side-inset-right, 0px)');
+  });
 });
 
 /**
