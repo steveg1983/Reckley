@@ -78,9 +78,12 @@ What follows from the table:
   `remotepairingd` (or restart) or it lists the OLD Xcode's simulators as
   "unavailable", shows none of the new runtime's, and will not pair a phone —
   while each Add Device still quietly creates and boots a device behind it.
-- `xcrun devicectl device capture screenshot` returns a black PNG for the Duo;
-  `devicectl device copy from --domain-type appDataContainer` does work, which
-  is how the probe's log came off the phone.
+- `xcrun devicectl device capture screenshot` captures the PRIMARY display,
+  which on the Duo is the outer one — black whenever the phone is open. Pass
+  `--display-unique-id` of the active display from
+  `devicectl device info displays` (the inner one listed itself as
+  `123-456-789`) and the inner screen comes back. `devicectl device copy from
+  --domain-type appDataContainer` is how the probe's log came off the phone.
 
 ## Associated Domains — why a password would not save
 
