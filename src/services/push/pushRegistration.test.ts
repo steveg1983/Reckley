@@ -53,12 +53,28 @@ const within = <T>(ms: number, promise: Promise<T>): Promise<T> =>
 
 const originalCapacitor = window.Capacitor;
 
+/**
+ * Registration refuses, BEFORE it touches the plugin, when there is no
+ * Supabase client to save a token with — Apple's prompt is never shown for
+ * a token that could not be kept. CI runs this suite with no Supabase
+ * variables, so the client is null there (locally `.env.local` supplies
+ * them). These values give the module a client that is never called: every
+ * path below ends before the upsert.
+ */
+const withACloudSession = (): void => {
+  vi.stubEnv('VITE_SUPABASE_URL', 'https://example.supabase.co');
+  vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'anon-key-for-a-client-this-suite-never-calls');
+};
+
 beforeEach(() => {
   window.Capacitor = { isNativePlatform: () => true };
+  withACloudSession();
+  vi.resetModules();
 });
 
 afterEach(() => {
   window.Capacitor = originalCapacitor;
+  vi.unstubAllEnvs();
   vi.resetModules();
 });
 
@@ -93,6 +109,20 @@ describe('loading the push plugin', () => {
       kind: 'denied',
     });
     expect(fake.calls).toContain('requestPermissions');
+  });
+
+  it('refuses before asking iOS when there is no cloud session to keep a token', async () => {
+    fake = makeProxyPlugin('granted');
+    vi.stubEnv('VITE_SUPABASE_URL', '');
+    vi.stubEnv('VITE_SUPABASE_ANON_KEY', '');
+    vi.resetModules();
+    const { registerThisPhone } = await import('./pushRegistration');
+
+    await expect(within(500, registerThisPhone('00000000-0000-4000-8000-000000000001'))).resolves.toEqual({
+      kind: 'failed',
+      message: 'No cloud session to register with',
+    });
+    expect(fake.calls).toEqual([]);
   });
 
   it('is not a phone when Capacitor is absent', async () => {
