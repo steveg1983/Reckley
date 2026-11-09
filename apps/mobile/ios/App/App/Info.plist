@@ -66,5 +66,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- Capacitor's bridge view controller reads this key and answers
+	     preferredStatusBarStyle with it (CAPBridgeViewController: any value
+	     other than Default/DarkContent is light content). The clock sits on
+	     the web view's header shoulder, which is navy at every width since
+	     9 Nov 2026, so the clock is light in both colour schemes. Reaches the
+	     phone only with a new build (7). -->
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
 </dict>
 </plist>

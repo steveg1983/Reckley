@@ -539,10 +539,17 @@ export default function Layout(): React.JSX.Element {
         </div>
       </nav>
 
-      {/* Mobile Header */}
+      {/* Mobile Header — the same navy as the desktop bar, in both colour
+          schemes (owner, 9 Nov 2026, from the iPhone Duo: "when in landscape
+          view the top header is in our dark blue colour, but when in
+          horizontal view the header is white"). One bar colour at every
+          width, and the bell — painted for the navy bar and mounted here too
+          — becomes visible on the phone, where white/60 on white had hidden
+          it. The shell's status bar is set to light content to match
+          (Info.plist UIStatusBarStyle). */}
       <header
         ref={mobileHeaderRef}
-        className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white dark:bg-gray-800 shadow-md"
+        className="md:hidden fixed top-0 left-0 right-0 z-40 bg-[#1a2332] shadow-md"
         // The status bar's room as well as the banner's — see TOP_CHROME_OFFSET.
         // This header carries the identity menu, so getting it wrong took the
         // only way to sign out on a phone behind the battery indicator.
@@ -559,24 +566,24 @@ export default function Layout(): React.JSX.Element {
             no arithmetic of its own. */}
         <div
           aria-hidden="true"
-          className="absolute left-0 right-0 bottom-full bg-white dark:bg-gray-800"
+          className="absolute left-0 right-0 bottom-full bg-[#1a2332]"
           style={{ height: TOP_CHROME_OFFSET }}
         />
         <div className="flex items-center justify-between py-4" style={sidePadding('1rem')}>
           <button
             onClick={toggleMobileMenu}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
             aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
             aria-expanded={isMobileMenuOpen}
             aria-controls="mobile-menu"
             title={isMobileMenuOpen ? 'Close menu (Escape)' : 'Open menu (Alt+M)'}
           >
-            {isMobileMenuOpen ? <XIcon size={24} className="text-gray-700 dark:text-gray-200" /> : <MenuIcon size={24} className="text-gray-700 dark:text-gray-200" />}
+            {isMobileMenuOpen ? <XIcon size={24} /> : <MenuIcon size={24} />}
           </button>
           
-          {/* Navy on the white bar, white on the dark one: the lockup has one
-              colour and takes it from here. */}
-          <h1 className="text-[#1a2332] dark:text-white" id="mobile-app-title">
+          {/* The lockup has one colour and takes it from here: white, as on
+              the desktop bar. */}
+          <h1 className="text-white" id="mobile-app-title">
             <ReckleyLockup layout="horizontal" width={96} />
           </h1>
           
@@ -590,10 +597,10 @@ export default function Layout(): React.JSX.Element {
                   openMobileSearch();
                 }
               }}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               aria-label="Search"
             >
-              <SearchIcon size={20} className="text-gray-700 dark:text-gray-200" />
+              <SearchIcon size={20} />
             </button>
             <IdentityMenu />
           </div>

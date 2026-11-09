@@ -129,7 +129,15 @@ export default function NetWorthSummary({
    * near-black navy to the eye, and the colour the rest of the app's headline
    * figures already use.
    */
-  const NET_FIGURE_CLASS = 'text-display font-semibold text-gray-900 dark:text-white';
+  /* `text-display` only from `lg`. The three cells sit abreast from `sm`,
+     and at the widths between — the opened iPhone Duo held upright is 669px,
+     an iPad held upright 768 — a cell is some 180–240px wide, where an
+     eight-digit net worth at 32px wraps onto a second line while its two
+     neighbours at 24px do not (owner's screenshot, 9 Nov 2026: "the Net
+     worth figure is not in line with the what you own and what you owe
+     figures"). Below `lg` all three figures share the 24px size and the
+     baseline; from `lg` the net figure is the headline again. */
+  const NET_FIGURE_CLASS = 'text-page lg:text-display font-semibold text-gray-900 dark:text-white';
   const COMPONENT_FIGURE_CLASS = 'text-page font-semibold text-gray-900 dark:text-white';
 
   const cells: ReadonlyArray<{
