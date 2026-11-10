@@ -9,5 +9,10 @@
 		<string>webcredentials:www.wealthtrackerpro.co.uk</string>
 		<string>webcredentials:www.reckley.co.uk</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.wealthtracker.mobile</string>
+		<string>$(AppIdentifierPrefix)com.wealthtracker.mobile.widget</string>
+	</array>
 </dict>
 </plist>
