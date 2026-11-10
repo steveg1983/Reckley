@@ -221,6 +221,18 @@ the distribution profile itself. The key lives in
 `~/Documents/WealthTracker-signing/` and Apple allows it to be downloaded
 **once** — back that folder up.
 
+**What the key could not do (build 8, 10 Nov 2026).** A build that carries a
+NEW App ID — the widget extension was the first — archives and signs for
+development, and then the export is refused: *"Cloud signing permission error
+… You haven't been given access to cloud-managed distribution certificates"*
+and *"No profiles for 'com.wealthtracker.mobile.widgets' were found"*. The key
+can regenerate a profile that exists; with its present role it cannot create
+the first one. The owner finished build 8 from Organizer (Distribute App →
+App Store Connect → Upload), which created the profile. The script therefore
+archives into Xcode's own archives folder, so the build is in Organizer when
+that is needed. Whether the next build exports headlessly again, now the
+profile exists, is not yet proven.
+
 A build number already on App Store Connect is rejected *after* the upload
 rather than before, so the script sets it deliberately and refuses to let
 Xcode renumber.
