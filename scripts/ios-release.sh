@@ -120,6 +120,32 @@ fi
 # host on a bare line of its own, and it was read as missing.
 echo "==> Entitlement present: $(codesign -d --entitlements :- "$APP" 2>/dev/null | grep -o 'webcredentials:[^<]*' | paste -sd ' ' -)"
 
+# The home-screen widgets (build 8, Nov 2026). The widget is a second signed
+# binary inside the app, and it reads its key from a keychain group BOTH must
+# be entitled to. An archive without the extension has no widgets; one where
+# either binary lacks the group has a widget that says "turn me on" for ever,
+# because the app writes the key where the widget may not look. Neither shows
+# on a simulator build, which does not enforce the group.
+WIDGETS="$APP/PlugIns/ReckleyWidgets.appex"
+if [ ! -d "$WIDGETS" ]; then
+  echo "The archive does not carry the widget extension — refusing to upload." >&2
+  exit 1
+fi
+WIDGET_GROUP="VT6W829WRX.com.wealthtracker.mobile.widget"
+for SIGNED in "$APP" "$WIDGETS"; do
+  if ! codesign -d --entitlements :- "$SIGNED" 2>/dev/null | grep -q "<string>$WIDGET_GROUP</string>"; then
+    echo "$(basename "$SIGNED") is not entitled to the keychain group $WIDGET_GROUP — the widget could never read its key. Refusing to upload." >&2
+    exit 1
+  fi
+done
+APP_BUILD="$(plutil -extract CFBundleVersion raw -o - "$APP/Info.plist")"
+WIDGET_BUILD="$(plutil -extract CFBundleVersion raw -o - "$WIDGETS/Info.plist")"
+if [ "$APP_BUILD" != "$WIDGET_BUILD" ]; then
+  echo "The app is build $APP_BUILD and its widget extension is build $WIDGET_BUILD — App Store Connect refuses a mismatch. Refusing to upload." >&2
+  exit 1
+fi
+echo "==> Widget extension present, build $WIDGET_BUILD, both binaries entitled to $WIDGET_GROUP"
+
 EXPORT_PLIST="${TMPDIR:-/tmp}/wt-export-options.plist"
 cat > "$EXPORT_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

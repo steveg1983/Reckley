@@ -125,6 +125,78 @@ Three things that are easy to get wrong, all of which we did:
 domain before an install can believe it. Deploy the web change first, then
 build.
 
+## Home-screen widgets (10 Nov 2026, first in build 8)
+
+The first native surface the shell has: a WidgetKit extension,
+`ios/App/ReckleyWidgets`, with one widget — **Key Budgets**, small and medium.
+It fetches for itself (owner's ruling, 10 Nov): it holds a read-only key and
+asks `GET /api/widget/budgets`, so it is current while the app is closed.
+
+**How the key gets there.** The page cannot reach a widget and a widget cannot
+read the page's session, so the app target carries one small Capacitor plugin,
+`ReckleyWidget` (`App/ReckleyWidgetPlugin.swift`), and the Settings card
+(`src/components/settings/WidgetSettings.tsx`) calls it:
+
+| call | does |
+| --- | --- |
+| `status()` | `{ hasKey, keyId }` — never the key |
+| `setKey({ key, keyId, origin })` | stores all three as ONE keychain item, redraws |
+| `clearKey()` | forgets it, redraws |
+| `reload()` | redraws — a setting changed |
+
+Things that are true of it and not obvious:
+
+- **The plugin is registered by hand.** It is not a package, so Capacitor's
+  class list does not find it: `ReckleyBridgeViewController.capacitorDidLoad()`
+  registers the instance and `Main.storyboard` names that class. Registered
+  there, its script is injected at document start, which is what makes
+  `Capacitor.isPluginAvailable('ReckleyWidget')` true on the REMOTE page —
+  and that answer is the only thing that draws the Settings card. Measured in
+  the simulator against production, 10 Nov.
+- **The key is in the keychain, in a group both binaries are entitled to**
+  (`keychain-access-groups` in `App/App.entitlements` and
+  `ReckleyWidgets/ReckleyWidgets.entitlements`; spelled a third time in
+  `Shared/WidgetKeyStore.swift`, which is compiled into both targets). Not an
+  App Group: a shared preferences file goes into backups and a this-device
+  keychain item does not, and a keychain group needs nothing registered in the
+  Apple account. The app's own group stays FIRST in its list, because the
+  first group is where an app's unqualified keychain items go.
+- **A keychain item outlives the app.** `forgetIfFreshInstall()` runs as the
+  plugin loads: no marker in the app's preferences beside a held key means the
+  key belonged to a copy that was deleted.
+- **The key and the origin are never changed apart.** The origin is where the
+  key is sent. A page in the web view can replace both together and can read
+  neither back.
+- **A key the server refuses is forgotten by the widget itself** (401 → the
+  item is deleted), so the Settings card stops saying "on" for a key that was
+  revoked from somewhere else. Proven end to end in the simulator with a
+  made-up key: the app stored it, the widget sent it to production, production
+  answered 401, and the app then reported no key.
+- **The widget does no arithmetic.** Every figure arrives as the words to draw
+  (`api/_lib/widget-budgets.ts`); `percent` is the length of a bar.
+- **The extension needs iOS 17**; the app still installs on 15. A phone older
+  than 17 simply has no Reckley widget to add.
+- **`src/services/widget/__tests__/nativeContract.test.ts` reads the Swift,
+  the two entitlements, the storyboard and the project file**, because nothing
+  else in CI compiles the page and the shell together.
+
+**Proving it in a simulator** needs no Apple account:
+`xcodebuild -project App.xcodeproj -scheme App -configuration Debug
+-destination id=<sim> -derivedDataPath <scratch> build` — WITHOUT
+`CODE_SIGNING_ALLOWED=NO` this time, because the simulated entitlements are
+what carry the keychain group. Then `simctl install`, sign in, Settings.
+Adding the widget by script: long-press the wallpaper, then the top-left
+button → Add Widget. The simulator tool's `tap` misses that button; a
+two-point `touch_path` hits it.
+
+**Not proven until build 8 is on a phone:** automatic signing creating the
+extension's App ID (`com.wealthtracker.mobile.widgets`) and its distribution
+profile from the API key; the keychain group between two device-signed
+binaries (a simulator does not enforce it — the release script checks the
+signed entitlements for exactly this reason); and whether a locked phone
+blanks the rows marked `privacySensitive` when "Hide figures while the phone
+is locked" is on.
+
 ## Releasing to TestFlight
 
 `scripts/ios-release.sh [build-number]` — archives, checks the entitlement
