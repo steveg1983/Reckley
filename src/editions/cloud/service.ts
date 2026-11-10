@@ -21,6 +21,7 @@
 import SubscriptionStatusComponent from '../../components/SubscriptionStatus';
 import BankFeedRefreshSettingsComponent from '../../components/settings/BankFeedRefreshSettings';
 import PhoneNotificationSettingsComponent from '../../components/settings/PhoneNotificationSettings';
+import WidgetSettingsComponent from '../../components/settings/WidgetSettings';
 import DangerZoneComponent from '../../components/settings/DangerZone';
 import SignOutPanelComponent from '../../components/settings/SignOutPanel';
 import SessionGuardComponent from '../../components/SessionGuard';
@@ -57,6 +58,9 @@ export const BankFeedRefreshSettings: ServicePanel = BankFeedRefreshSettingsComp
 
 /** What the phone may push, on /settings/app — drawn only inside the iOS shell. */
 export const PhoneNotificationSettings: ServicePanel = PhoneNotificationSettingsComponent;
+
+/** The home-screen widgets' key and how they draw, on /settings/app — only in a shell that has them. */
+export const WidgetSettings: ServicePanel = WidgetSettingsComponent;
 
 /** Delete the whole account — Stripe, rows, and the Clerk identity. */
 export const DangerZone: ServicePanel = DangerZoneComponent;

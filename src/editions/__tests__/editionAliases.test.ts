@@ -295,6 +295,7 @@ describe('the edition seams', () => {
       'SessionGuard',
       'SignOutPanel',
       'SubscriptionStatus',
+      'WidgetSettings',
       'useAccountBankSync',
       'useBankConnectionSnapshot'
     ]);

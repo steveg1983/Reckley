@@ -450,9 +450,20 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  * claimed a share of the difference is gone, and so is the list's height cap
  * (owner, 10 Nov 2026). Budgets hold at 3914 / 1206 — measured + 38.6 KiB raw
  * (+1.00%) and + 12.0 KiB gzip (+1.01%), the standing rule already.
+ *
+ * ── RE-RECORDED 2026-11-10, SAME DAY: A CARD THIS EDITION DOES NOT DRAW ─────
+ *
+ *     + the bank's two lines  3875.4 KiB raw   1194.0 KiB gzip
+ *     + the widgets' seam     3875.5 KiB raw   1193.8 KiB gzip   +0.1 / −0.2
+ *
+ * Intended, and nearly nothing: the home-screen widgets' Settings card is
+ * the cloud edition's, and what reaches this renderer is the `@service`
+ * member that draws nothing, its place on the shared App Settings page,
+ * and two names in the inventory of preferences that travel. Recorded
+ * rather than left to drift. Budgets hold at 3914 / 1206.
  */
-const BASELINE_TOTAL_RAW_KIB = 3875.4;
-const BASELINE_TOTAL_GZIP_KIB = 1194.0;
+const BASELINE_TOTAL_RAW_KIB = 3875.5;
+const BASELINE_TOTAL_GZIP_KIB = 1193.8;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that

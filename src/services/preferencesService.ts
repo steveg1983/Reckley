@@ -245,6 +245,15 @@ export const PORTABLE_PREFERENCE_KEYS: readonly string[] = [
   'phoneNotifications.prefs.v1',
   'device.timeZone.v1',
 
+  // ── Home-screen widgets ──────────────────────────────────────────────────
+  // How the person wants their budgets seen at a glance — amounts or
+  // percentages, hidden while locked or not. The SERVER reads both from this
+  // document to shape what a widget is sent (api/_lib/widget-budgets.ts).
+  // Whether a phone HOLDS a widget key is not here: that is a fact about one
+  // phone, and it is asked of the phone. See services/widget/prefs.ts.
+  'widgetDisplay',
+  'widgetHideWhenLocked',
+
   // ── Formatting ───────────────────────────────────────────────────────────
   'preferredLocale',
 ] as const;
