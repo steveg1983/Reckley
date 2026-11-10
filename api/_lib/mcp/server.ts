@@ -41,8 +41,6 @@ import { McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import type { Category, Transaction } from '../../../src/types/index.js';
 import { computeIncomeExpense } from '../../../src/utils/incomeExpense.js';
-import { evaluateBudgets } from '../../../src/utils/budgetEvaluation.js';
-import { getBudgetPeriodWindow } from '../../../src/utils/budgetPeriods.js';
 import { bucketByCategoryDirection } from '../../../src/utils/categoryNetting.js';
 import { expandSplitTransactions } from '../../../src/utils/transactionSplits.js';
 import { FALLBACK_BANK_DESCRIPTION, normalizePayee } from '../../../src/utils/payeeAutoCategorize.js';
@@ -50,6 +48,7 @@ import { isAwaitingReview, isUnfiled } from '../../../src/utils/transactionRevie
 import { signTransactionAmount } from '../../../src/utils/transactionAmount.js';
 import { toDecimal } from '../../../src/utils/decimal.js';
 import { PortRefusal, type PortAccount, type ReckleyPort, type ReviewFilter, type TransactionPatch } from './port.js';
+import { categoryPath, evaluateRunningBudgets, localDay } from '../budget-status.js';
 import { balancesAt, netWorthSeriesByCurrency, type SeriesAccount } from './netWorthSeries.js';
 
 export const READ_SCOPE = 'reckley:read';
@@ -151,14 +150,6 @@ const confirmFlag = z
 const dayOf = (date: Date | string): string =>
   (typeof date === 'string' ? new Date(date) : date).toISOString().slice(0, 10);
 
-/**
- * A budget window's bounds are LOCAL midnights (utils/budgetPeriods), so they
- * are named by their local calendar parts — through toISOString, 1 October
- * at 00:00 BST would read as 30 September.
- */
-const localDay = (date: Date): string =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-
 /** "-12.34 GBP": a signed magnitude and the currency code, nothing a locale could misread. */
 export const money = (amount: number, currency: string): string => {
   const sign = amount < 0 ? '-' : '';
@@ -183,19 +174,6 @@ function fitPage<T, R extends { text: string }>(items: T[], render: (page: T[]) 
 interface Lookups {
   accounts: Map<string, PortAccount>;
   categories: Map<string, Category>;
-}
-
-/** "Bills (Household) > Telephone" — the path a category reads as on screen. */
-function categoryPath(id: string | undefined, categories: Map<string, Category>): string | null {
-  if (!id) return null;
-  const parts: string[] = [];
-  let current = categories.get(id);
-  let guard = 0;
-  while (current && guard++ < 6) {
-    if (current.level !== 'type') parts.unshift(current.name);
-    current = current.parentId ? categories.get(current.parentId) : undefined;
-  }
-  return parts.length > 0 ? parts.join(' > ') : (categories.get(id)?.name ?? null);
 }
 
 /** One row as the tools report it, in both formats. */
@@ -1130,47 +1108,23 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ response_format }) => {
-      const [budgets, categories, look] = await Promise.all([port.listBudgets(), port.listCategories(), lookups()]);
-      const today = now();
-      // Running today: active, and neither finished (past its end date) nor
-      // yet to start. A finished budget's figure is history, a future one's is
-      // nothing; the Budget page shows both captioned as such, this answer
-      // is about now.
-      const active = budgets.filter(budget => budget.isActive);
-      const running = active.filter(budget => {
-        const window = getBudgetPeriodWindow(budget, today);
-        return !window.ended && !window.notStarted;
-      });
-      if (running.length === 0) {
+      // Which budgets are running, how wide the read is and the evaluation
+      // itself are api/_lib/budget-status — shared with the home-screen
+      // widget, so the two cannot quote different figures.
+      const { activeCount, evaluated, currency, categories } = await evaluateRunningBudgets(port, now(), AGGREGATE_ROW_CAP);
+      if (evaluated.length === 0) {
         const body = { count: 0, budgets: [] as never[] };
-        const text = active.length === 0
+        const text = activeCount === 0
           ? 'No active budgets.'
           : 'No budgets running today: the active ones have finished or have not started yet.';
         return response_format === ResponseFormat.JSON
           ? { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body }
           : { content: [{ type: 'text', text }] };
       }
-      // Budgets are measured over their own windows — since 5 Nov 2026 a
-      // repeating budget runs its cycle from its OWN start, so a yearly one
-      // can straddle two calendar years. The read covers the earliest start
-      // to the latest end among them, nothing wider and nothing narrower.
-      const windows = running.map(budget => getBudgetPeriodWindow(budget, today));
-      const earliest = windows.reduce((soFar, w) => (w.start < soFar ? w.start : soFar), windows[0].start);
-      const latest = windows.reduce((soFar, w) => (w.end > soFar ? w.end : soFar), windows[0].end);
-      const range = await port.transactionsBetween(localDay(earliest), localDay(latest), AGGREGATE_ROW_CAP);
-      const currency = look.accounts.values().next().value?.currency ?? 'GBP';
-      const evaluated = evaluateBudgets(running, {
-        transactions: range.rows,
-        transactionSplits: range.splits,
-        categories,
-        now: today,
-        // Every active budget, so what one sends another is counted into it.
-        budgets: active,
-      });
       const described = evaluated.map(entry => ({
         id: entry.budget.id,
-        name: entry.budget.name || (categoryPath(entry.categoryId, look.categories) ?? entry.categoryId),
-        category: categoryPath(entry.categoryId, look.categories),
+        name: entry.budget.name || (categoryPath(entry.categoryId, categories) ?? entry.categoryId),
+        category: categoryPath(entry.categoryId, categories),
         period: entry.window.label,
         from: localDay(entry.window.start),
         to: localDay(entry.window.end),
