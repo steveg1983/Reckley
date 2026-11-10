@@ -5,6 +5,7 @@ import { setCorsHeaders } from '../_lib/cors.js';
 import { createErrorResponse } from '../_lib/http-error.js';
 import { getServiceRoleSupabase } from '../_lib/supabase.js';
 import { withSentry } from '../_lib/sentry.js';
+import { pendingFromColumns, type PendingAtBank } from '../../src/services/banking/pendingAtBank.js';
 
 async function handler(req: VercelRequest, res: VercelResponse) {
   if (setCorsHeaders(req, res)) {
@@ -62,9 +63,37 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // What each bank says is pending, per account. Its own query, and allowed
+    // to fail: it selects columns a database may not have yet (the migration
+    // is applied by hand), and the connections list must load either way.
+    const pendingByConnection = new Map<string, Record<string, PendingAtBank>>();
+    if (connectionIds.length > 0) {
+      const pendingResult = await supabase
+        .from('linked_accounts')
+        .select('connection_id, account_id, pending_items, pending_as_of')
+        .in('connection_id', connectionIds)
+        .not('pending_as_of', 'is', null);
+
+      if (pendingResult.error) {
+        console.error('[connections] failed to load pending-at-bank', {
+          message: pendingResult.error.message
+        });
+      } else {
+        (pendingResult.data ?? []).forEach((row) => {
+          const pending = pendingFromColumns(row);
+          if (!pending || typeof row.account_id !== 'string') return;
+          const forConnection = pendingByConnection.get(row.connection_id) ?? {};
+          forConnection[row.account_id] = pending;
+          pendingByConnection.set(row.connection_id, forConnection);
+        });
+      }
+    }
+
     const response: ConnectionsResponse = (data ?? []).map((connection) => {
       const linkedAccountIds = linkedAccountIdsByConnection.get(connection.id) ?? [];
+      const pendingAtBank = pendingByConnection.get(connection.id);
       return {
+        ...(pendingAtBank ? { pendingAtBank } : {}),
         id: connection.id,
         provider: connection.provider,
         institutionId: connection.institution_id,

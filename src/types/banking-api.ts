@@ -1,3 +1,5 @@
+import type { PendingAtBank } from '../services/banking/pendingAtBank.js';
+
 // POST /api/banking/create-link-token
 export interface CreateLinkTokenRequest {
   institutionId?: string;
@@ -218,6 +220,12 @@ export interface BankConnection {
   accountsCount: number;
   /** Reckley account ids linked to this connection (for per-account UI). */
   linkedAccountIds: string[];
+  /**
+   * What the bank says is pending — authorised, not yet posted — keyed by
+   * Reckley account id. Only accounts with at least one pending item appear;
+   * absent altogether when none do. See services/banking/pendingAtBank.
+   */
+  pendingAtBank?: Record<string, PendingAtBank>;
   expiresAt?: string;
   /**
    * The last failure the server recorded against this connection, if any.

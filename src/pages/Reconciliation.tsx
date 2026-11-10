@@ -4,6 +4,8 @@ import { useApp } from '../contexts/AppContextSupabase';
 import { useToast } from '../contexts/ToastContext';
 import { ArrowLeftIcon, CheckCircleIcon, CheckIcon } from '../components/icons';
 import { useReconciliation, type ReconciliationSummary } from '../hooks/useReconciliation';
+import { usePendingAtBank } from '../hooks/usePendingAtBank';
+import PendingAtBankList from '../components/banking/PendingAtBankList';
 import ReconciliationAccountList from '../components/reconciliation/ReconciliationAccountList';
 import {
   groupReconciliationSummaries,
@@ -232,6 +234,17 @@ export default function Reconciliation() {
   const bankBalance = selectedAccount?.bankBalance ?? selectedAccount?.lastReconciledBalance ?? null;
   const balanceConfirmed =
     confirmedBalance != null && confirmedBalance.accountId === selectedAccountId;
+  /**
+   * What the bank says is pending on this account. The proposed closing
+   * balance is the bank's own figure, and a card issuer's figure can already
+   * include items it has not posted — which leaves a difference no marked
+   * transaction can close. The list under the transactions names them and
+   * says how much of the difference they would account for.
+   */
+  const pendingAtBank = usePendingAtBank(selectedAccountId);
+  const differenceToExplain = bankBalance != null
+    ? toDecimal(bankBalance).minus(toDecimal(clearedBalance)).toNumber()
+    : null;
 
   /**
    * The figure moved under the agreement — so the agreement lapses.
@@ -810,6 +823,16 @@ export default function Reconciliation() {
         onAddTransaction={handleAddTransaction}
         onVisibleOrderChange={handleVisibleOrderChange}
       />
+
+      {/* Pending at the bank — the rows that explain a difference the posted
+          transactions cannot. Under the list, beneath a rule, faded. */}
+      {pendingAtBank && (
+        <PendingAtBankList
+          pending={pendingAtBank}
+          currency={selectedAccount?.currency}
+          difference={differenceToExplain}
+        />
+      )}
 
       {/* Edit / add transaction (new transactions default to this account) */}
       <EditTransactionModal

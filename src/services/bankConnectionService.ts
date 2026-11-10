@@ -17,6 +17,7 @@ import type {
   SyncAccountsResponse,
   SyncTransactionsResponse
 } from '../types/banking-api';
+import type { PendingAtBank } from './banking/pendingAtBank';
 import { isRuntimeBypassAllowed } from '../utils/runtimeMode';
 import { compareText } from '../utils/localeFormat';
 
@@ -32,6 +33,13 @@ export interface BankConnection {
   accountsCount?: number;
   /** Reckley account ids linked to this connection. */
   linkedAccountIds: string[];
+  /**
+   * What the bank says is pending on each linked account, keyed by Reckley
+   * account id — present only for accounts with at least one pending item.
+   * The reconcile screen reads it to explain a difference the posted feed
+   * cannot (services/banking/pendingAtBank).
+   */
+  pendingAtBank?: Record<string, PendingAtBank>;
   createdAt?: Date;
   expiresAt?: Date;
   error?: string;
@@ -545,6 +553,7 @@ export class BankConnectionService {
         accounts: [],
         accountsCount: connection.accountsCount,
         linkedAccountIds: connection.linkedAccountIds ?? [],
+        ...(connection.pendingAtBank ? { pendingAtBank: connection.pendingAtBank } : {}),
         expiresAt: connection.expiresAt ? new Date(connection.expiresAt) : undefined,
         // The last failure the server recorded. Present on a CONNECTED row
         // too — that is the "connected, but the last sync did not finish"
