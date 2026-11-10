@@ -23,9 +23,21 @@ import type { PendingAtBank } from '../../services/banking/pendingAtBank';
  *  - The caption says what they are and where they came from, because a grey
  *    row with no explanation reads as a row that failed to load.
  *
- * On the reconcile screen it is also handed the DIFFERENCE, and says how much
- * of it these rows would account for — the sentence the screen was missing
- * when a card's balance ran ahead of its posted transactions.
+ * On the reconcile screen it is also handed the bank's balance and the
+ * DIFFERENCE, and sets out two figures beneath the rows: what the bank
+ * reports now, and where that lands once these post (the owner, 10 Nov: "so
+ * the user can see what the card issuer is showing as the current account
+ * balance, but also… excluding the pending transactions").
+ *
+ * WHAT IT NO LONGER SAYS. The first version added "If the bank's balance
+ * already includes these, they account for £x of the difference". On the
+ * day it shipped the owner's American Express cards showed that issuer's
+ * balance is processed charges ONLY — a pending purchase larger than the
+ * whole balance sat beside it — so the sentence invited a comparison that
+ * was false, and he made it. (The real cause of that difference was a
+ * re-link snap, see planLinkBalanceSnap.) Only the exact case is still
+ * claimed: pending equal to the difference to the penny, which is what an
+ * issuer that DOES count pending produces.
  */
 export interface PendingAtBankListProps {
   pending: PendingAtBank;
@@ -35,12 +47,17 @@ export interface PendingAtBankListProps {
    * cleared balance), when there is one to explain. Omitted in the register.
    */
   difference?: number | null;
+  /**
+   * The bank's own reported balance, on the reconcile screen — the figure the
+   * two-line statement under the rows starts from. Omitted in the register.
+   */
+  bankBalance?: number | null;
 }
 
 /** A penny's tolerance: both figures are 2dp, compared in Decimal. */
 const samePence = (a: number, b: number): boolean => toDecimal(a).minus(toDecimal(b)).abs().lessThan(0.005);
 
-export default function PendingAtBankList({ pending, currency, difference }: PendingAtBankListProps): React.JSX.Element | null {
+export default function PendingAtBankList({ pending, currency, difference, bankBalance }: PendingAtBankListProps): React.JSX.Element | null {
   const { formatCurrency } = useCurrencyDecimal();
   if (pending.items.length === 0) return null;
 
@@ -63,9 +80,9 @@ export default function PendingAtBankList({ pending, currency, difference }: Pen
         as transactions when the bank posts them, and the amounts can change before then.
       </p>
 
-      {/* Capped and scrolling: a card with thirty authorisations outstanding
-          must not push the register's own rows off the screen. */}
-      <ul className="mt-2 max-h-48 overflow-y-auto text-sm text-gray-400 dark:text-gray-500 italic">
+      {/* Every row, no cap. A capped list said "7 items" and drew six, the
+          seventh under a scroll nobody could see was there (10 Nov 2026). */}
+      <ul className="mt-2 text-sm text-gray-400 dark:text-gray-500 italic">
         {pending.items.map((item, index) => (
           <li
             // Pending rows carry no id of their own; position in one reading is
@@ -85,11 +102,28 @@ export default function PendingAtBankList({ pending, currency, difference }: Pen
         <span className="tabular-nums font-semibold">{formatCurrency(pending.total, currency)}</span>
       </p>
 
-      {hasDifference && (
+      {/* Where the bank's figure is heading. Two facts and no inference:
+          whether an issuer's balance counts pending differs by issuer, so the
+          first line is only what it reported and the second only arithmetic. */}
+      {bankBalance != null && (
+        <dl className="mt-2 px-3 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-baseline justify-between py-0.5">
+            <dt>The bank’s reported balance</dt>
+            <dd className="tabular-nums">{formatCurrency(bankBalance, currency)}</dd>
+          </div>
+          <div className="flex items-baseline justify-between py-0.5">
+            <dt>If these post as shown</dt>
+            <dd className="tabular-nums">
+              {formatCurrency(toDecimal(bankBalance).plus(toDecimal(pending.total)).toNumber(), currency)}
+            </dd>
+          </div>
+        </dl>
+      )}
+
+      {explainsAll && (
         <p role="status" className="mt-2 px-3 text-xs text-gray-700 dark:text-gray-300">
-          {explainsAll
-            ? 'These pending items account for the whole difference. Nothing is missing from your ledger: the difference closes when the bank posts them.'
-            : `If the bank’s balance already includes these, they account for ${formatCurrency(pending.total, currency)} of the difference.`}
+          These pending items account for the whole difference. Nothing is missing from your ledger: the
+          difference closes when the bank posts them.
         </p>
       )}
     </section>

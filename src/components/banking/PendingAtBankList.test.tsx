@@ -56,11 +56,37 @@ describe('PendingAtBankList', () => {
     );
   });
 
-  it('claims only its own share of a difference it does not wholly explain', () => {
+  it('claims nothing about a difference it does not exactly equal', () => {
+    // An issuer's balance may or may not count pending (American Express does
+    // not), so a part-share is not this list's to assert.
     render(<PendingAtBankList pending={pending} difference={55.5} />);
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'If the bank’s balance already includes these, they account for £40.00 of the difference.'
-    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByText(/of the difference/)).not.toBeInTheDocument();
+  });
+
+  it('sets out the bank’s balance and where it lands once these post', () => {
+    render(<PendingAtBankList pending={pending} difference={55.5} bankBalance={-100} />);
+    const section = screen.getByRole('region', { name: 'Pending at the bank' });
+    expect(within(section).getByText('The bank’s reported balance').parentElement).toHaveTextContent('(£100.00)');
+    // −100.00 + 40.00, in Decimal.
+    expect(within(section).getByText('If these post as shown').parentElement).toHaveTextContent('(£60.00)');
+  });
+
+  it('shows no such statement in the register, which has no bank figure to start from', () => {
+    render(<PendingAtBankList pending={pending} />);
+    expect(screen.queryByText('The bank’s reported balance')).not.toBeInTheDocument();
+  });
+
+  it('draws every row it counts', () => {
+    const many = {
+      ...pending,
+      items: Array.from({ length: 30 }, (_unused, index) => ({ date: '2026-11-09', description: `ROW ${index}`, amount: -1 })),
+      total: -30,
+    };
+    render(<PendingAtBankList pending={many} />);
+    const section = screen.getByRole('region', { name: 'Pending at the bank' });
+    expect(within(section).getAllByRole('listitem')).toHaveLength(30);
+    expect(within(section).getByRole('list').className).not.toMatch(/max-h|overflow-y/);
   });
 
   it('stays quiet about a difference of nothing', () => {
