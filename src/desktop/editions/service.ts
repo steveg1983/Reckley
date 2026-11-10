@@ -62,6 +62,9 @@
  *                                 from, no token to push to — and the cloud
  *                                 half draws it only inside the iOS shell in
  *                                 any case. A desktop window is neither.
+ *   WidgetSettings                the home-screen widgets' read-only key.
+ *                                 There is no server to mint one and no
+ *                                 home screen to draw on.
  *   BankingCriticalIncidentBadge  "the bank feed is having an incident". There
  *                                 is no feed and no service to have one.
  *   BankConnections               the modal that lists a person's bank logins.
@@ -139,6 +142,9 @@ export const BankFeedRefreshSettings: ServicePanel = () => null;
  * this only inside the iOS shell in any case; a desktop window is neither.
  */
 export const PhoneNotificationSettings: ServicePanel = () => null;
+
+/** No server to mint a widget's key, and no home screen to draw one on. */
+export const WidgetSettings: ServicePanel = () => null;
 
 /** No account with anybody to close. See the header for where the wipe lives. */
 export const DangerZone: ServicePanel = () => null;

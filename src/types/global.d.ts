@@ -54,12 +54,16 @@ interface Window {
   __updateRealtimeActionTimestamp?: (entity: string, actionType: string) => void;
   /**
    * The bridge the iOS shell injects before the page's own scripts run.
-   * Only the one question the web app asks of it is declared — whether it is
-   * there at all; the plugins are reached through @capacitor/core's typed
-   * proxies, never through this object. See services/push/nativeShell.ts.
+   * Only the two questions the web app asks of it are declared — whether it
+   * is there at all, and whether the installed build carries a plugin by
+   * name (a page is newer than the app whenever the app has not been
+   * updated); the plugins are reached through @capacitor/core's typed
+   * proxies, never through this object. See services/push/nativeShell.ts
+   * and services/widget/widgetBridge.ts.
    */
   Capacitor?: {
     isNativePlatform?: () => boolean;
     getPlatform?: () => string;
+    isPluginAvailable?: (name: string) => boolean;
   };
 }

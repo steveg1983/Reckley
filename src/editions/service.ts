@@ -26,12 +26,19 @@
  *                        useBankConnectionSnapshot      banking
  *     /settings          SignOutPanel                   auth      ← added later
  *     /settings/app      PhoneNotificationSettings      banking   ← added 11 Sep
+ *     /settings/app      WidgetSettings                 auth      ← added 10 Nov
  *
  * The tenth is a push notification's switchboard, and it is `banking` rather
  * than a region of its own because every push the server sends is about a
  * feed the server refreshed or a reminder the server kept: a phone registers
  * a token WITH somebody, which is exactly this seam's one idea. The cloud
  * half draws it only inside the iOS shell; a device window is not a phone.
+ *
+ * The eleventh is the home-screen widget's card, and it is `auth`: a widget
+ * has no session of its own, so the card's switch asks the server for a
+ * read-only key on the signed-in person's behalf and hands it to the phone.
+ * A key is a thing you hold WITH somebody. The cloud half draws it only
+ * inside an iOS shell that carries the widget plugin.
  *
  * The eighth is the one that did not come from the measurement, and the way it
  * arrived is worth keeping: the owner could not find any way to sign out on his

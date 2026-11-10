@@ -31,13 +31,23 @@
 import type { Budget, Category } from '../../src/types/index.js';
 import type { EvaluatedBudget } from '../../src/utils/budgetEvaluation.js';
 import { toDecimal } from '../../src/utils/decimal.js';
+import {
+  parseWidgetDisplay,
+  parseWidgetHideWhenLocked,
+  WIDGET_DISPLAY_KEY,
+  WIDGET_HIDE_WHEN_LOCKED_KEY,
+  type WidgetDisplay,
+} from '../../src/services/widget/prefs.js';
 import { categoryPath, localDay } from './budget-status.js';
 
 export const WIDGET_DOCUMENT_VERSION = 1;
 
-/** The preference keys the widget's document is shaped by (the cloud preferences document). */
-export const WIDGET_DISPLAY_KEY = 'widgetDisplay';
-export const WIDGET_HIDE_WHEN_LOCKED_KEY = 'widgetHideWhenLocked';
+/**
+ * The preference keys the widget's document is shaped by (the cloud
+ * preferences document). The two the Settings card writes are declared once,
+ * in src/services/widget/prefs, with the parsers both sides read them by.
+ */
+export { WIDGET_DISPLAY_KEY, WIDGET_HIDE_WHEN_LOCKED_KEY, type WidgetDisplay };
 export const KEY_BUDGETS_KEY = 'dashboardKeyBudgets';
 export const LOCALE_KEY = 'preferredLocale';
 
@@ -50,7 +60,6 @@ export const DEFAULT_NEAR_PERCENT = 90;
 /** Budgets one document carries: more than any widget draws, few enough to stay a small download. */
 export const MAX_WIDGET_BUDGETS = 40;
 
-export type WidgetDisplay = 'amounts' | 'percent';
 export type WidgetAttention = 'none' | 'near' | 'over';
 
 export interface WidgetBudget {
@@ -115,8 +124,8 @@ export function widgetSettingsFrom(values: Record<string, string> | undefined): 
     keyBudgetIds = [];
   }
   return {
-    display: source[WIDGET_DISPLAY_KEY] === 'percent' ? 'percent' : 'amounts',
-    hideWhenLocked: source[WIDGET_HIDE_WHEN_LOCKED_KEY] === 'true',
+    display: parseWidgetDisplay(source[WIDGET_DISPLAY_KEY]),
+    hideWhenLocked: parseWidgetHideWhenLocked(source[WIDGET_HIDE_WHEN_LOCKED_KEY]),
     keyBudgetIds,
     locale: usableLocale(source[LOCALE_KEY]),
   };
