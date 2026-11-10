@@ -8,7 +8,13 @@ import {
   withProviderAccessToken,
   type BankConnectionRow
 } from './banking-sync.js';
-import { fetchAccountBalance, fetchAccounts, fetchCardBalance, fetchCards } from './truelayer.js';
+import { fetchAccountBalance, fetchAccounts, fetchCardBalance, fetchCardPendingTransactions, fetchCards } from './truelayer.js';
+import {
+  PENDING_UNAVAILABLE,
+  pendingColumns,
+  pendingFromFeed,
+  type PendingAtBankSnapshot
+} from '../../src/services/banking/pendingAtBank.js';
 import {
   cardDisplayName,
   cardMask
@@ -19,6 +25,7 @@ import {
   balanceForDisplay,
   cardBalanceSnapshot,
   isAnySeedingDeferred,
+  isExpiredTokenBalanceError,
   planBankBalanceRefresh,
   planNewAccountSeeding,
   resolveBalanceSnapshot,
@@ -92,7 +99,31 @@ interface SyncedTrueLayerAccount {
   sortCode?: string | null;
   /** 'card' → served by /data/v1/cards; 'account' → /data/v1/accounts. */
   kind: 'account' | 'card';
+  /**
+   * What the bank says is pending — read for cards only, whose balance can
+   * run ahead of the posted feed. 'unavailable' for a bank account, and for a
+   * card whose issuer did not answer.
+   */
+  pending: PendingAtBankSnapshot;
 }
+
+/**
+ * A card's pending items, or 'unavailable'. One attempt: this explains a
+ * difference on the reconcile screen and nothing depends on it, so a flaky
+ * endpoint is not worth three round trips on every sync. An expired token is
+ * re-thrown, for the same reason a balance read re-throws it — the whole
+ * operation is replayed with a fresh one.
+ */
+const readCardPending = async (accessToken: string, externalAccountId: string): Promise<PendingAtBankSnapshot> => {
+  try {
+    return pendingFromFeed(await fetchCardPendingTransactions(accessToken, externalAccountId), { cardSigned: true });
+  } catch (error) {
+    if (isExpiredTokenBalanceError(error)) {
+      throw error;
+    }
+    return PENDING_UNAVAILABLE;
+  }
+};
 
 interface LinkedAccountRow {
   account_id: string;
@@ -371,6 +402,22 @@ const persistAccountsAndLinks = async (
     if (upsertLinkResult.error) {
       throw new Error(`Failed to store linked account mapping: ${upsertLinkResult.error.message}`);
     }
+
+    // What the bank says is pending, beside the balance it was read with. A
+    // SEPARATE write that is allowed to fail: the link above is what the sync
+    // cannot do without, and this is a sentence on one screen. Kept out of the
+    // upsert so that a database without these columns yet (the migration is
+    // applied by hand) still syncs.
+    const pendingResult = await supabase
+      .from('linked_accounts')
+      .update(pendingColumns(account.pending, nowIso))
+      .eq('connection_id', connection.id)
+      .eq('external_account_id', account.externalAccountId);
+    if (pendingResult.error) {
+      console.error('[sync-accounts] could not record pending-at-bank', {
+        message: pendingResult.error.message
+      });
+    }
   }
 
   const staleExternalAccountIds = existingLinks
@@ -456,7 +503,8 @@ export const runAccountSync = async (
           mask: inferMask(account),
           accountNumber: identifiers.accountNumber,
           sortCode: identifiers.sortCode,
-          kind: 'account'
+          kind: 'account',
+          pending: PENDING_UNAVAILABLE
         };
       })
     );
@@ -484,7 +532,8 @@ export const runAccountSync = async (
           // re-adoption is skipped for them (see findAdoptableAccountId).
           accountNumber: null,
           sortCode: null,
-          kind: 'card'
+          kind: 'card',
+          pending: await readCardPending(accessToken, card.account_id)
         };
       })
     );

@@ -377,6 +377,36 @@ export const fetchCardTransactions = async (
   return Array.isArray(payload.results) ? payload.results : [];
 };
 
+/**
+ * A card's PENDING transactions — authorised, not yet posted. Read for one
+ * purpose: to say how much of the issuer's balance the posted feed has not
+ * caught up with (services/banking/pendingAtBank). Never imported: a pending
+ * row can change amount, or disappear, before it posts.
+ *
+ * Throws on any failure, the message in the shape httpStatusOfError reads, so
+ * the caller can tell an expired token (replay the sync) from an issuer that
+ * simply does not offer the endpoint (say nothing). Same sign convention as
+ * posted card rows: positive = money out of the card.
+ */
+export const fetchCardPendingTransactions = async (
+  accessToken: string,
+  accountId: string
+): Promise<TrueLayerTransaction[]> => {
+  const response = await fetch(
+    `${getApiBaseUrl()}/data/v1/cards/${encodeURIComponent(accountId)}/transactions/pending`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`TrueLayer card pending transactions fetch failed (${accountId}): ${response.status} ${details}`);
+  }
+
+  const payload = (await response.json()) as TransactionsResponse;
+  // Same PII rule as posted transactions: never log contents.
+  return Array.isArray(payload.results) ? payload.results : [];
+};
+
 export const fetchAccounts = async (accessToken: string): Promise<TrueLayerAccount[]> => {
   const response = await fetch(`${getApiBaseUrl()}/data/v1/accounts`, {
     headers: {

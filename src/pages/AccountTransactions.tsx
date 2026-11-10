@@ -42,6 +42,8 @@ import MobileQuickEditCard from '../components/MobileQuickEditCard';
 import { useIsMobileViewport } from '../hooks/useMediaQuery';
 import { TableSkeleton } from '../components/loading/TableSkeleton';
 import { useDelayedFlag } from '../hooks/useDelayedFlag';
+import { usePendingAtBank } from '../hooks/usePendingAtBank';
+import PendingAtBankList from '../components/banking/PendingAtBankList';
 import EmptyState from '../components/EmptyState';
 import FilteredEmptyState from '../components/FilteredEmptyState';
 import { compareChronological, compareTransactions, type TransactionSortField } from '../utils/transactionSort';
@@ -434,6 +436,9 @@ export default function AccountTransactions() {
    * is what they are.
    */
   const registerCurrency = account?.currency;
+  // What the bank has authorised but not posted on this account, if it says.
+  // Drawn beneath the register, after the last real row — never among them.
+  const pendingAtBank = usePendingAtBank(accountId);
   const formatRegisterMoney = useCallback(
     (amount: DecimalInstance | number) => formatCurrency(amount, registerCurrency),
     [formatCurrency, registerCurrency]
@@ -4023,6 +4028,14 @@ export default function AccountTransactions() {
         />
       </div>
       </QuickEditRowProvider>
+
+      {/* Pending at the bank: after the last real transaction, under a rule,
+          faded — what the bank has authorised and not yet sent. Not rows of the
+          register: nothing in it can be selected, edited or counted. Hidden
+          with the rest of the chrome when the table is expanded. */}
+      {!tableExpanded && pendingAtBank && (
+        <PendingAtBankList pending={pendingAtBank} currency={registerCurrency} />
+      )}
 
       {/* Bottom dock — ONE always-visible bar (hidden only in expanded mode).
           Editing a transaction happens up in the register now, on the row
