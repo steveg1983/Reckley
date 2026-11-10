@@ -421,16 +421,34 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3911 / 1204
  * (+39.0 KiB raw, +1.01%; +11.6 KiB gzip, +0.97% — the gzip budget holds).
+ *
+ * ── RE-RECORDED 2026-11-10: PENDING AT THE BANK ─────────────────────────────
+ *
+ *     + bars at lg, the pill  3872.0 KiB raw   1192.4 KiB gzip
+ *     main at 96e60402        3872.3 KiB raw   1192.4 KiB gzip   +0.3 / +0.0
+ *     + pending at the bank   3875.0 KiB raw   1194.1 KiB gzip   +2.7 / +1.7
+ *
+ * The +0.3 is #635, the phone card's description-first run — a shared
+ * editor's prop, inside the budget and unrecorded until now. The +2.7 / +1.7
+ * is this commit's and is intended: the list of what a bank has authorised
+ * but not posted, drawn beneath the register and the reconcile list, and the
+ * arithmetic that reads it (owner, 10 Nov 2026). Both pages are desktop
+ * surfaces. A local file has no bank feed, so the list never draws there —
+ * the bytes are the price of one source tree, and the hook answers from an
+ * empty snapshot.
+ *
+ * Budgets reset to the standing rule, ~1% above measured: 3914 / 1206
+ * (+39.0 KiB raw, +1.01%; +11.9 KiB gzip, +1.00%).
  */
-const BASELINE_TOTAL_RAW_KIB = 3872.0;
-const BASELINE_TOTAL_GZIP_KIB = 1192.4;
+const BASELINE_TOTAL_RAW_KIB = 3875.0;
+const BASELINE_TOTAL_GZIP_KIB = 1194.1;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that
 // slack deliberately rather than banking it, so this is tight ON PURPOSE and
 // intended growth is expected to raise it in the commit that causes it.
-const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3911);
-const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1204);
+const MAX_TOTAL_RAW_KIB = Number(process.env.DESKTOP_MAX_TOTAL_RAW_KIB ?? 3914);
+const MAX_TOTAL_GZIP_KIB = Number(process.env.DESKTOP_MAX_TOTAL_GZIP_KIB ?? 1206);
 
 const isReport = process.argv.includes('--report');
 
