@@ -831,6 +831,7 @@ export default function Reconciliation() {
           pending={pendingAtBank}
           currency={selectedAccount?.currency}
           difference={differenceToExplain}
+          bankBalance={selectedAccount?.bankBalance ?? null}
         />
       )}
 

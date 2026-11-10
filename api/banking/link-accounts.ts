@@ -19,6 +19,7 @@ import { linkedAccountNumberForStorage } from '../../src/utils/accountNumberInpu
 import {
   accountBalanceSnapshot,
   cardBalanceSnapshot,
+  planBankBalanceRefresh,
   planLinkBalanceSnap,
   resolveBalanceSnapshot,
   unavailableBalance,
@@ -224,11 +225,49 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       // gave it, bank_balance stays as it was (unset for a new account, so the
       // reconciliation screen honestly reads "N/A"), and the next sync fills
       // the bank's figure in once the bank will say what it is.
-      const snapPlan = planLinkBalanceSnap(
-        balanceByExternalAccountId.get(link.externalAccountId) ?? unavailableBalance('fetch_failed')
-      );
+      //
+      // And never an account the feed has already written to: the import
+      // after a RE-link is incremental, so a snap there counts every row the
+      // feed had not yet delivered twice (planLinkBalanceSnap tells the whole
+      // story). Asked with the import's own question, and a failure to ask is
+      // a failure of the link — guessing "never fed" is the guess that
+      // corrupts a balance.
+      const feedHistory = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('account_id', link.accountId)
+        .not('external_transaction_id', 'is', null)
+        .limit(1);
+      if (feedHistory.error) {
+        console.error('[link-accounts] could not read feed history', {
+          code: feedHistory.error.code,
+          message: feedHistory.error.message
+        });
+        return createErrorResponse(res, 500, 'Failed to read account history', 'internal_error');
+      }
 
-      if (snapPlan.action === 'snap') {
+      const bankSnapshot =
+        balanceByExternalAccountId.get(link.externalAccountId) ?? unavailableBalance('fetch_failed');
+      const snapPlan = planLinkBalanceSnap(bankSnapshot, {
+        hasFeedHistory: (feedHistory.data ?? []).length > 0
+      });
+
+      if (snapPlan.action === 'record') {
+        // The reconcile screen's reference, and nothing else: `balance` and
+        // `initial_balance` are not in this write.
+        const recordResult = await supabase
+          .from('accounts')
+          .update(planBankBalanceRefresh(bankSnapshot, new Date().toISOString().slice(0, 10)))
+          .eq('id', link.accountId)
+          .eq('user_id', auth.userId);
+        if (recordResult.error) {
+          console.error('[link-accounts] could not record the bank balance', {
+            code: recordResult.error.code,
+            message: recordResult.error.message
+          });
+          return createErrorResponse(res, 500, 'Failed to record the bank balance', 'internal_error');
+        }
+      } else if (snapPlan.action === 'snap') {
         const snapResult = await supabase.rpc('link_bank_account_snap', {
           p_account_id: link.accountId,
           p_user_id: auth.userId,

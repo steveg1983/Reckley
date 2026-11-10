@@ -439,9 +439,20 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3914 / 1206
  * (+39.0 KiB raw, +1.01%; +11.9 KiB gzip, +1.00%).
+ *
+ * ── RE-RECORDED 2026-11-10, SAME DAY: THE PENDING LIST SAYS LESS ────────────
+ *
+ *     + pending at the bank   3875.0 KiB raw   1194.1 KiB gzip
+ *     + the bank's two lines  3875.4 KiB raw   1194.0 KiB gzip   +0.4 / −0.1
+ *
+ * Intended: under the pending rows on the reconcile screen, the bank's
+ * reported balance and where it lands once they post; the sentence that
+ * claimed a share of the difference is gone, and so is the list's height cap
+ * (owner, 10 Nov 2026). Budgets hold at 3914 / 1206 — measured + 38.6 KiB raw
+ * (+1.00%) and + 12.0 KiB gzip (+1.01%), the standing rule already.
  */
-const BASELINE_TOTAL_RAW_KIB = 3875.0;
-const BASELINE_TOTAL_GZIP_KIB = 1194.1;
+const BASELINE_TOTAL_RAW_KIB = 3875.4;
+const BASELINE_TOTAL_GZIP_KIB = 1194.0;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that

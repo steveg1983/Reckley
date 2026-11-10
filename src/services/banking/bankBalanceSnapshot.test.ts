@@ -133,10 +133,26 @@ describe('refreshing an existing account bank balance', () => {
 });
 
 describe('the link-time balance snap', () => {
-  it('snaps to a reported figure', () => {
-    expect(planLinkBalanceSnap(reportedBalance(980.21))).toEqual({
+  it('snaps a never-fed account to a reported figure', () => {
+    expect(planLinkBalanceSnap(reportedBalance(980.21), { hasFeedHistory: false })).toEqual({
       action: 'snap',
       bankBalance: 980.21
+    });
+  });
+
+  it('does not snap an account the feed has already written to — it records the figure', () => {
+    // A re-link after a lapsed consent. The import that follows is
+    // incremental, so a snap here counts every not-yet-delivered row twice:
+    // once inside initial_balance, once as the row itself.
+    const plan = planLinkBalanceSnap(reportedBalance(980.21), { hasFeedHistory: true });
+
+    expect(plan).toEqual({ action: 'record', bankBalance: 980.21 });
+  });
+
+  it('skips an unreported figure whether or not the account was ever fed', () => {
+    expect(planLinkBalanceSnap(unavailableBalance('not_reported'), { hasFeedHistory: true })).toEqual({
+      action: 'skip',
+      reason: 'not_reported'
     });
   });
 
@@ -144,7 +160,7 @@ describe('the link-time balance snap', () => {
     // link_bank_account_snap moves `balance` AND shifts initial_balance by the
     // same delta, so a fabricated 0 here does not merely record a bad
     // reference — it zeroes what the user believes they hold.
-    const plan = planLinkBalanceSnap(unavailableBalance('fetch_failed'));
+    const plan = planLinkBalanceSnap(unavailableBalance('fetch_failed'), { hasFeedHistory: false });
 
     expect(plan).toEqual({ action: 'skip', reason: 'fetch_failed' });
     expect('bankBalance' in plan).toBe(false);

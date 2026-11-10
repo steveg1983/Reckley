@@ -301,12 +301,46 @@ export const planBankBalanceRefresh = (
  * does not merely record a wrong reference, it rewrites what the user believes
  * they hold. Without a reported figure there is nothing to snap to, and the
  * account keeps the balance its owner gave it.
+ *
+ * ── AND NEVER AN ACCOUNT THE FEED HAS ALREADY WRITTEN TO ────────────────────
+ *
+ * The snap and the import are two halves of one sum. A snap puts everything
+ * the bank has posted into `initial_balance`; the import that follows a FIRST
+ * link is a backfill for exactly that reason — it rebases instead of adding
+ * (backfillStamp.ts), so nothing is counted twice. That pairing only holds
+ * while the account has no feed row.
+ *
+ * Re-link an account that already has feed history — a consent that lapsed
+ * and was renewed, which PSD2 forces every ninety days — and the snap still
+ * ran, but the import after it is INCREMENTAL: the account is "already fed",
+ * so every row the feed had not yet delivered is added on top of a balance
+ * that already contained it. The error lands in `initial_balance`, where
+ * `balance = initial_balance + Σ(amount)` goes on holding and every
+ * transaction matches the bank row for row. The owner re-authorised American
+ * Express at 00:51 on 6 Nov 2026; nine seconds later the catch-up import
+ * arrived, and both cards carried a reconcile difference equal — to the
+ * penny — to the rows of that one import, until the audit log gave the two
+ * timestamps (10 Nov).
+ *
+ * So `hasFeedHistory` is asked with the import's OWN question (any row of the
+ * account with an external_transaction_id), and an account that answers yes
+ * is not snapped. The bank's figure is still RECORDED — `bank_balance` is the
+ * reconcile screen's reference and moving it touches no ledger figure.
  */
 export type BalanceSnapPlan =
   | { readonly action: 'snap'; readonly bankBalance: number }
+  /** Already fed: note what the bank said, leave the ledger alone. */
+  | { readonly action: 'record'; readonly bankBalance: number }
   | { readonly action: 'skip'; readonly reason: BalanceUnavailableReason };
 
-export const planLinkBalanceSnap = (snapshot: BankBalanceSnapshot): BalanceSnapPlan =>
-  snapshot.status === 'reported'
-    ? { action: 'snap', bankBalance: snapshot.amount }
-    : { action: 'skip', reason: snapshot.reason };
+export const planLinkBalanceSnap = (
+  snapshot: BankBalanceSnapshot,
+  account: { hasFeedHistory: boolean }
+): BalanceSnapPlan => {
+  if (snapshot.status !== 'reported') {
+    return { action: 'skip', reason: snapshot.reason };
+  }
+  return account.hasFeedHistory
+    ? { action: 'record', bankBalance: snapshot.amount }
+    : { action: 'snap', bankBalance: snapshot.amount };
+};

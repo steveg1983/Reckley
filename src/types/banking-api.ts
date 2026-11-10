@@ -100,7 +100,11 @@ export interface LinkAccountsRequest {
 export interface LinkAccountsResponse {
   success: boolean;
   linked: number;
-  /** Of those linked, how many were snapped to a bank-reported balance. */
+  /**
+   * Of those linked, how many were snapped to a bank-reported balance. An
+   * account the feed has already written to is never snapped — a re-link
+   * records the bank's figure for reconciliation and leaves the ledger alone.
+   */
   snapped: number;
   /**
    * Accounts linked WITHOUT a balance snap because the bank reported no
