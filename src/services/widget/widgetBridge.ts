@@ -100,6 +100,28 @@ export async function takeKeyFromWidget(): Promise<void> {
   await plugin.clearKey();
 }
 
+/**
+ * Empty this phone if it holds a key, and say whether it did. For the moment
+ * nobody is signed in: the key on the phone is then somebody's who has left,
+ * and the next person to sign in would otherwise find their Settings saying
+ * "on" over a widget drawing the last person's budgets. Asks first, because
+ * forgetting redraws every widget and a signed-out page loads often.
+ * Never throws: there is no one on a signed-out page to tell.
+ */
+export async function forgetWidgetKeyIfHeld(): Promise<boolean> {
+  if (!widgetBridgeAvailable()) return false;
+  try {
+    const { plugin } = await loadPlugin();
+    const answer = await plugin.status();
+    if (answer.hasKey !== true) return false;
+    await plugin.clearKey();
+    return true;
+  } catch (error) {
+    logger.warn('Could not take the widget key back from this phone', error);
+    return false;
+  }
+}
+
 /** Ask the widgets to fetch again. Best-effort: they refresh on their own schedule regardless. */
 export async function reloadWidgets(): Promise<void> {
   if (!widgetBridgeAvailable()) return;
