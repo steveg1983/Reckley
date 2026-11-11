@@ -249,8 +249,9 @@ can regenerate a profile that exists; with its present role it cannot create
 the first one. The owner finished build 8 from Organizer (Distribute App →
 App Store Connect → Upload), which created the profile. The script therefore
 archives into Xcode's own archives folder, so the build is in Organizer when
-that is needed. Whether the next build exports headlessly again, now the
-profile exists, is not yet proven.
+that is needed. **Build 9 (11 Nov) then uploaded headlessly, start to finish**:
+with the profile in existence the key regenerates it as it always did, so the
+refusal is a one-off per new App ID and not a standing fault.
 
 A build number already on App Store Connect is rejected *after* the upload
 rather than before, so the script sets it deliberately and refuses to let
