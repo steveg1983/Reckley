@@ -1,12 +1,12 @@
 import SwiftUI
 import WidgetKit
 
-/// Every home-screen widget Reckley offers. One today; the others the owner
-/// asked for (one chosen budget, left to spend, the lock-screen ring) join
-/// this list.
+/// Every widget Reckley offers: the Key Budgets on the home screen, and one
+/// chosen budget on the home screen and the lock screen.
 @main
 struct ReckleyWidgetsBundle: WidgetBundle {
     var body: some Widget {
         KeyBudgetsWidget()
+        OneBudgetWidget()
     }
 }

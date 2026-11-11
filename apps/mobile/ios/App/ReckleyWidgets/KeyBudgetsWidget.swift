@@ -2,7 +2,11 @@ import SwiftUI
 import WidgetKit
 
 /// "Key Budgets": the budgets the person starred on the Dashboard, on the
-/// home screen. Small draws three, medium four.
+/// home screen. Small draws three, medium four, large six and extra large
+/// twelve in two columns (the owner, 11 Nov 2026: "Can we have bigger budget
+/// widgets? … the 2 biggest are greyed out"). The two larger sizes have room
+/// for a second line under each bar — spent of the allowance — which the
+/// server sends only when the person shows amounts.
 ///
 /// ── IT FETCHES FOR ITSELF ───────────────────────────────────────────────────
 ///
@@ -28,7 +32,7 @@ struct KeyBudgetsWidget: Widget {
         }
         .configurationDisplayName("Key Budgets")
         .description("How the budgets you starred on the Dashboard are doing.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge])
     }
 }
 
@@ -69,24 +73,44 @@ struct KeyBudgetsProvider: TimelineProvider {
     }
 
     static func entry(now: Date = Date()) async -> KeyBudgetsEntry {
+        switch await BudgetsSource.load(now: now) {
+        case .needsKey:
+            return KeyBudgetsEntry(date: now, content: .needsKey)
+        case .unreachable:
+            return KeyBudgetsEntry(date: now, content: .unreachable)
+        case .document(let document, let staleSince):
+            return KeyBudgetsEntry(date: now, content: .document(document, staleSince: staleSince))
+        }
+    }
+}
+
+/// The budgets document as every widget gets it: one fetch shape, one cache,
+/// one answer to a key the server refuses. A refused key is forgotten HERE,
+/// whichever widget happened to ask, so the app's Settings stop saying "on".
+enum BudgetsSource {
+    enum Loaded {
+        case needsKey
+        case unreachable
+        /// `staleSince` is when a kept document was true, when the network gave nothing newer.
+        case document(BudgetsDocument, staleSince: Date?)
+    }
+
+    static func load(now: Date = Date()) async -> Loaded {
         guard let credential = WidgetKeyStore.read() else {
             BudgetsCache.clear()
-            return KeyBudgetsEntry(date: now, content: .needsKey)
+            return .needsKey
         }
         switch await BudgetsFetch.run(with: credential) {
         case .document(let document):
             BudgetsCache.save(document, for: credential.keyId)
-            return KeyBudgetsEntry(date: now, content: .document(document, staleSince: nil))
+            return .document(document, staleSince: nil)
         case .refused:
             try? WidgetKeyStore.clear()
             BudgetsCache.clear()
-            return KeyBudgetsEntry(date: now, content: .needsKey)
+            return .needsKey
         case .unreachable:
-            guard let kept = BudgetsCache.read(for: credential.keyId) else {
-                return KeyBudgetsEntry(date: now, content: .unreachable)
-            }
-            let asOf = ISO8601DateFormatter.withFraction.date(from: kept.asOf) ?? now
-            return KeyBudgetsEntry(date: now, content: .document(kept, staleSince: asOf))
+            guard let kept = BudgetsCache.read(for: credential.keyId) else { return .unreachable }
+            return .document(kept, staleSince: ISO8601DateFormatter.withFraction.date(from: kept.asOf) ?? now)
         }
     }
 }
@@ -112,13 +136,46 @@ struct KeyBudgetsView: View {
                 .textCase(.uppercase)
                 .foregroundStyle(Palette.quiet)
             Spacer(minLength: 4)
-            if case .document(_, let staleSince?) = entry.content {
-                Text("as of \(staleSince, style: .time)")
-                    .font(.caption2)
-                    .foregroundStyle(Palette.quiet)
-                    .lineLimit(1)
+            if case .document(let document, let staleSince) = entry.content {
+                // A kept document says when it was true; otherwise the header
+                // says how many budgets did not fit, so a full widget is never
+                // mistaken for the whole list.
+                if let staleSince {
+                    Text("as of \(staleSince, style: .time)")
+                        .font(.caption2)
+                        .foregroundStyle(Palette.quiet)
+                        .lineLimit(1)
+                } else if document.forKeyBudgetsWidget.count > capacity {
+                    Text("+\(document.forKeyBudgetsWidget.count - capacity) more")
+                        .font(.caption2)
+                        .foregroundStyle(Palette.quiet)
+                        .lineLimit(1)
+                }
             }
         }
+    }
+
+    /// How many budgets a size has room for.
+    private var capacity: Int {
+        switch family {
+        case .systemSmall: return 3
+        case .systemLarge: return 6
+        case .systemExtraLarge: return 12
+        default: return 4
+        }
+    }
+
+    /// The two larger sizes have room for "spent of allowance" under each bar.
+    private var roomy: Bool { family == .systemLarge || family == .systemExtraLarge }
+
+    private func rows(_ budgets: [BudgetsDocument.Budget], hide: Bool) -> some View {
+        VStack(alignment: .leading, spacing: family == .systemSmall ? 7 : roomy ? 10 : 6) {
+            ForEach(budgets) { budget in
+                BudgetRow(budget: budget, stacked: family == .systemSmall, detailed: roomy)
+                    .privacySensitive(hide)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder private var content: some View {
@@ -128,16 +185,19 @@ struct KeyBudgetsView: View {
         case .unreachable:
             message("Could not reach Reckley. This will try again.")
         case .document(let document, _):
-            let shown = Array(document.forKeyBudgetsWidget.prefix(family == .systemSmall ? 3 : 4))
+            let shown = Array(document.forKeyBudgetsWidget.prefix(capacity))
             if shown.isEmpty {
                 message(document.hasBudgets ? "No budget is running today." : "No budgets yet. Add one in Reckley.")
-            } else {
-                VStack(alignment: .leading, spacing: family == .systemSmall ? 7 : 6) {
-                    ForEach(shown) { budget in
-                        BudgetRow(budget: budget, stacked: family == .systemSmall)
-                            .privacySensitive(document.hideWhenLocked)
-                    }
+            } else if family == .systemExtraLarge {
+                // Two columns, filled down the first and then the second, so
+                // the person's order reads top to bottom as it does elsewhere.
+                let half = (shown.count + 1) / 2
+                HStack(alignment: .top, spacing: 20) {
+                    rows(Array(shown.prefix(half)), hide: document.hideWhenLocked)
+                    rows(Array(shown.dropFirst(half)), hide: document.hideWhenLocked)
                 }
+            } else {
+                rows(shown, hide: document.hideWhenLocked)
             }
         }
     }
@@ -155,14 +215,10 @@ struct KeyBudgetsView: View {
 struct BudgetRow: View {
     let budget: BudgetsDocument.Budget
     let stacked: Bool
+    /// Room for "spent of allowance" under the bar. Drawn only when the server sent both.
+    var detailed: Bool = false
 
-    private var mark: Color {
-        switch budget.attention {
-        case "over": return Palette.over
-        case "near": return Palette.near
-        default: return Palette.ink
-        }
-    }
+    private var mark: Color { Palette.mark(for: budget.attention) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -177,6 +233,12 @@ struct BudgetRow: View {
                 }
             }
             bar
+            if detailed, let spent = budget.spent, let allowance = budget.allowance {
+                Text("\(spent) of \(allowance)")
+                    .font(.caption2)
+                    .foregroundStyle(Palette.quiet)
+                    .lineLimit(1)
+            }
         }
         .accessibilityElement(children: .combine)
     }
@@ -195,12 +257,20 @@ struct BudgetRow: View {
             .lineLimit(1)
     }
 
-    private var bar: some View {
+    private var bar: some View { BudgetBar(budget: budget) }
+}
+
+/// A budget's bar: full at the allowance and no further — there is no more
+/// room to draw — while the words beside it keep telling the truth past it.
+struct BudgetBar: View {
+    let budget: BudgetsDocument.Budget
+
+    var body: some View {
         GeometryReader { space in
             ZStack(alignment: .leading) {
                 Capsule().fill(Palette.track)
                 Capsule()
-                    .fill(mark)
+                    .fill(Palette.mark(for: budget.attention))
                     .frame(width: space.size.width * min(max(budget.percent, 0), 100) / 100)
                     .widgetAccentable()
             }
@@ -220,6 +290,15 @@ enum Palette {
     static let track = Color.white.opacity(0.16)
     static let near = Color(red: 0xf5 / 255, green: 0xb9 / 255, blue: 0x42 / 255)
     static let over = Color(red: 0xff / 255, green: 0x7b / 255, blue: 0x72 / 255)
+
+    /// Colour marks only what needs attention: a budget in hand is drawn plain.
+    static func mark(for attention: String) -> Color {
+        switch attention {
+        case "over": return over
+        case "near": return near
+        default: return ink
+        }
+    }
 }
 
 extension ISO8601DateFormatter {
@@ -240,15 +319,17 @@ extension BudgetsDocument {
         hideWhenLocked: false,
         hasBudgets: true,
         budgets: [
-            sampleBudget("a", "Groceries", 62, "none", "£190 left"),
-            sampleBudget("b", "Eating out", 93, "near", "£14 left"),
-            sampleBudget("c", "Fuel", 112, "over", "Over by £18"),
-            sampleBudget("d", "Household", 35, "none", "£130 left"),
+            sampleBudget("a", "Groceries", 62, "none", "£190 left", "£310", "£500"),
+            sampleBudget("b", "Eating out", 93, "near", "£14 left", "£186", "£200"),
+            sampleBudget("c", "Fuel", 112, "over", "Over by £18", "£168", "£150"),
+            sampleBudget("d", "Household", 35, "none", "£130 left", "£70", "£200"),
+            sampleBudget("e", "Clothes", 48, "none", "£52 left", "£48", "£100"),
+            sampleBudget("f", "Gifts", 20, "none", "£80 left", "£20", "£100"),
         ]
     )
 
-    private static func sampleBudget(_ id: String, _ name: String, _ percent: Double, _ attention: String, _ status: String) -> Budget {
+    private static func sampleBudget(_ id: String, _ name: String, _ percent: Double, _ attention: String, _ status: String, _ spent: String, _ allowance: String) -> Budget {
         Budget(id: id, name: name, key: true, percent: percent, attention: attention, status: status,
-               period: "Monthly", until: "2026-01-31", daysLeft: 12, spent: nil, allowance: nil, perDay: nil)
+               period: "Monthly", until: "2026-01-31", daysLeft: 12, spent: spent, allowance: allowance, perDay: nil)
     }
 }

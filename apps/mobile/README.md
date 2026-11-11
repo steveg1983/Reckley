@@ -128,7 +128,9 @@ build.
 ## Home-screen widgets (10 Nov 2026, first in build 8)
 
 The first native surface the shell has: a WidgetKit extension,
-`ios/App/ReckleyWidgets`, with one widget — **Key Budgets**, small and medium.
+`ios/App/ReckleyWidgets`. The first widget is **Key Budgets**: small (three
+budgets), medium (four), large (six) and extra large (twelve, two columns) —
+the two larger sizes add "spent of allowance" under each bar.
 It fetches for itself (owner's ruling, 10 Nov): it holds a read-only key and
 asks `GET /api/widget/budgets`, so it is current while the app is closed.
 
@@ -179,6 +181,23 @@ Things that are true of it and not obvious:
 - **`src/services/widget/__tests__/nativeContract.test.ts` reads the Swift,
   the two entitlements, the storyboard and the project file**, because nothing
   else in CI compiles the page and the shell together.
+
+**A second widget, "Budget" (11 Nov 2026):** one budget the person chooses
+when editing the widget (`OneBudgetWidget.swift`, an `AppIntentConfiguration`),
+in four shapes — small on the home screen, and the lock screen's ring,
+three-line rectangle and one line beside the date.
+
+- **The ring's centre is always the percentage, never an amount.** A lock
+  screen is read by whoever picks the phone up, and a percentage says how the
+  budget stands without saying how large it is.
+- **Unchosen, it is the first Key Budget.** A chosen budget that has finished
+  or been deleted says so and draws nothing in its place.
+- **Both widgets read through `BudgetsSource`**: one fetch shape, one cache,
+  one place a refused key is forgotten.
+- The project file is hand-edited, so the contract spec checks that every
+  Swift file in the folder is compiled and every `Widget` is in the bundle.
+- Seen in the simulator's gallery: the small shape. NOT seen: the three
+  lock-screen shapes, and choosing a budget — the list comes from a real key.
 
 **Proving it in a simulator** needs no Apple account:
 `xcodebuild -project App.xcodeproj -scheme App -configuration Debug

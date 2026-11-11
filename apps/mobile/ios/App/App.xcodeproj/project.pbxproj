@@ -22,6 +22,7 @@
 		A1E0000000000000000000B4 /* WidgetKeyStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E0000000000000000000F3 /* WidgetKeyStore.swift */; };
 		A1E0000000000000000000B5 /* ReckleyWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E0000000000000000000F4 /* ReckleyWidgetsBundle.swift */; };
 		A1E0000000000000000000B6 /* KeyBudgetsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E0000000000000000000F5 /* KeyBudgetsWidget.swift */; };
+		A1E0000000000000000000B9 /* OneBudgetWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E0000000000000000000FB /* OneBudgetWidget.swift */; };
 		A1E0000000000000000000B7 /* BudgetsDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1E0000000000000000000F6 /* BudgetsDocument.swift */; };
 		A1E0000000000000000000B8 /* ReckleyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1E0000000000000000000F9 /* ReckleyWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -67,6 +68,7 @@
 		A1E0000000000000000000F3 /* WidgetKeyStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetKeyStore.swift; sourceTree = "<group>"; };
 		A1E0000000000000000000F4 /* ReckleyWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReckleyWidgetsBundle.swift; sourceTree = "<group>"; };
 		A1E0000000000000000000F5 /* KeyBudgetsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyBudgetsWidget.swift; sourceTree = "<group>"; };
+		A1E0000000000000000000FB /* OneBudgetWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OneBudgetWidget.swift; sourceTree = "<group>"; };
 		A1E0000000000000000000F6 /* BudgetsDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BudgetsDocument.swift; sourceTree = "<group>"; };
 		A1E0000000000000000000F7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1E0000000000000000000F8 /* ReckleyWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ReckleyWidgets.entitlements; sourceTree = "<group>"; };
@@ -145,6 +147,7 @@
 			children = (
 				A1E0000000000000000000F4 /* ReckleyWidgetsBundle.swift */,
 				A1E0000000000000000000F5 /* KeyBudgetsWidget.swift */,
+				A1E0000000000000000000FB /* OneBudgetWidget.swift */,
 				A1E0000000000000000000F6 /* BudgetsDocument.swift */,
 				A1E0000000000000000000F7 /* Info.plist */,
 				A1E0000000000000000000F8 /* ReckleyWidgets.entitlements */,
@@ -270,6 +273,7 @@
 			files = (
 				A1E0000000000000000000B5 /* ReckleyWidgetsBundle.swift in Sources */,
 				A1E0000000000000000000B6 /* KeyBudgetsWidget.swift in Sources */,
+				A1E0000000000000000000B9 /* OneBudgetWidget.swift in Sources */,
 				A1E0000000000000000000B7 /* BudgetsDocument.swift in Sources */,
 				A1E0000000000000000000B4 /* WidgetKeyStore.swift in Sources */,
 			);

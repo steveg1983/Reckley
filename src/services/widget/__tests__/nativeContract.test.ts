@@ -11,7 +11,7 @@
  * widget extension reads it from — spelled three times (two entitlements and
  * the store), and a mismatch is a widget that says "turn me on" for ever.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { WIDGET_PLUGIN_NAME } from '../widgetBridge';
@@ -86,6 +86,38 @@ describe('the widget extension', () => {
   it('is embedded in the app, with the store compiled into both', () => {
     expect(project).toContain('ReckleyWidgets.appex in Embed Foundation Extensions');
     expect(project.match(/WidgetKeyStore\.swift in Sources \*\/,/g)).toHaveLength(2);
+  });
+
+  // The project file is edited by hand: a Swift file dropped into the folder
+  // and never listed compiles nowhere, and the widget it holds is simply
+  // absent from the gallery with no error anywhere.
+  it('compiles every Swift file in its folder', () => {
+    const files = readdirSync(join(IOS, 'ReckleyWidgets')).filter(name => name.endsWith('.swift'));
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      expect(project).toContain(`${file} in Sources */,`);
+    }
+  });
+
+  it('offers every widget it defines', () => {
+    const bundle = read('ReckleyWidgets/ReckleyWidgetsBundle.swift');
+    const defined = readdirSync(join(IOS, 'ReckleyWidgets'))
+      .filter(name => name.endsWith('.swift'))
+      .flatMap(name => [...read(`ReckleyWidgets/${name}`).matchAll(/^struct (\w+): Widget \{/gm)].map(match => match[1]));
+    expect(defined.sort()).toEqual(['KeyBudgetsWidget', 'OneBudgetWidget']);
+    for (const widget of defined) {
+      expect(bundle).toContain(`${widget}()`);
+    }
+  });
+
+  it("the lock-screen ring's centre is a percentage, never an amount", () => {
+    const one = read('ReckleyWidgets/OneBudgetWidget.swift');
+    const ring = one.slice(one.indexOf('private var ring'), one.indexOf('private var rectangular'));
+    expect(ring).toContain('currentValueLabel');
+    expect(ring).toContain('Int(shown.budget.percent.rounded())');
+    // The server's words can be an amount; they are for a screen reader here, never drawn.
+    expect(ring.match(/budget\.status/g)).toHaveLength(1);
+    expect(ring).toContain('accessibilityLabel("\\(shown.budget.name): \\(shown.budget.status)")');
   });
 
   it("carries the app's build number, which App Store Connect requires to match", () => {
