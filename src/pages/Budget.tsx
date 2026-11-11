@@ -22,7 +22,10 @@ import EmptyState from '../components/EmptyState';
 import { foreignCurrencyAccountIds } from '../utils/budgetSpending';
 import { evaluateBudgets } from '../utils/budgetEvaluation';
 import type { BudgetPeriodName } from '../utils/budgetPeriods';
-import { budgetPace, describeBudgetWindow, paceDifference } from '../utils/budgetPace';
+import { budgetPace, describeBudgetMeasure, describeBudgetWindow, paceDifference } from '../utils/budgetPace';
+import { measureBudget } from '../utils/budgetView';
+import BudgetViewChoice from '../components/budget/BudgetViewChoice';
+import { useBudgetView } from '../hooks/useBudgetView';
 import { toDecimal } from '../utils/decimal';
 import type { DecimalInstance } from '../utils/decimal';
 import { formatDecimal } from '../utils/decimal-format';
@@ -113,6 +116,10 @@ function BudgetView() {
   // describes the same "now".
   const evaluatedAt = useMemo(() => new Date(), []);
 
+  // How a long budget is read (owner, 10 Nov 2026) — the Dashboard's Key
+  // Budgets cog holds the same setting. See utils/budgetView.
+  const [budgetView, setBudgetView] = useBudgetView();
+
   // Rows on accounts held in another currency cannot join this total without a
   // rate; they are left out and the card says so.
   const foreignAccountIds = useMemo(
@@ -130,7 +137,12 @@ function BudgetView() {
     return evaluateBudgets(
       budgets.filter((budget): budget is Budget => budget !== null && budget !== undefined),
       { transactions, transactionSplits, categories, foreignAccountIds, now: evaluatedAt }
-    ).map(({ budget, effectiveAmount, carriedIn, carriedFrom, receivedIn, receivedFrom, rolloverTo, spent, percentage, remaining, window, excludedForeignCount }) => {
+    ).map(evaluated => {
+      const { budget, effectiveAmount, carriedIn, carriedFrom, receivedIn, receivedFrom, rolloverTo, spent, percentage, remaining, window, excludedForeignCount } = evaluated;
+      // What the CARD draws: the budget under the chosen reading. The fields
+      // beside it stay the whole period's — the totals at the top of the
+      // page, the alerts and the carry are statements about the period.
+      const measure = measureBudget(evaluated, budgetView);
       // How far through its window the budget is, and spending against that
       // pace (owner, 5 Nov 2026): a year read on day five and on day 360 used
       // to show the same bar. See utils/budgetPace.
@@ -150,10 +162,20 @@ function BudgetView() {
         window,
         pace,
         paceDifference: paceDifference(effectiveAmount, spent, pace),
-        excludedForeignCount
+        excludedForeignCount,
+        shown: {
+          allowance: measure.allowance.toNumber(),
+          spent: measure.spent.toNumber(),
+          remaining: measure.remaining.toNumber(),
+          percentage: measure.percentage,
+          caption: describeBudgetMeasure(window, measure),
+          /** A shorter reading than the whole period is on the card. */
+          short: measure.view !== 'period',
+        },
+        hasMonths: evaluated.months !== null,
       };
     });
-  }, [budgets, transactions, transactionSplits, categories, foreignAccountIds, evaluatedAt]);
+  }, [budgets, transactions, transactionSplits, categories, foreignAccountIds, evaluatedAt, budgetView]);
 
   const categoryNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -223,7 +245,7 @@ function BudgetView() {
         return rows.sort(byName);
       case 'used':
         // Most-spent first: the one about to overflow is the one to see.
-        return rows.sort((a, b) => (b.percentage - a.percentage) || byName(a, b));
+        return rows.sort((a, b) => (b.shown.percentage - a.shown.percentage) || byName(a, b));
       case 'largest':
         return rows.sort((a, b) =>
           b.effectiveAmount.comparedTo(a.effectiveAmount) || byName(a, b));
@@ -478,6 +500,10 @@ function BudgetView() {
             </select>
           </div>
         )}
+        {/* Offered only when some budget HAS months to be read by. */}
+        {budgetsWithSpent.some(b => b.hasMonths) && (
+          <BudgetViewChoice id="budget-view" view={budgetView} onChange={setBudgetView} />
+        )}
         <WholePoundsToggle />
       </div>
       {/* The budgets — the page itself. */}
@@ -560,7 +586,7 @@ function BudgetView() {
                       not monthly fell through to the same branch — AND the
                       exact days it covers right now (owner, 5 Nov 2026: a card
                       that said "Yearly" never said which year, or from when). */}
-                  {budget.periodLabel} · {describeBudgetWindow(budget.window)}
+                  {budget.shown.caption}
                   {/* Past its end date the card still shows what the last
                       period came to, and says in the caption that it is over —
                       a finished one-off among live cards must not read as this
@@ -625,7 +651,7 @@ function BudgetView() {
               <div className="flex justify-between text-body">
                 <span className="text-gray-600 dark:text-gray-400">Spent</span>
                 <span className="font-medium text-gray-900 dark:text-white">
-                  {formatCurrency(budget.spent)} of {formatCurrency(budget.effectiveAmount)}
+                  {formatCurrency(budget.shown.spent)} of {formatCurrency(budget.shown.allowance)}
                 </span>
               </div>
 
@@ -661,25 +687,25 @@ function BudgetView() {
                 role="progressbar"
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-valuenow={Math.round(Math.min(budget.percentage, 100))}
-                aria-valuetext={`${formatPercentage(budget.percentage, 0)}% of ${getBudgetCategoryLabel(budget)} budget used`}
+                aria-valuenow={Math.round(Math.min(budget.shown.percentage, 100))}
+                aria-valuetext={`${formatPercentage(budget.shown.percentage, 0)}% of ${getBudgetCategoryLabel(budget)} budget used`}
               >
                 <div
-                  className={`h-2 rounded-full transition-all ${getProgressColor(budget.percentage)}`}
-                  style={{ width: `${Math.min(budget.percentage, 100)}%` }}
+                  className={`h-2 rounded-full transition-all ${getProgressColor(budget.shown.percentage)}`}
+                  style={{ width: `${Math.min(budget.shown.percentage, 100)}%` }}
                 />
               </div>
 
               <div className="flex justify-between text-body">
                 <span className="text-gray-600 dark:text-gray-400">
-                  {`${formatPercentage(budget.percentage, 0)}% used`}
+                  {`${formatPercentage(budget.shown.percentage, 0)}% used`}
                 </span>
                 <span className={`font-medium ${
-                  budget.remaining >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                  budget.shown.remaining >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                 }`}>
-                  {budget.remaining >= 0
-                    ? `${formatCurrency(budget.remaining)} remaining`
-                    : `over budget by ${formatCurrency(Math.abs(budget.remaining))}`}
+                  {budget.shown.remaining >= 0
+                    ? `${formatCurrency(budget.shown.remaining)} remaining`
+                    : `over budget by ${formatCurrency(Math.abs(budget.shown.remaining))}`}
                 </span>
               </div>
 
@@ -688,6 +714,16 @@ function BudgetView() {
                   the one reading that needs attention; behind pace and on
                   pace are findings, not alarms (the colour rule). A budget of
                   nothing paces nothing, so it carries only the time gone. */}
+              {/* UNDER A SHORTER READING the figures above already say
+                  whether spending is ahead of the months begun, so a second
+                  pace by days beside them would be two answers to one
+                  question. The line says the whole period instead, so the
+                  plan it was shared from is never off the card. */}
+              {budget.shown.short ? (
+              <p className="text-xs text-gray-500 dark:text-gray-400" data-testid="budget-whole-period">
+                {formatCurrency(budget.spent)} of {formatCurrency(budget.effectiveAmount)} for the whole period
+              </p>
+              ) : (
               <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                 <span>{budget.pace.text}</span>
                 {/* PAID IN ONE GO (owner, 7 Nov 2026): a lump has no pace
@@ -707,6 +743,7 @@ function BudgetView() {
                   </span>
                 )}
               </div>
+              )}
               </>
               )}
 

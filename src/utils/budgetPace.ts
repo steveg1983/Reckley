@@ -17,6 +17,7 @@
  */
 
 import type { BudgetPeriodWindow } from './budgetPeriods';
+import type { BudgetMeasure } from './budgetView';
 import { getDateLocale } from './dateFormatter';
 import { toDecimal, type DecimalInstance } from './decimal';
 
@@ -29,6 +30,25 @@ export function describeBudgetWindow(window: Pick<BudgetPeriodWindow, 'start' | 
 /** "6 Apr 2027" — one day, in the app's locale. */
 export function describeBudgetDay(date: Date): string {
   return new Intl.DateTimeFormat(getDateLocale(), { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+}
+
+/**
+ * The caption under a budget's name: its kind of period, and what the figures
+ * beside it cover (utils/budgetView). The whole period says its days, as it
+ * always did. "So far" says how many of the budget's months have begun — the
+ * count the allowance was shared by — and "this month" says the month's days.
+ */
+export function describeBudgetMeasure(
+  window: Pick<BudgetPeriodWindow, 'start' | 'end' | 'label'>,
+  measure: Pick<BudgetMeasure, 'view' | 'months' | 'start' | 'end'>
+): string {
+  if (measure.view === 'toDate' && measure.months) {
+    return `${window.label}, so far · ${measure.months.elapsed} of ${measure.months.total} months`;
+  }
+  if (measure.view === 'month' && measure.months) {
+    return `${window.label}, this month · ${describeBudgetWindow(measure)}`;
+  }
+  return `${window.label} · ${describeBudgetWindow(window)}`;
 }
 
 export interface BudgetPace {
