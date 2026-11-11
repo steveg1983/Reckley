@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { GridIcon } from '../icons';
 import { preferences } from '../../services/preferencesService';
@@ -10,19 +10,32 @@ import {
   widgetBridgeAvailable,
   widgetStatus,
 } from '../../services/widget/widgetBridge';
-import { mintWidgetKey, revokeWidgetKey } from '../../services/widget/widgetKeyClient';
+import { listWidgetPhones, mintWidgetKey, revokeWidgetKey, type WidgetPhone } from '../../services/widget/widgetKeyClient';
+import { formatDate, formatDateTime } from '../../utils/dateFormatter';
 import { loadWidgetPrefs, saveWidgetPrefs } from '../../utils/widgetSettings';
 
 /**
  * Home-screen widgets — whether this phone's widgets may read the budget
  * summary, and how much of it they draw.
  *
- * Drawn ONLY inside an iOS shell that carries the widget plugin
- * (services/widget/widgetBridge.ts). A browser has no home screen, and an
- * installed build older than the widget has nothing to switch on — the page
- * is newer than the app whenever the app has not been updated, and a card
- * there would be a claim the app cannot keep. So it is absent, the way
- * Phone notifications is absent outside the shell.
+ * The SWITCH and the two choices are drawn only inside an iOS shell that
+ * carries the widget plugin (services/widget/widgetBridge.ts). A browser has
+ * no home screen, and an installed build older than the widget has nothing
+ * to switch on — the page is newer than the app whenever the app has not
+ * been updated, and a switch there would be a claim the app cannot keep.
+ *
+ * ── A LOST PHONE IS TURNED OFF FROM ANYWHERE (owner, 11 Nov 2026) ───────────
+ *
+ * The switch is about this phone, and a lost phone is not this phone. So the
+ * card also says which phones have widgets on — asked of the server, which
+ * knows the keys it gave out — and offers one control that turns every one
+ * of them off. Outside the shell that is ALL the card is, and it is drawn
+ * only when some phone has them on: with none, there is nothing to say and
+ * nothing to turn off, and a browser shows no card at all, as before.
+ *
+ * It says the consequence it cannot avoid: a phone that is offline goes on
+ * showing the last figures it fetched until it is next online. The key is
+ * dead at once; what is already drawn on a screen nobody can reach is not.
  *
  * ── THE SWITCH IS ABOUT THIS PHONE ──────────────────────────────────────────
  *
@@ -68,8 +81,36 @@ export default function WidgetSettings(): React.JSX.Element | null {
   const [keyId, setKeyId] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [phones, setPhones] = useState<WidgetPhone[]>([]);
 
   const available = widgetBridgeAvailable();
+
+  // Clerk hands back a new `getToken` whenever it likes; the asking below
+  // should follow the session and this phone's key, not that.
+  const tokenSource = useRef(getToken);
+  tokenSource.current = getToken;
+
+  // Which phones have widgets on, asked once the card is up and again after
+  // anything here changes it. A failure to ask is no list, not an error on a
+  // settings page: the switch below still works without it.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const token = await tokenSource.current();
+        if (!token) return;
+        const found = await listWidgetPhones(token);
+        if (!cancelled) setPhones(found);
+      } catch {
+        if (!cancelled) setPhones([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // `keyId` changes when this phone is switched on or off.
+  }, [isSignedIn, keyId]);
 
   useEffect(() => {
     if (!available) return;
@@ -84,7 +125,10 @@ export default function WidgetSettings(): React.JSX.Element | null {
     };
   }, [available]);
 
-  if (!available || !isSignedIn) return null;
+  if (!isSignedIn) return null;
+  // The phones that are not this one — every phone, outside the shell.
+  const otherPhones = phones.filter((phone) => phone.id !== keyId);
+  if (!available && otherPhones.length === 0 && notice === null) return null;
 
   const switchOn = async (): Promise<void> => {
     const token = await getToken();
@@ -132,6 +176,99 @@ export default function WidgetSettings(): React.JSX.Element | null {
       setWorking(false);
     }
   };
+
+  /** Every key the person has, dead at once; this phone's own emptied first, as the switch does. */
+  const turnOffEverywhere = async (): Promise<void> => {
+    if (working) return;
+    setWorking(true);
+    setNotice(null);
+    try {
+      if (available) {
+        await takeKeyFromWidget();
+        setOn(false);
+      }
+      const token = await getToken();
+      if (!token) {
+        setNotice('Your session has expired. Sign in again, then turn them off.');
+        return;
+      }
+      await revokeWidgetKey(token);
+      setPhones([]);
+      setKeyId(null);
+      setNotice(
+        'Budget widgets are off on every phone. A widget stops showing your budgets the next time it refreshes, within about half an hour. A phone that is offline keeps showing the last figures it fetched until it is next online.'
+      );
+    } catch (error) {
+      setNotice(`The widgets could not be turned off: ${describe(error)}`);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const phonesSection = otherPhones.length > 0 && (
+    <div className={available ? 'mt-4 border-t border-gray-200 dark:border-gray-700 pt-4' : ''} data-testid="widget-phones">
+      <p className="text-sm font-medium text-gray-900 dark:text-white">
+        {available
+          ? otherPhones.length === 1
+            ? 'Budget widgets are also on for another phone'
+            : `Budget widgets are also on for ${otherPhones.length} other phones`
+          : otherPhones.length === 1
+            ? 'Budget widgets are on for one phone'
+            : `Budget widgets are on for ${otherPhones.length} phones`}
+      </p>
+      <ul className="mt-2 space-y-1 text-xs text-gray-500 dark:text-gray-400">
+        {otherPhones.map((phone) => (
+          <li key={phone.id}>
+            {phone.label} · switched on {formatDate(phone.createdAt)} ·{' '}
+            {phone.lastUsedAt ? `last fetched ${formatDateTime(phone.lastUsedAt)}` : 'has not fetched yet'}
+          </li>
+        ))}
+      </ul>
+      <button
+        type="button"
+        onClick={() => void turnOffEverywhere()}
+        disabled={working}
+        className="mt-3 inline-flex items-center min-h-[44px] px-4 py-2 border border-line dark:border-gray-600 text-gray-700 dark:text-gray-200 text-sm font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-60"
+      >
+        Turn off on every phone
+      </button>
+      <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        For a phone you have lost or sold. Widgets are switched on again from the Reckley app on each phone.
+      </p>
+    </div>
+  );
+
+  const status = (
+    <>
+      {working && (
+        <p role="status" className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          One moment…
+        </p>
+      )}
+      {!working && notice && (
+        <p role="status" className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+          {notice}
+        </p>
+      )}
+    </>
+  );
+
+  // Outside the shell the card is the list and its one control, and nothing else.
+  if (!available) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg border border-line dark:border-gray-700 p-6">
+        <h2 className="text-card font-semibold text-theme-heading dark:text-white mb-1 flex items-center gap-2">
+          <GridIcon size={20} className="text-gray-500" />
+          Home-screen widgets
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Your budgets on a phone’s home screen. Budgets only — never your net worth or a balance.
+        </p>
+        {phonesSection}
+        {status}
+      </div>
+    );
+  }
 
   const choose = async (next: WidgetPrefs): Promise<void> => {
     setPrefs(next);
@@ -218,16 +355,8 @@ export default function WidgetSettings(): React.JSX.Element | null {
         These two choices apply to the widgets on every phone you use.
       </p>
 
-      {working && (
-        <p role="status" className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          One moment…
-        </p>
-      )}
-      {!working && notice && (
-        <p role="status" className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          {notice}
-        </p>
-      )}
+      {phonesSection}
+      {status}
     </div>
   );
 }

@@ -69,6 +69,9 @@ interface Posted {
 }
 const posted: Posted[] = [];
 let minted = 0;
+/** What the server says of the phones with widgets on; asking is counted apart from `posted`, which is what CHANGED something. */
+let phonesOnTheServer: Array<{ id: string; label: string; createdAt: string; lastUsedAt: string | null }> = [];
+let listsAsked = 0;
 
 const answerTheKeyRoute = (): void => {
   vi.stubGlobal(
@@ -76,6 +79,10 @@ const answerTheKeyRoute = (): void => {
     vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe('/api/widget/key');
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if (body.action === 'list') {
+        listsAsked += 1;
+        return new Response(JSON.stringify({ keys: phonesOnTheServer }), { status: 200 });
+      }
       posted.push({ authorization: new Headers(init?.headers).get('Authorization'), body });
       if (body.action === 'mint') {
         minted += 1;
@@ -105,6 +112,8 @@ describe('WidgetSettings', () => {
     native.refuseSetKey = false;
     posted.length = 0;
     minted = 0;
+    phonesOnTheServer = [];
+    listsAsked = 0;
     answerTheKeyRoute();
   });
 
@@ -133,7 +142,7 @@ describe('WidgetSettings', () => {
     expect(screen.getByRole('radio', { name: /Amounts/ })).toBeChecked();
     expect(screen.getByRole('radio', { name: /Percentages only/ })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: /Hide figures while the phone is locked/ })).not.toBeChecked();
-    // Nothing is asked of the server by looking at the card.
+    // Nothing is CHANGED on the server by looking at the card.
     expect(posted).toEqual([]);
   });
 
@@ -242,5 +251,83 @@ describe('WidgetSettings', () => {
   it('both choices travel with the account', () => {
     expect(PORTABLE_PREFERENCE_KEYS).toContain('widgetDisplay');
     expect(PORTABLE_PREFERENCE_KEYS).toContain('widgetHideWhenLocked');
+  });
+
+  /**
+   * A LOST PHONE (owner, 11 Nov 2026). The switch is about this phone; a lost
+   * phone is not this phone. The card says which phones have widgets on and
+   * turns every one off — from a browser too, which is where a person without
+   * their phone will be.
+   */
+  describe('turning widgets off for a phone you no longer have', () => {
+    const lost = { id: 'key-lost', label: 'iPhone', createdAt: '2026-11-01T09:00:00.000Z', lastUsedAt: '2026-11-10T14:00:00.000Z' };
+    const spare = { id: 'key-spare', label: 'iPhone', createdAt: '2026-11-05T09:00:00.000Z', lastUsedAt: null };
+
+    it('in a browser with no phone switched on: still nothing', async () => {
+      const { container } = render(<WidgetSettings />);
+      await waitFor(() => expect(listsAsked).toBe(1));
+      expect(container).toBeEmptyDOMElement();
+    });
+
+    it('in a browser: names the phones, and one press kills every key', async () => {
+      phonesOnTheServer = [lost, spare];
+      render(<WidgetSettings />);
+
+      expect(await screen.findByText('Budget widgets are on for 2 phones')).toBeInTheDocument();
+      const section = screen.getByTestId('widget-phones');
+      expect(section).toHaveTextContent(/switched on 1 Nov 2026|switched on 01\/11\/2026/);
+      expect(section).toHaveTextContent('has not fetched yet');
+      // No switch and no choices: there is no phone here to switch.
+      expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Turn off on every phone' }));
+
+      await waitFor(() => expect(posted).toHaveLength(1));
+      // No id: every key the person has.
+      expect(posted[0]).toEqual({ authorization: 'Bearer session-token-invented', body: { action: 'revoke' } });
+      expect(await screen.findByRole('status')).toHaveTextContent(/off on every phone/);
+      // Says what it cannot do: a phone that is offline keeps what it drew.
+      expect(screen.getByRole('status')).toHaveTextContent(/offline keeps showing the last figures/);
+      expect(screen.queryByTestId('widget-phones')).not.toBeInTheDocument();
+      // Nothing native was touched: there is no plugin in a browser.
+      expect(native.calls).toEqual([]);
+    });
+
+    it('on a phone: lists only the OTHER phones, and turning all off empties this one first', async () => {
+      shell(true);
+      native.held = { key: 'rkw_invented_here', keyId: 'key-here', origin: 'https://www.reckley.co.uk' };
+      phonesOnTheServer = [{ ...lost, id: 'key-here' }, lost];
+      render(<WidgetSettings />);
+
+      await waitFor(() => expect(theSwitch()).toBeChecked());
+      expect(await screen.findByText('Budget widgets are also on for another phone')).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Turn off on every phone' }));
+
+      await waitFor(() => expect(posted).toHaveLength(1));
+      expect(native.calls.map(call => call.method)).toEqual(['clearKey']);
+      expect(posted[0].body).toEqual({ action: 'revoke' });
+      expect(theSwitch()).not.toBeChecked();
+    });
+
+    it('on a phone that is the only one: no list, no second control', async () => {
+      shell(true);
+      native.held = { key: 'rkw_invented_here', keyId: 'key-here', origin: 'https://www.reckley.co.uk' };
+      phonesOnTheServer = [{ ...lost, id: 'key-here' }];
+      render(<WidgetSettings />);
+
+      await waitFor(() => expect(theSwitch()).toBeChecked());
+      await waitFor(() => expect(listsAsked).toBeGreaterThan(0));
+      expect(screen.queryByTestId('widget-phones')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Turn off on every phone' })).not.toBeInTheDocument();
+    });
+
+    it('a server that cannot say draws no list, and the switch still works', async () => {
+      shell(true);
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 500 })));
+      render(<WidgetSettings />);
+      expect(await screen.findByRole('heading', { name: 'Home-screen widgets' })).toBeInTheDocument();
+      expect(screen.queryByTestId('widget-phones')).not.toBeInTheDocument();
+    });
   });
 });
