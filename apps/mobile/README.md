@@ -187,9 +187,12 @@ when editing the widget (`OneBudgetWidget.swift`, an `AppIntentConfiguration`),
 in four shapes — small on the home screen, and the lock screen's ring,
 three-line rectangle and one line beside the date.
 
-- **The ring's centre is always the percentage, never an amount.** A lock
-  screen is read by whoever picks the phone up, and a percentage says how the
-  budget stands without saying how large it is.
+- **No lock-screen shape ever draws an amount** — ring, rectangle or line.
+  A lock screen is read by whoever picks the phone up, so all three say how
+  the budget stands as a percentage, whatever "amounts or percentages" is set
+  to (that choice is about the home screen, which is behind the lock). Build
+  9 did this for the ring only, and the owner's lock screen showed pounds
+  within minutes; fixed in build 10. The contract spec holds it.
 - **Unchosen, it is the first Key Budget.** A chosen budget that has finished
   or been deleted says so and draws nothing in its place.
 - **Both widgets read through `BudgetsSource`**: one fetch shape, one cache,
