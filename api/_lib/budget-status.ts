@@ -40,6 +40,30 @@ export function categoryPath(id: string | undefined, categories: Map<string, Cat
   return parts.length > 0 ? parts.join(' > ') : (categories.get(id)?.name ?? null);
 }
 
+const ID_SHAPED = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * What a budget is CALLED, for anything that draws or says one outside the
+ * app: its category's own name, as the Budget page and the Dashboard label
+ * it. The stored `budgets.name` is a fallback and not the truth — the app
+ * never shows it when the category resolves, and the writer fills the column
+ * with the CATEGORY ID when a budget is saved without a name
+ * (`services/api/planningService`), so a budget made in the plain editor
+ * carried a UUID for a name. The owner found one in the lock-screen widget's
+ * list of budgets on 11 Nov 2026. An id-shaped name is therefore never a
+ * name, and a budget with neither is "Budget".
+ */
+export function budgetLabel(
+  budget: Pick<Budget, 'name'>,
+  categoryId: string | undefined,
+  categories: Map<string, Category>
+): string {
+  const category = categoryId ? categories.get(categoryId)?.name : undefined;
+  if (category) return category;
+  const stored = budget.name?.trim();
+  return stored && !ID_SHAPED.test(stored) ? stored : 'Budget';
+}
+
 export interface RunningBudgets {
   /** Active budgets, running or not — zero means the person has none at all. */
   activeCount: number;
