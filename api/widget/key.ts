@@ -5,6 +5,12 @@
  *   { "action": "mint", "label": "iPhone" }   → 201 { id, key }
  *   { "action": "revoke", "id": "<key id>" }  → 200 { revoked: n }   that one
  *   { "action": "revoke" }                    → 200 { revoked: n }   every one of theirs
+ *   { "action": "list" }                      → 200 { keys: [{ id, label, createdAt, lastUsedAt }] }
+ *
+ * `list` is for the person who has lost a phone (owner, 11 Nov 2026): it says
+ * which phones hold a live key, so the app can offer to turn them all off
+ * from a browser. It answers with ids, labels and two dates — never a key,
+ * which the table could not give back if it wanted to.
  *
  * This route is behind the app's own sign-in (Clerk), like every other; only
  * `GET /api/widget/budgets` accepts the key it hands out. The key is in the
@@ -119,7 +125,32 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ revoked: (revoked.data ?? []).length });
     }
 
-    return createErrorResponse(res, 400, "action must be 'mint' or 'revoke'", 'invalid_request');
+    if (body.action === 'list') {
+      const live = await supabase
+        .from('widget_keys')
+        .select('id, label, created_at, last_used_at')
+        .eq('user_id', auth.userId)
+        .is('revoked_at', null)
+        .order('created_at', { ascending: false })
+        .limit(MAX_ACTIVE_WIDGET_KEYS);
+      if (live.error) {
+        return createErrorResponse(
+          res,
+          500,
+          'Failed to list the widget keys',
+          'internal_error',
+          describeSupabaseFailure(live.error, live.status)
+        );
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json({
+        keys: ((live.data ?? []) as Array<{ id: string; label: string | null; created_at: string; last_used_at: string | null }>).map(
+          (row) => ({ id: row.id, label: row.label ?? '', createdAt: row.created_at, lastUsedAt: row.last_used_at })
+        ),
+      });
+    }
+
+    return createErrorResponse(res, 400, "action must be 'mint', 'revoke' or 'list'", 'invalid_request');
   } catch (error) {
     if (error instanceof AuthError) {
       return createErrorResponse(res, error.status, error.message, error.code);

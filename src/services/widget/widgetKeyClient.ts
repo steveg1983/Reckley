@@ -50,3 +50,31 @@ export async function revokeWidgetKey(sessionToken: string, id?: string): Promis
   const answer = await post(sessionToken, id ? { action: 'revoke', id } : { action: 'revoke' });
   return typeof answer.revoked === 'number' ? answer.revoked : 0;
 }
+
+/** A phone that holds a live key: what the server will say of it, which is never the key. */
+export interface WidgetPhone {
+  id: string;
+  /** What the phone called itself when it switched widgets on — "iPhone". */
+  label: string;
+  /** When widgets were switched on there, ISO 8601. */
+  createdAt: string;
+  /** When its widget last fetched, to the hour, or null if it never has. */
+  lastUsedAt: string | null;
+}
+
+/** Every phone with widgets switched on. An answer that is not the expected shape is no phones, not a crash. */
+export async function listWidgetPhones(sessionToken: string): Promise<WidgetPhone[]> {
+  const answer = await post(sessionToken, { action: 'list' });
+  if (!Array.isArray(answer.keys)) return [];
+  const phones: WidgetPhone[] = [];
+  for (const entry of answer.keys as unknown[]) {
+    if (!isRecord(entry) || typeof entry.id !== 'string' || typeof entry.createdAt !== 'string') continue;
+    phones.push({
+      id: entry.id,
+      label: typeof entry.label === 'string' && entry.label !== '' ? entry.label : 'A phone',
+      createdAt: entry.createdAt,
+      lastUsedAt: typeof entry.lastUsedAt === 'string' ? entry.lastUsedAt : null,
+    });
+  }
+  return phones;
+}
