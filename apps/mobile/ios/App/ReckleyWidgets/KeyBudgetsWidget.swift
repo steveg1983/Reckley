@@ -69,24 +69,44 @@ struct KeyBudgetsProvider: TimelineProvider {
     }
 
     static func entry(now: Date = Date()) async -> KeyBudgetsEntry {
+        switch await BudgetsSource.load(now: now) {
+        case .needsKey:
+            return KeyBudgetsEntry(date: now, content: .needsKey)
+        case .unreachable:
+            return KeyBudgetsEntry(date: now, content: .unreachable)
+        case .document(let document, let staleSince):
+            return KeyBudgetsEntry(date: now, content: .document(document, staleSince: staleSince))
+        }
+    }
+}
+
+/// The budgets document as every widget gets it: one fetch shape, one cache,
+/// one answer to a key the server refuses. A refused key is forgotten HERE,
+/// whichever widget happened to ask, so the app's Settings stop saying "on".
+enum BudgetsSource {
+    enum Loaded {
+        case needsKey
+        case unreachable
+        /// `staleSince` is when a kept document was true, when the network gave nothing newer.
+        case document(BudgetsDocument, staleSince: Date?)
+    }
+
+    static func load(now: Date = Date()) async -> Loaded {
         guard let credential = WidgetKeyStore.read() else {
             BudgetsCache.clear()
-            return KeyBudgetsEntry(date: now, content: .needsKey)
+            return .needsKey
         }
         switch await BudgetsFetch.run(with: credential) {
         case .document(let document):
             BudgetsCache.save(document, for: credential.keyId)
-            return KeyBudgetsEntry(date: now, content: .document(document, staleSince: nil))
+            return .document(document, staleSince: nil)
         case .refused:
             try? WidgetKeyStore.clear()
             BudgetsCache.clear()
-            return KeyBudgetsEntry(date: now, content: .needsKey)
+            return .needsKey
         case .unreachable:
-            guard let kept = BudgetsCache.read(for: credential.keyId) else {
-                return KeyBudgetsEntry(date: now, content: .unreachable)
-            }
-            let asOf = ISO8601DateFormatter.withFraction.date(from: kept.asOf) ?? now
-            return KeyBudgetsEntry(date: now, content: .document(kept, staleSince: asOf))
+            guard let kept = BudgetsCache.read(for: credential.keyId) else { return .unreachable }
+            return .document(kept, staleSince: ISO8601DateFormatter.withFraction.date(from: kept.asOf) ?? now)
         }
     }
 }
@@ -156,13 +176,7 @@ struct BudgetRow: View {
     let budget: BudgetsDocument.Budget
     let stacked: Bool
 
-    private var mark: Color {
-        switch budget.attention {
-        case "over": return Palette.over
-        case "near": return Palette.near
-        default: return Palette.ink
-        }
-    }
+    private var mark: Color { Palette.mark(for: budget.attention) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -195,12 +209,20 @@ struct BudgetRow: View {
             .lineLimit(1)
     }
 
-    private var bar: some View {
+    private var bar: some View { BudgetBar(budget: budget) }
+}
+
+/// A budget's bar: full at the allowance and no further — there is no more
+/// room to draw — while the words beside it keep telling the truth past it.
+struct BudgetBar: View {
+    let budget: BudgetsDocument.Budget
+
+    var body: some View {
         GeometryReader { space in
             ZStack(alignment: .leading) {
                 Capsule().fill(Palette.track)
                 Capsule()
-                    .fill(mark)
+                    .fill(Palette.mark(for: budget.attention))
                     .frame(width: space.size.width * min(max(budget.percent, 0), 100) / 100)
                     .widgetAccentable()
             }
@@ -220,6 +242,15 @@ enum Palette {
     static let track = Color.white.opacity(0.16)
     static let near = Color(red: 0xf5 / 255, green: 0xb9 / 255, blue: 0x42 / 255)
     static let over = Color(red: 0xff / 255, green: 0x7b / 255, blue: 0x72 / 255)
+
+    /// Colour marks only what needs attention: a budget in hand is drawn plain.
+    static func mark(for attention: String) -> Color {
+        switch attention {
+        case "over": return over
+        case "near": return near
+        default: return ink
+        }
+    }
 }
 
 extension ISO8601DateFormatter {
