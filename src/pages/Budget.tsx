@@ -277,25 +277,29 @@ function BudgetView() {
       .filter(budget => budget.isActive && !budget.window.ended && !budget.window.notStarted)
       .map(budget => {
         const categoryLabel = getBudgetCategoryLabel(budget);
-        if (budget.percentage >= 100) {
+        // Under the chosen reading (owner, 11 Nov 2026: the alerts follow it
+        // too): a year read "so far" warns when the months begun are spent,
+        // not eleven months later when the year is.
+        if (budget.shown.percentage >= 100) {
           return {
             budgetId: budget.id,
             categoryName: categoryLabel || 'Unknown',
-            percentage: Math.round(budget.percentage),
-            spent: budget.spent,
-            // The figure the card shows — the plan plus any carry — so an
-            // alert can never quote a limit the page does not display.
-            budget: budget.effectiveAmount.toNumber(),
+            percentage: Math.round(budget.shown.percentage),
+            spent: budget.shown.spent,
+            // The figure the card shows — the allowance under the reading,
+            // carry counted — so an alert can never quote a limit the page
+            // does not display.
+            budget: budget.shown.allowance,
             period: budget.period,
             type: 'danger' as const
           };
-        } else if (budget.percentage >= alertThreshold) {
+        } else if (budget.shown.percentage >= alertThreshold) {
           return {
             budgetId: budget.id,
             categoryName: categoryLabel || 'Unknown',
-            percentage: Math.round(budget.percentage),
-            spent: budget.spent,
-            budget: budget.effectiveAmount.toNumber(),
+            percentage: Math.round(budget.shown.percentage),
+            spent: budget.shown.spent,
+            budget: budget.shown.allowance,
             period: budget.period,
             type: 'warning' as const
           };

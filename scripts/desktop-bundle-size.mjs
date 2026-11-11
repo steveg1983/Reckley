@@ -475,9 +475,18 @@ const BINARY = path.join(REPO, 'apps', 'desktop', 'src-tauri', 'target', 'releas
  *
  * Budgets reset to the standing rule, ~1% above measured: 3919 / 1208
  * (+39.4 KiB raw, +1.02%; +12.6 KiB gzip, +1.05%).
+ *
+ * ── RE-RECORDED 2026-11-11, SAME DAY: THE ALERTS FOLLOW THE READING ─────────
+ *
+ *     + the budget's months   3879.6 KiB raw   1195.4 KiB gzip
+ *     + alerts by the reading 3879.9 KiB raw   1195.8 KiB gzip   +0.3 / +0.4
+ *
+ * Intended: the Budget page's alerts, the notification rules and the
+ * Spending Alerts panel measure a long budget as the person reads it
+ * (owner, 11 Nov 2026). Budgets hold at 3919 / 1208.
  */
-const BASELINE_TOTAL_RAW_KIB = 3879.6;
-const BASELINE_TOTAL_GZIP_KIB = 1195.4;
+const BASELINE_TOTAL_RAW_KIB = 3879.9;
+const BASELINE_TOTAL_GZIP_KIB = 1195.8;
 
 // ~1% above measured — see "WHY THE NEW BUDGETS ARE WHERE THEY ARE" above. The
 // convention this file inherited was ~10%; the eviction of 2026-09-01 spent that

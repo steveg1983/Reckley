@@ -15,6 +15,7 @@ import '@testing-library/jest-dom';
 import SpendingAlerts from './SpendingAlerts';
 import { formatCurrency as formatCurrencyDecimal } from '../utils/currency-decimal';
 import { toDecimal } from '../utils/decimal';
+import { preferences } from '../services/preferencesService';
 
 const inCurrentMonth = (day: number): Date => {
   const now = new Date();
@@ -101,6 +102,44 @@ describe('SpendingAlerts', () => {
 
     expect(screen.getByText(/Critical: Groceries has reached 95% of budget!/)).toBeInTheDocument();
     expect(screen.queryByText(/cat-1/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * THE ALERTS FOLLOW THE READING (owner, 11 Nov 2026). The panel used to set
+   * one calendar month's spend against a yearly budget's WHOLE allowance, so
+   * a year could spend twelve times its month before it warned.
+   */
+  describe('a yearly budget', () => {
+    const monthly = mockBudgets[0];
+    const now = new Date();
+    const yearly = {
+      ...monthly,
+      amount: 2400,
+      period: 'yearly' as const,
+      startDate: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
+      // Written after the cycle model shipped: the start is its anchor.
+      createdAt: new Date(2026, 10, 7),
+    };
+
+    beforeEach(() => {
+      mockBudgets[0] = yearly as typeof monthly;
+    });
+
+    afterEach(() => {
+      mockBudgets[0] = monthly;
+      preferences.removeItem('budgetView');
+    });
+
+    it('so far, by default: 190 of the first month\u2019s 200 is critical', () => {
+      render(<SpendingAlerts />);
+      expect(screen.getByText(/Critical: Groceries has reached 95% of budget!/)).toBeInTheDocument();
+    });
+
+    it('the whole period, when that is the choice: 190 of 2,400 raises nothing', () => {
+      preferences.setItem('budgetView', 'period');
+      render(<SpendingAlerts />);
+      expect(screen.queryByText(/Groceries (has reached|is at)/)).not.toBeInTheDocument();
+    });
   });
 
   it('resolves the most-alerted category to a name too', () => {

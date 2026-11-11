@@ -40,6 +40,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Budget, Category, Transaction, TransactionSplit } from '../../../src/types/index.js';
 import { normalisePaceShape, normaliseRolloverMode } from '../../../src/utils/budgetPeriods.js';
+import { parsePreferencesDocument } from '../../../src/services/preferences/document.js';
 import { readAllPages } from './paging.js';
 
 /** Which rows a search wants with respect to review. */
@@ -156,6 +157,12 @@ export interface ReckleyPort {
   getTransaction(id: string): Promise<TransactionDetail | null>;
   listCategories(): Promise<Category[]>;
   listBudgets(): Promise<Budget[]>;
+  /**
+   * The person's portable preferences, as the strings they are stored as.
+   * Optional: a port that keeps none answers nothing, and every reader has
+   * a default. Read for how a long budget is measured (utils/budgetView).
+   */
+  preferenceValues?(): Promise<Record<string, string>>;
   /**
    * Every row dated in [from, to], with the splits of any split parents, up
    * to `cap` rows. Archived rows are left out unless asked for: the reports
@@ -572,6 +579,16 @@ export function createSupabasePort(
         .order('name');
       if (error) return fail('categories', error);
       return ((data ?? []) as CategoryRow[]).map(toCategory);
+    },
+
+    async preferenceValues() {
+      const { data, error } = await supabase
+        .from('user_preferences')
+        .select('prefs')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) return fail('preferences', error);
+      return parsePreferencesDocument((data as { prefs: unknown } | null)?.prefs).values;
     },
 
     async listBudgets() {
