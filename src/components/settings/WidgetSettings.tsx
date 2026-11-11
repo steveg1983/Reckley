@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { GridIcon } from '../icons';
 import { preferences } from '../../services/preferencesService';
-import { type WidgetDisplay, type WidgetPrefs } from '../../services/widget/prefs';
+import { type WidgetDisplay, type WidgetPercentAs, type WidgetPrefs } from '../../services/widget/prefs';
 import {
   handKeyToWidget,
   reloadWidgets,
@@ -70,6 +70,16 @@ const DISPLAY_CHOICES: Array<{ value: WidgetDisplay; label: string; detail: stri
     label: 'Percentages only',
     detail: 'How much of each budget is used. No amount is sent to the widget at all.',
   },
+];
+
+/**
+ * How a percentage is said (owner, 11 Nov 2026): what is used, or what is
+ * left. It governs every place a widget says a percentage — the lock screen
+ * always, and the home screen under "Percentages only".
+ */
+const PERCENT_CHOICES: Array<{ value: WidgetPercentAs; label: string; detail: string }> = [
+  { value: 'used', label: 'Used', detail: 'How much of the budget has gone: “62% used”.' },
+  { value: 'left', label: 'Left', detail: 'How much of the budget remains: “38% left”.' },
 ];
 
 const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
@@ -336,6 +346,35 @@ export default function WidgetSettings(): React.JSX.Element | null {
         </div>
       </fieldset>
 
+      <fieldset className="mt-4">
+        <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Show percentages as</legend>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+          The lock screen always shows a percentage, never an amount. So does the home screen under
+          “Percentages only”.
+        </p>
+        <div className="flex flex-col gap-2">
+          {PERCENT_CHOICES.map(({ value, label, detail }) => (
+            <label
+              key={value}
+              className="flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-3 cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 transition-colors"
+            >
+              <input
+                type="radio"
+                name="widget-percent-as"
+                value={value}
+                checked={prefs.percentAs === value}
+                onChange={() => void choose({ ...prefs, percentAs: value })}
+                className="mt-1"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-gray-900 dark:text-white">{label}</span>
+                <span className="block text-xs text-gray-500 dark:text-gray-400">{detail}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
       <label className="mt-4 flex items-start gap-3 rounded-xl border border-gray-200 dark:border-gray-700 p-3 cursor-pointer hover:border-gray-300 dark:hover:border-gray-600 transition-colors">
         <input
           type="checkbox"
@@ -352,7 +391,7 @@ export default function WidgetSettings(): React.JSX.Element | null {
       </label>
 
       <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-        These two choices apply to the widgets on every phone you use.
+        These choices apply to the widgets on every phone you use.
       </p>
 
       {phonesSection}

@@ -61,6 +61,7 @@ const transactions = [
 const settings = (over: Partial<WidgetSettings> = {}): WidgetSettings => ({
   display: 'amounts',
   hideWhenLocked: false,
+  percentAs: 'used',
   keyBudgetIds: [],
   locale: 'en-GB',
   budgetView: 'toDate',
@@ -189,6 +190,38 @@ describe('describeBudgetsForWidget — order and the empty states', () => {
  * one is its CATEGORY ID, and the widget was drawing the stored name first.
  * The app has always labelled a budget by its category.
  */
+/**
+ * USED OR LEFT (owner, 11 Nov 2026): "what they have left to use rather than
+ * what they have used as a percentage" suits some people better. One choice
+ * for every place a widget says a percentage.
+ */
+describe('a percentage is said as used, or as left', () => {
+  it('used by default, and the document says which so the lock screen can follow', () => {
+    const document = describeWith({ display: 'percent' });
+    expect(document.percentAs).toBe('used');
+    expect(document.budgets.map(entry => entry.status)).toEqual(['25% used', '93% used', 'Over by 12%']);
+  });
+
+  it('left when chosen: the complement of the figure "used" would show, and over is still over', () => {
+    const document = describeWith({ display: 'percent', percentAs: 'left' });
+    expect(document.percentAs).toBe('left');
+    expect(document.budgets.map(entry => entry.status)).toEqual(['75% left', '7% left', 'Over by 12%']);
+    // The bar's own number is untouched: it is what is used, whatever the words.
+    expect(document.budgets.map(entry => entry.percent)).toEqual(describeWith({ display: 'percent' }).budgets.map(entry => entry.percent));
+  });
+
+  it('changes nothing about amounts, which already say what is left', () => {
+    expect(describeWith({ percentAs: 'left' }).budgets.map(entry => entry.status)).toEqual(
+      describeWith().budgets.map(entry => entry.status)
+    );
+  });
+
+  it('reads the choice out of the preferences document, and anything odd is "used"', () => {
+    expect(widgetSettingsFrom({ widgetPercentAs: 'left' }).percentAs).toBe('left');
+    expect(widgetSettingsFrom({ widgetPercentAs: 'remaining' }).percentAs).toBe('used');
+  });
+});
+
 describe('a budget is named by its category, never by an id', () => {
   const named = (over: Partial<Budget>) =>
     describeBudgetsForWidget({
@@ -275,6 +308,7 @@ describe('widgetSettingsFrom — a preferences document is strings someone else 
     expect(widgetSettingsFrom(undefined)).toEqual({
       display: 'amounts',
       hideWhenLocked: false,
+      percentAs: 'used',
       keyBudgetIds: [],
       locale: 'en-GB',
       budgetView: 'toDate',
@@ -289,7 +323,7 @@ describe('widgetSettingsFrom — a preferences document is strings someone else 
         dashboardKeyBudgets: '["a","b"]',
         preferredLocale: 'en-US',
       })
-    ).toEqual({ display: 'percent', hideWhenLocked: true, keyBudgetIds: ['a', 'b'], locale: 'en-US', budgetView: 'toDate' });
+    ).toEqual({ display: 'percent', hideWhenLocked: true, percentAs: 'used', keyBudgetIds: ['a', 'b'], locale: 'en-US', budgetView: 'toDate' });
   });
 
   it('survives values that are not what they should be', () => {
@@ -300,7 +334,7 @@ describe('widgetSettingsFrom — a preferences document is strings someone else 
         dashboardKeyBudgets: '{not json',
         preferredLocale: 'not a locale!',
       })
-    ).toEqual({ display: 'amounts', hideWhenLocked: false, keyBudgetIds: [], locale: 'en-GB', budgetView: 'toDate' });
+    ).toEqual({ display: 'amounts', hideWhenLocked: false, percentAs: 'used', keyBudgetIds: [], locale: 'en-GB', budgetView: 'toDate' });
     expect(widgetSettingsFrom({ dashboardKeyBudgets: '["a",7,null]' }).keyBudgetIds).toEqual(['a']);
   });
 });

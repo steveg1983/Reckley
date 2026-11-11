@@ -44,9 +44,12 @@ import { toDecimal } from '../../src/utils/decimal.js';
 import {
   parseWidgetDisplay,
   parseWidgetHideWhenLocked,
+  parseWidgetPercentAs,
   WIDGET_DISPLAY_KEY,
   WIDGET_HIDE_WHEN_LOCKED_KEY,
+  WIDGET_PERCENT_AS_KEY,
   type WidgetDisplay,
+  type WidgetPercentAs,
 } from '../../src/services/widget/prefs.js';
 import { budgetLabel, localDay } from './budget-status.js';
 
@@ -102,6 +105,12 @@ export interface WidgetBudgetsDocument {
   asOf: string;
   display: WidgetDisplay;
   hideWhenLocked: boolean;
+  /**
+   * How a percentage is said: 'used' or 'left'. The lock-screen widgets make
+   * their own words from `percent` and read this to know which; under
+   * 'percent' the `status` here already follows it.
+   */
+  percentAs: WidgetPercentAs;
   /** False when the person has no active budget at all — a different empty state from "none running". */
   hasBudgets: boolean;
   budgets: WidgetBudget[];
@@ -110,6 +119,7 @@ export interface WidgetBudgetsDocument {
 export interface WidgetSettings {
   display: WidgetDisplay;
   hideWhenLocked: boolean;
+  percentAs: WidgetPercentAs;
   keyBudgetIds: string[];
   locale: string;
   /** How a long budget is read — see the header. */
@@ -139,6 +149,7 @@ export function widgetSettingsFrom(values: Record<string, string> | undefined): 
   return {
     display: parseWidgetDisplay(source[WIDGET_DISPLAY_KEY]),
     hideWhenLocked: parseWidgetHideWhenLocked(source[WIDGET_HIDE_WHEN_LOCKED_KEY]),
+    percentAs: parseWidgetPercentAs(source[WIDGET_PERCENT_AS_KEY]),
     keyBudgetIds,
     locale: usableLocale(source[LOCALE_KEY]),
     budgetView: parseBudgetView(source[BUDGET_VIEW_KEY]),
@@ -226,7 +237,9 @@ export function describeBudgetsForWidget(input: DescribeInput): WidgetBudgetsDoc
     } else {
       status = over
         ? `Over by ${count.format(Math.max(1, Math.round(measure.percentage - 100)))}%`
-        : `${count.format(Math.round(measure.percentage))}% used`;
+        : settings.percentAs === 'left'
+          ? `${count.format(Math.max(0, 100 - Math.round(measure.percentage)))}% left`
+          : `${count.format(Math.round(measure.percentage))}% used`;
     }
 
     const budget: WidgetBudget = {
@@ -272,6 +285,7 @@ export function describeBudgetsForWidget(input: DescribeInput): WidgetBudgetsDoc
     asOf: input.instant.toISOString(),
     display: settings.display,
     hideWhenLocked: settings.hideWhenLocked,
+    percentAs: settings.percentAs,
     hasBudgets: input.activeCount > 0,
     budgets: described.slice(0, MAX_WIDGET_BUDGETS).map(entry => entry.budget),
   };

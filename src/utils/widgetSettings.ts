@@ -12,9 +12,11 @@ import { preferences } from '../services/preferencesService';
 import {
   parseWidgetDisplay,
   parseWidgetHideWhenLocked,
+  parseWidgetPercentAs,
   serialiseWidgetHideWhenLocked,
   WIDGET_DISPLAY_KEY,
   WIDGET_HIDE_WHEN_LOCKED_KEY,
+  WIDGET_PERCENT_AS_KEY,
   type WidgetPrefs,
 } from '../services/widget/prefs';
 
@@ -22,10 +24,12 @@ export function loadWidgetPrefs(): WidgetPrefs {
   return {
     display: parseWidgetDisplay(preferences.getItem(WIDGET_DISPLAY_KEY)),
     hideWhenLocked: parseWidgetHideWhenLocked(preferences.getItem(WIDGET_HIDE_WHEN_LOCKED_KEY)),
+    percentAs: parseWidgetPercentAs(preferences.getItem(WIDGET_PERCENT_AS_KEY)),
   };
 }
 
 export function saveWidgetPrefs(prefs: WidgetPrefs): void {
   preferences.setItem(WIDGET_DISPLAY_KEY, prefs.display);
   preferences.setItem(WIDGET_HIDE_WHEN_LOCKED_KEY, serialiseWidgetHideWhenLocked(prefs.hideWhenLocked));
+  preferences.setItem(WIDGET_PERCENT_AS_KEY, prefs.percentAs);
 }

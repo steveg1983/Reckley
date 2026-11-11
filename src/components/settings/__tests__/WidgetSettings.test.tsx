@@ -253,6 +253,22 @@ describe('WidgetSettings', () => {
     expect(PORTABLE_PREFERENCE_KEYS).toContain('widgetHideWhenLocked');
   });
 
+  it('says percentages as used by default, and stores "left" where the server reads it', async () => {
+    shell(true);
+    render(<WidgetSettings />);
+
+    expect(screen.getByRole('radio', { name: /^Used/ })).toBeChecked();
+    await userEvent.click(screen.getByRole('radio', { name: /^Left/ }));
+
+    expect(screen.getByRole('radio', { name: /^Left/ })).toBeChecked();
+    expect(preferences.getItem('widgetPercentAs')).toBe('left');
+    expect(PORTABLE_PREFERENCE_KEYS).toContain('widgetPercentAs');
+    // The server's own reader, over what the card wrote.
+    expect(widgetSettingsFrom({ widgetPercentAs: preferences.getItem('widgetPercentAs') ?? '' }).percentAs).toBe('left');
+    // …and the widgets are asked to fetch again.
+    await waitFor(() => expect(native.calls.map(call => call.method)).toContain('reload'));
+  });
+
   /**
    * A LOST PHONE (owner, 11 Nov 2026). The switch is about this phone; a lost
    * phone is not this phone. The card says which phones have widgets on and

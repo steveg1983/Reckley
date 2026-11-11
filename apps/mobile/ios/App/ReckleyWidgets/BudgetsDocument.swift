@@ -26,6 +26,9 @@ struct BudgetsDocument: Codable, Equatable {
     let asOf: String
     let display: String
     let hideWhenLocked: Bool
+    /// "used" or "left": how a percentage is said. Absent from a document made
+    /// before the choice existed, which reads as "used".
+    var percentAs: String? = nil
     let hasBudgets: Bool
     let budgets: [Budget]
 
