@@ -10,16 +10,25 @@ import WidgetKit
 ///   small        the name, what is left in large figures, the bar, and what
 ///                that is a day for the days left
 ///   circular     the lock-screen ring: how much is used, as a percentage
-///   rectangular  the lock screen's three lines: name, what is left, a bar
-///   inline       one line beside the date: "Groceries: £190 left"
+///   rectangular  the lock screen's three lines: name, how much is used, a bar
+///   inline       one line beside the date: "Groceries: 62% used"
 ///
-/// The ring's centre is always the PERCENTAGE, never an amount. A lock screen
-/// is read by whoever picks the phone up (the owner's concern, 9 Nov 2026), a
-/// ring has room for three characters, and a percentage says how the budget
-/// stands without saying how large it is. The rectangular and inline shapes
-/// carry the server's own words, which are amounts or percentages by the
-/// person's choice in Settings — and under "percentages only" no amount was
-/// ever sent (`api/_lib/widget-budgets.ts`).
+/// ── NO AMOUNT IS EVER DRAWN ON THE LOCK SCREEN ──────────────────────────────
+///
+/// A lock screen is read by whoever picks the phone up (the owner's concern,
+/// 9 Nov 2026), so all three lock-screen shapes say how the budget stands as
+/// a PERCENTAGE and never as money, whatever the person chose in Settings.
+/// The first build of this widget (9) did that for the ring only and let the
+/// rectangle and the line carry the server's words, which are amounts by
+/// default: the owner's lock screen showed what was left of a budget in
+/// pounds within minutes of his installing it (11 Nov 2026). "Amounts or
+/// percentages" in Settings is a choice about the HOME screen, which is
+/// behind the lock; the lock screen does not get to ask.
+///
+/// The words are made here, from the one number the document carries for
+/// drawing — `percent` — in the server's own two phrasings ("62% used",
+/// "Over by 12%"; `api/_lib/widget-budgets.ts`). That is the only sentence
+/// this widget composes, and it has no money in it to get wrong.
 ///
 /// ── WHICH BUDGET ────────────────────────────────────────────────────────────
 ///
@@ -246,6 +255,15 @@ struct OneBudgetView: View {
 
     // ── Lock screen ─────────────────────────────────────────────────────────
 
+    /// How the budget stands, with no amount in it — see the header. The
+    /// server's own two phrasings, from the one number it sends for drawing.
+    static func lockScreenWords(for budget: BudgetsDocument.Budget) -> String {
+        if budget.attention == "over" || budget.percent > 100 {
+            return "Over by \(max(1, Int((budget.percent - 100).rounded())))%"
+        }
+        return "\(Int(budget.percent.rounded()))% used"
+    }
+
     private var ring: some View {
         Group {
             if let shown {
@@ -256,7 +274,7 @@ struct OneBudgetView: View {
                 }
                 .gaugeStyle(.accessoryCircularCapacity)
                 .privacySensitive(shown.hide)
-                .accessibilityLabel("\(shown.budget.name): \(shown.budget.status)")
+                .accessibilityLabel("\(shown.budget.name): \(Self.lockScreenWords(for: shown.budget))")
             } else {
                 // No room for words in a ring: the mark, and the other shapes say why.
                 Image(systemName: "chart.pie")
@@ -274,7 +292,7 @@ struct OneBudgetView: View {
                     .lineLimit(1)
                     .widgetAccentable()
                 Group {
-                    Text(shown.budget.status)
+                    Text(Self.lockScreenWords(for: shown.budget))
                         .font(.subheadline)
                         .lineLimit(1)
                     ProgressView(value: min(max(shown.budget.percent, 0), 100), total: 100)
@@ -294,7 +312,7 @@ struct OneBudgetView: View {
     private var inline: some View {
         Group {
             if let shown {
-                Text("\(shown.budget.name): \(shown.budget.status)").privacySensitive(shown.hide)
+                Text("\(shown.budget.name): \(Self.lockScreenWords(for: shown.budget))").privacySensitive(shown.hide)
             } else {
                 Text(words ?? "Reckley")
             }

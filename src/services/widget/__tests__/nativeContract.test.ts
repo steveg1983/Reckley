@@ -110,14 +110,19 @@ describe('the widget extension', () => {
     }
   });
 
-  it("the lock-screen ring's centre is a percentage, never an amount", () => {
+  // The owner's lock screen showed an amount on build 9 (11 Nov 2026): the
+  // ring was percentage-only and the other two lock-screen shapes drew the
+  // server's words, which are money by default. The server's words appear
+  // ONCE in this file now — in the home-screen shape, which is behind the lock.
+  it('no lock-screen shape draws or speaks the server\u2019s words, which can be an amount', () => {
     const one = read('ReckleyWidgets/OneBudgetWidget.swift');
-    const ring = one.slice(one.indexOf('private var ring'), one.indexOf('private var rectangular'));
-    expect(ring).toContain('currentValueLabel');
-    expect(ring).toContain('Int(shown.budget.percent.rounded())');
-    // The server's words can be an amount; they are for a screen reader here, never drawn.
-    expect(ring.match(/budget\.status/g)).toHaveLength(1);
-    expect(ring).toContain('accessibilityLabel("\\(shown.budget.name): \\(shown.budget.status)")');
+    const lockScreen = one.slice(one.indexOf('// \u2500\u2500 Lock screen'));
+    expect(lockScreen.length).toBeGreaterThan(200);
+    expect(lockScreen).not.toMatch(/budget\.(status|spent|allowance|perDay)/);
+    expect(lockScreen.match(/lockScreenWords\(for: shown\.budget\)/g)).toHaveLength(3);
+    expect(lockScreen).toContain('Int(shown.budget.percent.rounded())');
+    const homeScreen = one.slice(0, one.indexOf('// \u2500\u2500 Lock screen'));
+    expect(homeScreen.match(/shown\.budget\.status/g)).toHaveLength(1);
   });
 
   it("carries the app's build number, which App Store Connect requires to match", () => {
