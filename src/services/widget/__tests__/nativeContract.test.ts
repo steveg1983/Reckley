@@ -119,8 +119,11 @@ describe('the widget extension', () => {
     const lockScreen = one.slice(one.indexOf('// \u2500\u2500 Lock screen'));
     expect(lockScreen.length).toBeGreaterThan(200);
     expect(lockScreen).not.toMatch(/budget\.(status|spent|allowance|perDay)/);
-    expect(lockScreen.match(/lockScreenWords\(for: shown\.budget\)/g)).toHaveLength(3);
-    expect(lockScreen).toContain('Int(shown.budget.percent.rounded())');
+    expect(lockScreen.match(/lockScreenWords\(for: shown\.budget, asLeft: entry\.percentAsLeft\)/g)).toHaveLength(3);
+    // Used or left, by the person's choice — a percentage either way.
+    expect(lockScreen).toContain('% left');
+    expect(lockScreen).toContain('% used');
+    expect(lockScreen).toContain('ringFigures(for: shown.budget)');
     const homeScreen = one.slice(0, one.indexOf('// \u2500\u2500 Lock screen'));
     expect(homeScreen.match(/shown\.budget\.status/g)).toHaveLength(1);
   });

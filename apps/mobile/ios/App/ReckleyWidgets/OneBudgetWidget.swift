@@ -26,8 +26,10 @@ import WidgetKit
 /// behind the lock; the lock screen does not get to ask.
 ///
 /// The words are made here, from the one number the document carries for
-/// drawing — `percent` — in the server's own two phrasings ("62% used",
-/// "Over by 12%"; `api/_lib/widget-budgets.ts`). That is the only sentence
+/// drawing — `percent` — in the server's own phrasings ("62% used" or, by the
+/// person's choice in Settings, "38% left"; "Over by 12%" either way;
+/// `api/_lib/widget-budgets.ts`). The ring follows the same choice: it fills
+/// with what is used, or stands for what is left and empties. That is the only sentence
 /// this widget composes, and it has no money in it to get wrong.
 ///
 /// ── WHICH BUDGET ────────────────────────────────────────────────────────────
@@ -116,6 +118,8 @@ struct OneBudgetEntry: TimelineEntry {
 
     let date: Date
     let content: Content
+    /// The person asked for percentages as what is LEFT, not what is used.
+    var percentAsLeft = false
 }
 
 struct OneBudgetProvider: AppIntentTimelineProvider {
@@ -147,7 +151,11 @@ struct OneBudgetProvider: AppIntentTimelineProvider {
         case .unreachable:
             return OneBudgetEntry(date: now, content: .unreachable)
         case .document(let document, let staleSince):
-            return OneBudgetEntry(date: now, content: pick(configuration.budget?.id, from: document, staleSince: staleSince))
+            return OneBudgetEntry(
+                date: now,
+                content: pick(configuration.budget?.id, from: document, staleSince: staleSince),
+                percentAsLeft: document.percentAs == "left"
+            )
         }
     }
 
@@ -257,24 +265,41 @@ struct OneBudgetView: View {
 
     /// How the budget stands, with no amount in it — see the header. The
     /// server's own two phrasings, from the one number it sends for drawing.
-    static func lockScreenWords(for budget: BudgetsDocument.Budget) -> String {
+    static func lockScreenWords(for budget: BudgetsDocument.Budget, asLeft: Bool) -> String {
         if budget.attention == "over" || budget.percent > 100 {
             return "Over by \(max(1, Int((budget.percent - 100).rounded())))%"
         }
-        return "\(Int(budget.percent.rounded()))% used"
+        return asLeft ? "\(percentLeft(of: budget))% left" : "\(Int(budget.percent.rounded()))% used"
+    }
+
+    /// What remains, never below nothing: the complement of the rounded figure
+    /// "used" would show, so the two readings of one budget always sum to 100.
+    static func percentLeft(of budget: BudgetsDocument.Budget) -> Int {
+        max(0, 100 - Int(budget.percent.rounded()))
+    }
+
+    /// The ring's fill and its centre: what is used and filling, or what is
+    /// left and emptying. An overspent budget is a full ring saying how far
+    /// past, or an empty one saying nothing is left.
+    private func ringFigures(for budget: BudgetsDocument.Budget) -> (value: Double, label: String) {
+        if entry.percentAsLeft {
+            return (min(max(100 - budget.percent, 0), 100), "\(Self.percentLeft(of: budget))%")
+        }
+        return (min(max(budget.percent, 0), 100), "\(Int(budget.percent.rounded()))%")
     }
 
     private var ring: some View {
         Group {
             if let shown {
-                Gauge(value: min(max(shown.budget.percent, 0), 100), in: 0...100) {
+                let figures = ringFigures(for: shown.budget)
+                Gauge(value: figures.value, in: 0...100) {
                     Text(shown.budget.name)
                 } currentValueLabel: {
-                    Text("\(Int(shown.budget.percent.rounded()))%")
+                    Text(figures.label)
                 }
                 .gaugeStyle(.accessoryCircularCapacity)
                 .privacySensitive(shown.hide)
-                .accessibilityLabel("\(shown.budget.name): \(Self.lockScreenWords(for: shown.budget))")
+                .accessibilityLabel("\(shown.budget.name): \(Self.lockScreenWords(for: shown.budget, asLeft: entry.percentAsLeft))")
             } else {
                 // No room for words in a ring: the mark, and the other shapes say why.
                 Image(systemName: "chart.pie")
@@ -292,7 +317,7 @@ struct OneBudgetView: View {
                     .lineLimit(1)
                     .widgetAccentable()
                 Group {
-                    Text(Self.lockScreenWords(for: shown.budget))
+                    Text(Self.lockScreenWords(for: shown.budget, asLeft: entry.percentAsLeft))
                         .font(.subheadline)
                         .lineLimit(1)
                     ProgressView(value: min(max(shown.budget.percent, 0), 100), total: 100)
@@ -312,7 +337,7 @@ struct OneBudgetView: View {
     private var inline: some View {
         Group {
             if let shown {
-                Text("\(shown.budget.name): \(Self.lockScreenWords(for: shown.budget))").privacySensitive(shown.hide)
+                Text("\(shown.budget.name): \(Self.lockScreenWords(for: shown.budget, asLeft: entry.percentAsLeft))").privacySensitive(shown.hide)
             } else {
                 Text(words ?? "Reckley")
             }

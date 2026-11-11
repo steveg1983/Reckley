@@ -256,6 +256,7 @@ export const PORTABLE_PREFERENCE_KEYS: readonly string[] = [
   // phone, and it is asked of the phone. See services/widget/prefs.ts.
   'widgetDisplay',
   'widgetHideWhenLocked',
+  'widgetPercentAs',
 
   // ── Formatting ───────────────────────────────────────────────────────────
   'preferredLocale',
