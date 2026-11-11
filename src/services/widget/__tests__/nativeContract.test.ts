@@ -123,7 +123,10 @@ describe('the widget extension', () => {
     // Used or left, by the person's choice — a percentage either way.
     expect(lockScreen).toContain('% left');
     expect(lockScreen).toContain('% used');
-    expect(lockScreen).toContain('ringFigures(for: shown.budget)');
+    // The ring AND the bar take their fill from the one place that reads the
+    // choice: "95% left" over a bar of what is used read as nearly gone.
+    expect(lockScreen.match(/fillFigures\(for: shown\.budget\)/g)).toHaveLength(2);
+    expect(lockScreen).not.toMatch(/ProgressView\(value: [^)]*budget\.percent/);
     const homeScreen = one.slice(0, one.indexOf('// \u2500\u2500 Lock screen'));
     expect(homeScreen.match(/shown\.budget\.status/g)).toHaveLength(1);
   });

@@ -28,8 +28,9 @@ import WidgetKit
 /// The words are made here, from the one number the document carries for
 /// drawing — `percent` — in the server's own phrasings ("62% used" or, by the
 /// person's choice in Settings, "38% left"; "Over by 12%" either way;
-/// `api/_lib/widget-budgets.ts`). The ring follows the same choice: it fills
-/// with what is used, or stands for what is left and empties. That is the only sentence
+/// `api/_lib/widget-budgets.ts`). The ring and the bar follow the same
+/// choice: they fill with what is used, or stand for what is left and empty.
+/// That is the only sentence
 /// this widget composes, and it has no money in it to get wrong.
 ///
 /// ── WHICH BUDGET ────────────────────────────────────────────────────────────
@@ -278,10 +279,13 @@ struct OneBudgetView: View {
         max(0, 100 - Int(budget.percent.rounded()))
     }
 
-    /// The ring's fill and its centre: what is used and filling, or what is
-    /// left and emptying. An overspent budget is a full ring saying how far
-    /// past, or an empty one saying nothing is left.
-    private func ringFigures(for budget: BudgetsDocument.Budget) -> (value: Double, label: String) {
+    /// The fill of the ring and of the bar, and the ring's centre: what is used
+    /// and filling, or what is left and emptying. An overspent budget is a full
+    /// shape saying how far past, or an empty one saying nothing is left.
+    ///
+    /// The bar follows the choice too (owner, 11 Nov 2026, on build 11): "95%
+    /// left" over a bar drawn as what is used read as a budget nearly gone.
+    private func fillFigures(for budget: BudgetsDocument.Budget) -> (value: Double, label: String) {
         if entry.percentAsLeft {
             return (min(max(100 - budget.percent, 0), 100), "\(Self.percentLeft(of: budget))%")
         }
@@ -291,7 +295,7 @@ struct OneBudgetView: View {
     private var ring: some View {
         Group {
             if let shown {
-                let figures = ringFigures(for: shown.budget)
+                let figures = fillFigures(for: shown.budget)
                 Gauge(value: figures.value, in: 0...100) {
                     Text(shown.budget.name)
                 } currentValueLabel: {
@@ -320,7 +324,7 @@ struct OneBudgetView: View {
                     Text(Self.lockScreenWords(for: shown.budget, asLeft: entry.percentAsLeft))
                         .font(.subheadline)
                         .lineLimit(1)
-                    ProgressView(value: min(max(shown.budget.percent, 0), 100), total: 100)
+                    ProgressView(value: fillFigures(for: shown.budget).value, total: 100)
                         .progressViewStyle(.linear)
                 }
                 .privacySensitive(shown.hide)
