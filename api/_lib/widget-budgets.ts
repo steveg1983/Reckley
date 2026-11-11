@@ -24,12 +24,22 @@
  * monthly budget turns over. The widget says where it is (its IANA zone) and
  * `wallClockIn` hands the evaluation that zone's calendar.
  *
+ * ── THE WIDGET READS A LONG BUDGET AS THE APP DOES ──────────────────────────
+ * The owner's ruling (10 Nov 2026): a yearly budget is read "so far" — spend
+ * against the months that have begun — unless the person chooses this month's
+ * share or the whole period (`src/utils/budgetView`). One setting, kept with
+ * the account, and the same one the Dashboard and the Budget page draw by, so
+ * a glance at the phone and the page behind it say the same figure. Under a
+ * shorter reading the days left, and what is left per day, run to the end of
+ * the month being read, not the end of the year.
+ *
  * Nothing here is a TypeScript enum or a parameter property (the API project
  * compiles with `erasableSyntaxOnly`).
  */
 
 import type { Budget, Category } from '../../src/types/index.js';
 import type { EvaluatedBudget } from '../../src/utils/budgetEvaluation.js';
+import { BUDGET_VIEW_KEY, measureBudget, parseBudgetView, type BudgetView } from '../../src/utils/budgetView.js';
 import { toDecimal } from '../../src/utils/decimal.js';
 import {
   parseWidgetDisplay,
@@ -49,6 +59,7 @@ export const WIDGET_DOCUMENT_VERSION = 1;
  */
 export { WIDGET_DISPLAY_KEY, WIDGET_HIDE_WHEN_LOCKED_KEY, type WidgetDisplay };
 export const KEY_BUDGETS_KEY = 'dashboardKeyBudgets';
+export { BUDGET_VIEW_KEY };
 export const LOCALE_KEY = 'preferredLocale';
 
 export const DEFAULT_LOCALE = 'en-GB';
@@ -72,11 +83,11 @@ export interface WidgetBudget {
   attention: WidgetAttention;
   /** "£377 left" · "Over by £155" — or, under 'percent', "62% used" · "Over by 12%". */
   status: string;
-  /** "Monthly", "Fortnightly" … the Budget page's own caption. */
+  /** "Monthly", "Yearly, so far", "Yearly, this month" … what the figures are for. */
   period: string;
-  /** Last day of the window, YYYY-MM-DD. */
+  /** Last day the figures cover, YYYY-MM-DD: the window's, or the month's under a shorter reading. */
   until: string;
-  /** Days left in the window, today included. Never below 1 for a running budget. */
+  /** Days left to that day, today included. Never below 1 for a running budget. */
   daysLeft: number;
   /** Present only under 'amounts'. */
   spent?: string;
@@ -101,6 +112,8 @@ export interface WidgetSettings {
   hideWhenLocked: boolean;
   keyBudgetIds: string[];
   locale: string;
+  /** How a long budget is read — see the header. */
+  budgetView: BudgetView;
 }
 
 /** A BCP 47 tag Intl accepts, or the default. A preference is a string someone else wrote. */
@@ -128,6 +141,7 @@ export function widgetSettingsFrom(values: Record<string, string> | undefined): 
     hideWhenLocked: parseWidgetHideWhenLocked(source[WIDGET_HIDE_WHEN_LOCKED_KEY]),
     keyBudgetIds,
     locale: usableLocale(source[LOCALE_KEY]),
+    budgetView: parseBudgetView(source[BUDGET_VIEW_KEY]),
   };
 }
 
@@ -196,38 +210,44 @@ export function describeBudgetsForWidget(input: DescribeInput): WidgetBudgetsDoc
   const keyOrder = new Map(settings.keyBudgetIds.map((id, index) => [id, index]));
 
   const described = input.evaluated.map((entry, storedIndex) => {
-    const over = entry.remaining.isNegative();
+    const measure = measureBudget(entry, settings.budgetView);
+    const over = measure.remaining.isNegative();
     const threshold =
       typeof entry.budget.alertThreshold === 'number' && entry.budget.alertThreshold > 0
         ? entry.budget.alertThreshold
         : DEFAULT_NEAR_PERCENT;
-    const attention: WidgetAttention = over ? 'over' : entry.percentage >= threshold ? 'near' : 'none';
-    const daysLeft = Math.max(1, daysBetween(input.today, entry.window.end) + 1);
-    const left = entry.remaining.abs();
+    const attention: WidgetAttention = over ? 'over' : measure.percentage >= threshold ? 'near' : 'none';
+    const daysLeft = Math.max(1, daysBetween(input.today, measure.end) + 1);
+    const left = measure.remaining.abs();
 
     let status: string;
     if (amounts) {
       status = over ? `Over by ${whole.format(left.toNumber())}` : `${whole.format(left.toNumber())} left`;
     } else {
       status = over
-        ? `Over by ${count.format(Math.max(1, Math.round(entry.percentage - 100)))}%`
-        : `${count.format(Math.round(entry.percentage))}% used`;
+        ? `Over by ${count.format(Math.max(1, Math.round(measure.percentage - 100)))}%`
+        : `${count.format(Math.round(measure.percentage))}% used`;
     }
 
     const budget: WidgetBudget = {
       id: entry.budget.id,
       name: entry.budget.name || (categoryPath(entry.categoryId, input.categories) ?? 'Budget'),
       key: keyOrder.has(entry.budget.id),
-      percent: Number(entry.percentage.toFixed(1)),
+      percent: Number(measure.percentage.toFixed(1)),
       attention,
       status,
-      period: entry.window.label,
-      until: localDay(entry.window.end),
+      period:
+        measure.view === 'toDate'
+          ? `${entry.window.label}, so far`
+          : measure.view === 'month'
+            ? `${entry.window.label}, this month`
+            : entry.window.label,
+      until: localDay(measure.end),
       daysLeft,
     };
     if (amounts) {
-      budget.spent = whole.format(entry.spent.toNumber());
-      budget.allowance = whole.format(entry.effectiveAmount.toNumber());
+      budget.spent = whole.format(measure.spent.toNumber());
+      budget.allowance = whole.format(measure.allowance.toNumber());
       if (!over && left.greaterThan(0)) {
         budget.perDay = `${whole.format(left.dividedBy(toDecimal(daysLeft)).toNumber())} a day`;
       }

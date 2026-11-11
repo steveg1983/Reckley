@@ -4,6 +4,8 @@ import type { JsonValue, UnknownObject } from '../types/common';
 import { formatCurrency as formatCurrencyDecimal } from '../utils/currency-decimal';
 import { createScopedLogger, type ScopedLogger } from '../loggers/scopedLogger';
 import { evaluateBudgets } from '../utils/budgetEvaluation';
+import { BUDGET_VIEW_KEY, measureBudget, parseBudgetView } from '../utils/budgetView';
+import { preferences } from './preferencesService';
 import { buildTransactionRegisterPath } from '../utils/transactionDeepLink';
 
 export interface NotificationRule {
@@ -393,7 +395,17 @@ export class NotificationService {
       now
     });
 
-    evaluated.forEach(({ budget, effectiveAmount: amount, spent: spentDecimal, percentage, excludedForeignCount, window }) => {
+    // Measured under the person's reading of a long budget (owner, 11 Nov
+    // 2026): the figure a notification quotes is the one the Budget card and
+    // the Dashboard show — a year read "so far" against the months begun.
+    const view = parseBudgetView(preferences.getItem(BUDGET_VIEW_KEY));
+
+    evaluated.forEach(entry => {
+      const { budget, excludedForeignCount, window } = entry;
+      const measure = measureBudget(entry, view);
+      const amount = measure.allowance;
+      const spentDecimal = measure.spent;
+      const percentage = measure.percentage;
       // A budget past its end date, or not yet started, is nothing to be
       // warned about: the finished one's figure is history and the future
       // one's is nothing. The Budget page's own alert pass makes the same cut.

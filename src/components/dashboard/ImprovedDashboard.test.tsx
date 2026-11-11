@@ -686,6 +686,77 @@ describe('Budget Status', () => {
   });
 
   /**
+   * A LONG BUDGET, READ SHORT (owner, 10 Nov 2026): "Looking at a yearly
+   * budget all the time doesn't help people budget for the short term."
+   * A year from 1 September, read on 15 October, is in its second month of
+   * twelve — so "so far" is 2/12 of the year. The cog holds the choice.
+   */
+  describe('a yearly budget is read by its months', () => {
+    beforeEach(() => {
+      localStorage.removeItem('budgetView');
+      mocks.app.budgets = [{
+        id: 'b-food',
+        categoryId: 'cat-food',
+        amount: 1200,
+        period: 'yearly',
+        startDate: '2026-09-01',
+        isActive: true,
+        // Written after the cycle model shipped: the start is its anchor.
+        createdAt: new Date(2026, 10, 7),
+        updatedAt: new Date(2026, 10, 7),
+        spent: 0,
+      }] as never[];
+    });
+
+    afterEach(() => {
+      localStorage.removeItem('budgetView');
+    });
+
+    it('so far, by default: the months begun, and the rows of those months', () => {
+      render(<ImprovedDashboard />);
+
+      const row = screen.getByTestId('budget-status-row');
+      // September's 300 and October's net 380, against two months of twelve.
+      expect(row).toHaveTextContent('£680.00 / £200.00');
+      expect(row).toHaveTextContent('Yearly, so far · 2 of 12 months');
+      expect(screen.getByRole('button', { name: /Food Shopping: £680\.00 of £200\.00, yearly, so far, 2 of 12 months\. Show the transactions/ })).toBeInTheDocument();
+
+      fireEvent.click(row);
+      expect(screen.getByTestId('budget-drill-title')).toHaveTextContent(/Food Shopping — 1 Sept?\s*[–-]\s*31 Oct 2026/);
+      expect(screen.getByTestId('budget-drill-rows').textContent!.split(',').sort()).toEqual(['r-first', 'r-refund', 'r-sept']);
+    });
+
+    it('this month, from the cog: one twelfth against October alone, and it is remembered', () => {
+      render(<ImprovedDashboard />);
+      fireEvent.click(screen.getByRole('button', { name: 'Customise displayed budgets' }));
+      fireEvent.change(screen.getByLabelText('Read longer budgets'), { target: { value: 'month' } });
+
+      const row = screen.getByTestId('budget-status-row');
+      expect(row).toHaveTextContent('£380.00 / £100.00');
+      expect(row).toHaveTextContent(/Yearly, this month · 1\s*[–-]\s*31 Oct 2026/);
+      expect(localStorage.getItem('budgetView')).toBe('month');
+
+      fireEvent.click(row);
+      expect(screen.getByTestId('budget-drill-rows').textContent!.split(',').sort()).toEqual(['r-first', 'r-refund']);
+    });
+
+    it('the whole period, when that is the choice: the card as it always was', () => {
+      localStorage.setItem('budgetView', 'period');
+      render(<ImprovedDashboard />);
+
+      const row = screen.getByTestId('budget-status-row');
+      expect(row).toHaveTextContent('£680.00 / £1200.00');
+      expect(row).toHaveTextContent(/Yearly · 1 Sept? 2026\s*[–-]\s*31 Aug 2027/);
+    });
+  });
+
+  it('offers no reading to choose when no budget is longer than a month', () => {
+    render(<ImprovedDashboard />);
+    fireEvent.click(screen.getByRole('button', { name: 'Customise displayed budgets' }));
+    expect(screen.queryByLabelText('Read longer budgets')).not.toBeInTheDocument();
+  });
+
+  /**
    * KEY BUDGETS (owner, 7 Nov 2026): the cog the key accounts have. Nothing
    * chosen = the first three, never written; a choice is a filter, in the
    * stored order; "View All Budgets" is always there.

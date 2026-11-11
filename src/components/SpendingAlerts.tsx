@@ -5,6 +5,8 @@ import { useCurrencyDecimal } from '../hooks/useCurrencyDecimal';
 import { calculateBudgetSpending, calculateBudgetPercentage } from '../utils/calculations-decimal';
 import { toDecimal, toStorageNumber } from '../utils/decimal';
 import { evaluateBudgets } from '../utils/budgetEvaluation';
+import { BUDGET_VIEW_KEY, measureBudget, parseBudgetView } from '../utils/budgetView';
+import { preferences } from '../services/preferencesService';
 import { toDecimalTransaction } from '../utils/decimal-converters';
 import { expandSplitTransactions } from '../utils/transactionSplits';
 import { formatDecimal } from '../utils/decimal-format';
@@ -269,9 +271,15 @@ export default function SpendingAlerts() {
       // The allowance the Budget page shows — the plan plus whatever carry
       // the budget's mode allows in from the cycles before — so an alert
       // matches the spendable amount (utils/budgetEvaluation).
-      const allowanceById = new Map(
+      // …and read as the person reads a long budget (owner, 11 Nov 2026):
+      // so far, this month's share, or whole. utils/budgetView.
+      const view = parseBudgetView(preferences.getItem(BUDGET_VIEW_KEY));
+      const evaluatedById = new Map(
         evaluateBudgets(budgets, { transactions, transactionSplits, categories, now })
-          .map(entry => [entry.budget.id, entry.effectiveAmount] as const)
+          .map(entry => [entry.budget.id, entry] as const)
+      );
+      const allowanceById = new Map(
+        [...evaluatedById].map(([id, entry]) => [id, entry.effectiveAmount] as const)
       );
       const decimalBudgets: DecimalBudget[] = budgets.map(b => ({
         ...b,
@@ -294,9 +302,20 @@ export default function SpendingAlerts() {
         const decimalBudget = decimalBudgets.find((db: DecimalBudget) => db.id === budget.id);
         if (!decimalBudget || !budget.isActive) return;
         
-        const spent = calculateBudgetSpending(decimalBudget, decimalTransactions, startDate, endDate);
-        const percentage = calculateBudgetPercentage(decimalBudget, spent);
-        const remaining = decimalBudget.amount.minus(spent);
+        // A budget with months to be read by is measured under the reading:
+        // its own spend against its own allowance for the same stretch. This
+        // line used to set ONE CALENDAR MONTH's spend against the allowance
+        // for the budget's WHOLE window — a yearly budget could spend twelve
+        // times its month before it warned. Budgets with no months (monthly,
+        // weekly, paid in one go) keep the calendar-month sum they always had.
+        const evaluated = evaluatedById.get(budget.id);
+        const measure = evaluated?.months ? measureBudget(evaluated, view) : null;
+        const allowance = measure ? measure.allowance : decimalBudget.amount;
+        const spent = measure
+          ? measure.spent
+          : calculateBudgetSpending(decimalBudget, decimalTransactions, startDate, endDate);
+        const percentage = calculateBudgetPercentage({ amount: allowance }, spent);
+        const remaining = allowance.minus(spent);
         
         alertConfigs.forEach(config => {
           if (!config.enabled) return;
@@ -333,7 +352,7 @@ export default function SpendingAlerts() {
               type: alertType,
               percentage,
               spent,
-              budget: decimalBudget.amount,
+              budget: allowance,
               remaining,
               message,
               timestamp: now,

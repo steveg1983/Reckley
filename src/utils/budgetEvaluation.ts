@@ -52,7 +52,8 @@ import {
   type BudgetSpendingFilter,
   type DatedDecimalTransaction,
 } from './calculations-decimal.js';
-import { getBudgetPeriodWindow, normaliseRolloverMode, previousBudgetWindow, type BudgetPeriodWindow } from './budgetPeriods.js';
+import { getBudgetPeriodWindow, normalisePaceShape, normaliseRolloverMode, previousBudgetWindow, type BudgetPeriodWindow } from './budgetPeriods.js';
+import { budgetMonthSteps, type BudgetMonthFigures } from './budgetView.js';
 import {
   buildCategoryChildIndex,
   calculateBudgetSpend,
@@ -124,6 +125,13 @@ export interface EvaluatedBudget<B extends Budget = Budget> {
   countedRowIds: ReadonlySet<string>;
   /** In-window rows left out because their account is in another currency. */
   excludedForeignCount: number;
+  /**
+   * The window's months as at the evaluation instant, with the spend so far
+   * and this month's — what utils/budgetView reads "to date" and "this
+   * month" from. Null when the budget has nothing shorter to be read as:
+   * a month or less, paid in one go, not started, or finished.
+   */
+  months: BudgetMonthFigures | null;
 }
 
 export interface EvaluateBudgetsInput {
@@ -435,6 +443,26 @@ export function evaluateBudgets<B extends Budget>(
     );
     const effectiveAmount = toDecimal(budget.amount).plus(figures.carriedIn).plus(figures.receivedIn);
 
+    // The shorter readings (utils/budgetView), summed from the rows already
+    // counted for the window, so they can never count a row the whole did not.
+    const steps = normalisePaceShape(budget.paceShape) === 'once' ? null : budgetMonthSteps(window, ledger.now);
+    const spendBetween = (from: Date, to: Date) =>
+      calculateBudgetSpendingBreakdown({ categoryId }, counted, from, to, {
+        categoryIds: categoryIds.size > 1 ? categoryIds : undefined,
+      });
+    let months: BudgetMonthFigures | null = null;
+    if (steps) {
+      const toDate = spendBetween(window.start, steps.currentEnd);
+      const thisMonth = spendBetween(steps.currentStart, steps.currentEnd);
+      months = {
+        ...steps,
+        spentToDate: toDate.spent,
+        spentThisMonth: thisMonth.spent,
+        toDateRowIds: new Set(toDate.counted.map(row => row.id)),
+        thisMonthRowIds: new Set(thisMonth.counted.map(row => row.id)),
+      };
+    }
+
     return {
       budget,
       categoryId,
@@ -451,6 +479,7 @@ export function evaluateBudgets<B extends Budget>(
       window,
       countedRowIds: new Set(counted.map(row => row.id)),
       excludedForeignCount,
+      months,
     };
   });
 }

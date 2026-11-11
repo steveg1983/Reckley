@@ -141,6 +141,9 @@ export const PORTABLE_PREFERENCE_KEYS: readonly string[] = [
   // pinned beside them. Statements about HIS data, not about this screen.
   'dashboardKeyAccounts',
   'dashboardKeyBudgets',
+  // How a long budget is read — so far, this month, or whole (utils/budgetView).
+  // The widget's document is shaped by it too, so it must reach the server.
+  'budgetView',
   'dashboardPinnedReports',
   ...periodPreferenceKeys('dashboardReports'),
   ...periodPreferenceKeys('dashboardReportsFlows'),

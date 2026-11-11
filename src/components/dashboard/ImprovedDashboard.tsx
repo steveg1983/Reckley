@@ -73,7 +73,10 @@ import { compareText } from '../../utils/localeFormat';
 import { evaluateBudgets } from '../../utils/budgetEvaluation';
 import { foreignCurrencyAccountIds } from '../../utils/budgetSpending';
 import type { BudgetPeriodWindow } from '../../utils/budgetPeriods';
-import { describeBudgetWindow } from '../../utils/budgetPace';
+import { describeBudgetMeasure, describeBudgetWindow } from '../../utils/budgetPace';
+import { measureBudget } from '../../utils/budgetView';
+import BudgetViewChoice from '../budget/BudgetViewChoice';
+import { useBudgetView } from '../../hooks/useBudgetView';
 import ReportDrillModal, { type ReportDrillTarget } from '../reports/ReportDrillModal';
 import { buildAttentionItems } from '../../utils/attentionItems';
 import { loadAutoSyncPrefs } from '../../utils/bankAutoSync';
@@ -152,6 +155,8 @@ interface BudgetStatusRow {
   categoryName: string;
   spent: number;
   window: BudgetPeriodWindow;
+  /** The days the figure covers under the chosen reading — the drill's title. */
+  measuredOver: { start: Date; end: Date };
   countedRowIds: ReadonlySet<string>;
 }
 
@@ -199,6 +204,9 @@ export function ImprovedDashboard() {
    * (a portable preference, and its ids are followed through a restore).
    */
   const [showBudgetSettings, setShowBudgetSettings] = useState(false);
+  // How a long budget is read (owner, 10 Nov 2026): so far, this month, or
+  // whole. One setting, shared with the Budget page — see utils/budgetView.
+  const [budgetView, setBudgetView] = useBudgetView();
   const [selectedBudgetIds, setSelectedBudgetIds] = useState<string[] | null>(() => {
     try {
       const stored = JSON.parse(preferences.getItem('dashboardKeyBudgets') ?? 'null');
@@ -433,7 +441,12 @@ export function ImprovedDashboard() {
       // used" for a budget nobody has had the chance to use. Both stay on the
       // Budget page, captioned as what they are.
       .filter(({ window }) => !window.ended && !window.notStarted)
-      .map(({ budget, categoryId, effectiveAmount, spent, remaining, percentage, window, countedRowIds }) => ({
+      .map(evaluated => {
+      const { budget, categoryId, window } = evaluated;
+      // The figures under the chosen reading: a yearly budget read "so far"
+      // is measured against the months that have begun, not the year.
+      const measure = measureBudget(evaluated, budgetView);
+      return {
       ...budget,
       categoryId,
       // The budget's own category, NAMED. It was rendering `categoryId`
@@ -446,14 +459,25 @@ export function ImprovedDashboard() {
       categoryName: categoryNameFor(categoryId),
       // The allowance for the window with the carry counted in — the figure
       // the Budget page's card shows, so "£655 / £600" reads the same there.
-      amount: effectiveAmount.toNumber(),
-      spent: spent.toNumber(),
-      remaining: remaining.toNumber(),
-      percentUsed: percentage,
-      isOverBudget: spent.gt(effectiveAmount),
+      amount: measure.allowance.toNumber(),
+      spent: measure.spent.toNumber(),
+      remaining: measure.remaining.toNumber(),
+      percentUsed: measure.percentage,
+      isOverBudget: measure.spent.gt(measure.allowance),
       window,
-      countedRowIds,
-    }));
+      // The rows behind THIS figure, so the drill shows what was counted.
+      countedRowIds: measure.rowIds,
+      measuredOver: { start: measure.start, end: measure.end },
+      caption: describeBudgetMeasure(window, measure),
+      // The same, as a sentence for a screen reader: the whole period keeps
+      // the words it always had, "monthly, 1–31 Oct 2026".
+      spokenCaption: measure.view === 'period'
+        ? `${window.label.toLowerCase()}, ${describeBudgetWindow(window)}`
+        : describeBudgetMeasure(window, measure).replace(' · ', ', ').replace(/^./, first => first.toLowerCase()),
+      // Whether the choice changes anything for this budget at all.
+      hasMonths: evaluated.months !== null,
+    };
+    });
 
     return {
       netWorth,
@@ -461,7 +485,7 @@ export function ImprovedDashboard() {
       totalLiabilities,
       budgetStatus,
     };
-  }, [accounts, accountBalanceMap, transactions, transactionSplits, budgets, categories, displayCurrency, valuation, valuationDayKey]);
+  }, [accounts, accountBalanceMap, transactions, transactionSplits, budgets, categories, displayCurrency, valuation, valuationDayKey, budgetView]);
 
   /**
    * The budgets the card shows, in the stored order — or the first three when
@@ -535,7 +559,7 @@ export function ImprovedDashboard() {
     const rows = expandSplitTransactions(transactions, transactionSplits)
       .filter(row => status.countedRowIds.has(row.id));
     setBudgetDrill({
-      title: `${status.categoryName} — ${describeBudgetWindow(status.window)}`,
+      title: `${status.categoryName} — ${describeBudgetWindow(status.measuredOver)}`,
       bucket: 'expense',
       rows,
       total: status.spent,
@@ -1423,6 +1447,13 @@ export function ImprovedDashboard() {
                   <XIcon size={16} className="text-gray-500" />
                 </button>
               </div>
+              {/* Offered only when some budget HAS months to be read by: with
+                  none longer than a month the choice would change nothing. */}
+              {metrics.budgetStatus.some(b => b.hasMonths) && (
+                <div className="mb-3">
+                  <BudgetViewChoice id="dashboard-budget-view" view={budgetView} onChange={setBudgetView} />
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 mb-3">
                 <button
                   type="button"
@@ -1508,7 +1539,7 @@ export function ImprovedDashboard() {
                 type="button"
                 onClick={() => openBudgetDrill(budget)}
                 className="block w-full text-left space-y-2 -mx-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                aria-label={`${budget.categoryName}: ${formatCurrencyWithSymbol(budget.spent)} of ${formatCurrencyWithSymbol(budget.amount)}, ${budget.window.label.toLowerCase()}, ${describeBudgetWindow(budget.window)}. Show the transactions`}
+                aria-label={`${budget.categoryName}: ${formatCurrencyWithSymbol(budget.spent)} of ${formatCurrencyWithSymbol(budget.amount)}, ${budget.spokenCaption}. Show the transactions`}
                 title="Show the transactions behind this figure"
                 data-testid="budget-status-row"
               >
@@ -1520,7 +1551,7 @@ export function ImprovedDashboard() {
                     {/* The period, said in full: the budget's own kind of
                         period and the exact days it covers right now. */}
                     <span className="block text-xs text-gray-500 dark:text-gray-400">
-                      {budget.window.label} · {describeBudgetWindow(budget.window)}
+                      {budget.caption}
                     </span>
                   </span>
                   <span className={`shrink-0 font-medium ${

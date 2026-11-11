@@ -7,6 +7,7 @@ import { ToastProvider } from '../../contexts/ToastContext';
 import { NotificationProvider } from '../../contexts/NotificationContext';
 import { __setAppContextValue, __resetAppContextValue } from '../../test/mocks/AppContextSupabase';
 import Budget from '../Budget';
+import { preferences } from '../../services/preferencesService';
 import type { Account, Budget as BudgetType, Category, Transaction, TransactionSplit } from '../../types';
 
 /**
@@ -105,6 +106,8 @@ const card = (categoryName: string): HTMLElement => {
 describe('Budget page — what a card says has been spent', () => {
   afterEach(() => {
     __resetAppContextValue();
+    // The reading a spec chose must not become the next one's default.
+    preferences.removeItem('budgetView');
   });
 
   describe('a plain row and a split line, in one budget', () => {
@@ -248,6 +251,9 @@ describe('Budget page — what a card says has been spent', () => {
     it('measures a yearly budget over the year from its start, and says which year', () => {
       renderBudget();
       const groceries = within(card('Groceries'));
+      // "The whole period" is a choice now (owner, 10 Nov 2026); the default
+      // reading of a year is "so far", which the specs below hold.
+      fireEvent.change(screen.getByLabelText('Read longer budgets'), { target: { value: 'period' } });
       expect(groceries.getByText('£40.00 of £1,200.00')).toBeInTheDocument();
       expect(groceries.getByText(/^0 of 12 months gone$/)).toBeInTheDocument();
       // "Yearly · 1 Nov 2026 – 31 Oct 2027", or "1 Jan – 31 Dec 2026" when the
@@ -255,6 +261,27 @@ describe('Budget page — what a card says has been spent', () => {
       const caption = groceries.getByText(/^Yearly ·/).textContent?.replace(/\s+/g, ' ') ?? '';
       const monthAfter = new Date(now.getFullYear(), now.getMonth() + 12, 0);
       expect(caption).toMatch(new RegExp(`^Yearly · 1 ${now.toLocaleDateString('en-GB', { month: 'short' })}( ${now.getFullYear()})? – ${monthAfter.getDate()} ${monthAfter.toLocaleDateString('en-GB', { month: 'short' })} ${monthAfter.getFullYear()}$`));
+    });
+
+    it('reads a year "so far" by default: the months begun, and the whole year beneath', () => {
+      renderBudget();
+      const groceries = within(card('Groceries'));
+      expect(groceries.getByText('Yearly, so far · 1 of 12 months')).toBeInTheDocument();
+      expect(groceries.getByText('£40.00 of £100.00')).toBeInTheDocument();
+      expect(groceries.getByText('£60.00 remaining')).toBeInTheDocument();
+      expect(groceries.getByText('40% used')).toBeInTheDocument();
+      expect(groceries.getByTestId('budget-whole-period')).toHaveTextContent('£40.00 of £1,200.00 for the whole period');
+      // One answer to "am I ahead": no second pace by days beside it.
+      expect(groceries.queryByText(/the pace$/)).not.toBeInTheDocument();
+    });
+
+    it('reads this month\'s share when asked, and remembers the choice', () => {
+      renderBudget();
+      fireEvent.change(screen.getByLabelText('Read longer budgets'), { target: { value: 'month' } });
+      const groceries = within(card('Groceries'));
+      expect(groceries.getByText(/^Yearly, this month ·/)).toBeInTheDocument();
+      expect(groceries.getByText('£40.00 of £100.00')).toBeInTheDocument();
+      expect(preferences.getItem('budgetView')).toBe('month');
     });
 
     it('a budget that has not started says when it starts, and draws no bar', () => {
@@ -334,8 +361,11 @@ describe('Budget page — what a card says has been spent', () => {
     it('captions each card by its interval, and counts this month’s spend in the interval begun this month', () => {
       renderBudget();
       const groceries = within(card('Groceries'));
-      expect(groceries.getByText(/^Every 2 months ·/)).toBeInTheDocument();
-      expect(groceries.getByText('£40.00 of £200.00')).toBeInTheDocument();
+      // Two whole months: read "so far" by default, half the allowance in the first.
+      expect(groceries.getByText('Every 2 months, so far · 1 of 2 months')).toBeInTheDocument();
+      expect(groceries.getByText('£40.00 of £100.00')).toBeInTheDocument();
+      expect(groceries.getByTestId('budget-whole-period')).toHaveTextContent('£40.00 of £200.00 for the whole period');
+      // Six weeks is not a whole number of months, so it is left as it was.
       expect(within(card('Household')).getByText(/^Every 6 weeks ·/)).toBeInTheDocument();
     });
 

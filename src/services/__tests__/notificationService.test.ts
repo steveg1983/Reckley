@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { preferences } from '../preferencesService';
 import { NotificationService, type NotificationRule } from '../notificationService';
 import type { Budget, Category, Transaction } from '../../types';
 
@@ -196,5 +197,56 @@ describe('budget alerts say what they leave out', () => {
     ];
 
     expect(service.checkBudgetAlerts(finished, inItsLastMonth, categories, { transactionSplits: [] })).toEqual([]);
+  });
+});
+
+/**
+ * THE ALERTS FOLLOW THE READING (owner, 11 Nov 2026). A yearly budget read
+ * "so far" is measured against the months begun, so a rule on the percentage
+ * spent fires on the figure the Budget card shows — in the first month of the
+ * year, not the eleventh. Every figure is invented.
+ */
+describe('a budget alert measures a long budget as the person reads it', () => {
+  const rule: NotificationRule = {
+    id: 'r-half',
+    name: 'Half spent',
+    type: 'budget',
+    enabled: true,
+    priority: 'high',
+    conditions: [{ field: 'percentage_spent', operator: 'greater_than', value: 50 }],
+    actions: [{
+      type: 'show_notification',
+      config: { title: 'Budget alert', message: '{categoryName} is at {percentage}% of {budget}.' }
+    }]
+  };
+  const categories: Category[] = [{ id: 'cat-food', name: 'Food', type: 'expense', level: 'detail' }];
+  // A year from 1 January 2025, written after the cycle model shipped so the
+  // start is its anchor; "now" is its first day — month one of twelve.
+  const yearly: Budget[] = [{
+    id: 'b-year', categoryId: 'cat-food', amount: 1200, period: 'yearly', isActive: true,
+    startDate: '2025-01-01', createdAt: new Date(2026, 10, 7)
+  } as Budget];
+  const spent80: Transaction[] = [
+    { id: 't-1', accountId: 'acc-gbp', amount: -80, category: 'cat-food', date: new Date(fixedNow), type: 'expense', description: 'shop' } as Transaction
+  ];
+
+  afterEach(() => {
+    preferences.removeItem('budgetView');
+  });
+
+  it('so far, by default: 80 of the first month\u2019s 100 is over a 50% line', () => {
+    const { service } = createService();
+    service.addRule(rule);
+    const alerts = service.checkBudgetAlerts(yearly, spent80, categories, { transactionSplits: [] });
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].message).toMatch(/Food is at 80% of/);
+    expect(alerts[0].message).not.toMatch(/1,?200/);
+  });
+
+  it('the whole period, when that is the choice: 80 of 1,200 is nowhere near it', () => {
+    preferences.setItem('budgetView', 'period');
+    const { service } = createService();
+    service.addRule(rule);
+    expect(service.checkBudgetAlerts(yearly, spent80, categories, { transactionSplits: [] })).toEqual([]);
   });
 });

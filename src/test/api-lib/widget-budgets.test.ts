@@ -63,6 +63,7 @@ const settings = (over: Partial<WidgetSettings> = {}): WidgetSettings => ({
   hideWhenLocked: false,
   keyBudgetIds: [],
   locale: 'en-GB',
+  budgetView: 'toDate',
   ...over,
 });
 
@@ -182,6 +183,62 @@ describe('describeBudgetsForWidget — order and the empty states', () => {
   });
 });
 
+describe('a long budget is read as the app reads it', () => {
+  // A year from 1 October, written after the cycle model shipped so the
+  // start is its anchor; read on 15 October, the first of its twelve months.
+  const yearly = budget({
+    id: 'b-year',
+    categoryId: 'cat-fuel',
+    amount: 1200,
+    period: 'yearly',
+    startDate: '2026-10-01',
+    createdAt: new Date(2026, 10, 7),
+    updatedAt: new Date(2026, 10, 7),
+  });
+  const describeYear = (over: Partial<WidgetSettings> = {}) =>
+    describeBudgetsForWidget({
+      evaluated: evaluateBudgets([yearly], { transactions, categories: categoryList, now: NOW }),
+      activeCount: 1,
+      currency: 'GBP',
+      categories,
+      settings: settings(over),
+      today: NOW,
+      instant: INSTANT,
+    }).budgets[0];
+
+  it('so far, by default: one twelfth of the year against the month begun', () => {
+    const drawn = describeYear();
+    expect(drawn.period).toBe('Yearly, so far');
+    expect(drawn.allowance).toBe('£100');
+    expect(drawn.status).toBe('Over by £85');
+    expect(drawn.attention).toBe('over');
+    // The days left are the month's, not the year's.
+    expect(drawn.until).toBe('2026-10-31');
+    expect(drawn.daysLeft).toBe(17);
+  });
+
+  it('the whole period when that is the choice', () => {
+    const drawn = describeYear({ budgetView: 'period' });
+    expect(drawn.period).toBe('Yearly');
+    expect(drawn.allowance).toBe('£1,200');
+    expect(drawn.status).toBe('£1,015 left');
+    expect(drawn.until).toBe('2027-09-30');
+  });
+
+  it('percentages only still sends no amount under a shorter reading', () => {
+    const drawn = describeYear({ display: 'percent' });
+    expect(drawn.status).toBe('Over by 85%');
+    expect(drawn.spent).toBeUndefined();
+    expect(drawn.allowance).toBeUndefined();
+    expect(JSON.stringify(drawn)).not.toMatch(/£/);
+  });
+
+  it('reads the choice out of the preferences document', () => {
+    expect(widgetSettingsFrom({ budgetView: 'month' }).budgetView).toBe('month');
+    expect(widgetSettingsFrom({ budgetView: 'fortnight' }).budgetView).toBe('toDate');
+  });
+});
+
 describe('widgetSettingsFrom — a preferences document is strings someone else wrote', () => {
   it('defaults to amounts, shown when locked, no Key Budgets, UK English', () => {
     expect(widgetSettingsFrom(undefined)).toEqual({
@@ -189,6 +246,7 @@ describe('widgetSettingsFrom — a preferences document is strings someone else 
       hideWhenLocked: false,
       keyBudgetIds: [],
       locale: 'en-GB',
+      budgetView: 'toDate',
     });
   });
 
@@ -200,7 +258,7 @@ describe('widgetSettingsFrom — a preferences document is strings someone else 
         dashboardKeyBudgets: '["a","b"]',
         preferredLocale: 'en-US',
       })
-    ).toEqual({ display: 'percent', hideWhenLocked: true, keyBudgetIds: ['a', 'b'], locale: 'en-US' });
+    ).toEqual({ display: 'percent', hideWhenLocked: true, keyBudgetIds: ['a', 'b'], locale: 'en-US', budgetView: 'toDate' });
   });
 
   it('survives values that are not what they should be', () => {
@@ -211,7 +269,7 @@ describe('widgetSettingsFrom — a preferences document is strings someone else 
         dashboardKeyBudgets: '{not json',
         preferredLocale: 'not a locale!',
       })
-    ).toEqual({ display: 'amounts', hideWhenLocked: false, keyBudgetIds: [], locale: 'en-GB' });
+    ).toEqual({ display: 'amounts', hideWhenLocked: false, keyBudgetIds: [], locale: 'en-GB', budgetView: 'toDate' });
     expect(widgetSettingsFrom({ dashboardKeyBudgets: '["a",7,null]' }).keyBudgetIds).toEqual(['a']);
   });
 });

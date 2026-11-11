@@ -383,6 +383,75 @@ describe('reckley_budget_status', () => {
     expect(textOf(await call('reckley_budget_status'))).toBe('No active budgets.');
   });
 
+  /**
+   * THE CONNECTOR READS A LONG BUDGET AS THE PERSON DOES (owner, 11 Nov 2026).
+   * A year from 1 September, on 15 October, is in its second month of twelve.
+   */
+  describe('a yearly budget', () => {
+    const yearly = {
+      id: 'b-year', name: 'Groceries, the year', categoryId: 'det-groceries', amount: 1200, period: 'yearly' as const,
+      isActive: true, startDate: '2026-09-01', createdAt: new Date(2026, 10, 7), updatedAt: new Date(2026, 10, 7), spent: 0,
+    };
+    const reconnect = async (values?: Record<string, string>): Promise<void> => {
+      await client.close();
+      await handler.close();
+      const port = fakePort({ budgets: [yearly] });
+      await connect(values ? { ...port, preferenceValues: async () => values } : port);
+    };
+    const first = async (): Promise<Record<string, unknown>> =>
+      ((await call('reckley_budget_status', { response_format: 'json' })).structuredContent as { budgets: Record<string, unknown>[] }).budgets[0];
+
+    it('so far, when nothing is stored — and with a port that keeps no preferences', async () => {
+      await reconnect();
+      expect(await first()).toMatchObject({
+        reading: 'so_far',
+        months_begun: 2,
+        months_in_period: 12,
+        measured_from: '2026-09-01',
+        measured_to: '2026-10-31',
+        // 2/12 of 1,200; September's 60 and October's 102.50.
+        allowance: '200.00 GBP',
+        spent: '162.50 GBP',
+        remaining: '37.50 GBP',
+        over_budget: false,
+        period_allowance: '1200.00 GBP',
+        period_spent: '162.50 GBP',
+        from: '2026-09-01',
+        to: '2027-08-31',
+      });
+    });
+
+    it('this month\u2019s share, from the stored choice', async () => {
+      await reconnect({ budgetView: 'month' });
+      expect(await first()).toMatchObject({
+        reading: 'this_month',
+        measured_from: '2026-10-01',
+        measured_to: '2026-10-31',
+        allowance: '100.00 GBP',
+        spent: '102.50 GBP',
+        over_budget: true,
+      });
+    });
+
+    it('the whole period, from the stored choice — the figures it always gave', async () => {
+      await reconnect({ budgetView: 'period' });
+      expect(await first()).toMatchObject({
+        reading: 'whole_period',
+        months_begun: null,
+        allowance: '1200.00 GBP',
+        spent: '162.50 GBP',
+        remaining: '1037.50 GBP',
+      });
+    });
+
+    it('says the reading in words, and keeps the whole period beside it', async () => {
+      await reconnect();
+      expect(textOf(await call('reckley_budget_status'))).toContain(
+        '162.50 GBP of 200.00 GBP (81.3%), Yearly 2026-09-01 to 2027-08-31 · so far, 2 of 12 months (whole period 162.50 GBP of 1200.00 GBP) · 37.50 GBP left'
+      );
+    });
+  });
+
   it('says so, differently, when the active budgets have all finished or not started', async () => {
     await client.close();
     await handler.close();

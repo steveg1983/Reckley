@@ -47,6 +47,7 @@ import { FALLBACK_BANK_DESCRIPTION, normalizePayee } from '../../../src/utils/pa
 import { isAwaitingReview, isUnfiled } from '../../../src/utils/transactionReview.js';
 import { signTransactionAmount } from '../../../src/utils/transactionAmount.js';
 import { toDecimal } from '../../../src/utils/decimal.js';
+import { BUDGET_VIEW_KEY, measureBudget, parseBudgetView } from '../../../src/utils/budgetView.js';
 import { PortRefusal, type PortAccount, type ReckleyPort, type ReviewFilter, type TransactionPatch } from './port.js';
 import { categoryPath, evaluateRunningBudgets, localDay } from '../budget-status.js';
 import { balancesAt, netWorthSeriesByCurrency, type SeriesAccount } from './netWorthSeries.js';
@@ -1101,7 +1102,7 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
     'reckley_budget_status',
     {
       title: 'Budget status',
-      description: `Every active budget that is running today, measured over its own period — the cycle counted from the budget's own start date (a monthly budget from the 1st is the calendar month; a yearly one runs twelve months from its start), the week for a weekly one, the single run of a one-off — exactly as the app's Budget page shows it: the allowance (the plan plus whatever the budget's rollover mode carries in from the period before — a surplus, an overspend, both or nothing), what has been spent, what is left or by how much it is over, and the days the period covers. A budget past its end date, or not yet started, is left out.`,
+      description: `Every active budget that is running today, measured over its own period — the cycle counted from the budget's own start date (a monthly budget from the 1st is the calendar month; a yearly one runs twelve months from its start), the week for a weekly one, the single run of a one-off — exactly as the app's Budget page shows it: the allowance (the plan plus whatever the budget's rollover mode carries in from the period before — a surplus, an overspend, both or nothing), what has been spent, what is left or by how much it is over, and the days the period covers. A budget past its end date, or not yet started, is left out. A budget longer than a month is measured the way the person has chosen to read long budgets in the app — \`reading\` says which: \`so_far\` (spend against the calendar months of the period that have begun, e.g. 2 of 12), \`this_month\` (this month's spend against one month's share) or \`whole_period\`. Under the first two, allowance, spent, remaining and percent_used are for that reading, \`months_begun\` and \`months_in_period\` say the share, \`measured_from\`/\`measured_to\` the days counted, and \`period_allowance\` and \`period_spent\` still give the whole period.`,
       inputSchema: z.strictObject({
         response_format: responseFormat,
       }),
@@ -1121,14 +1122,27 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
           ? { content: [{ type: 'text', text: JSON.stringify(body) }], structuredContent: body }
           : { content: [{ type: 'text', text }] };
       }
-      const described = evaluated.map(entry => ({
+      // The person's own reading of a long budget (owner, 11 Nov 2026), so
+      // the connector quotes the figure the Budget page and the widget show.
+      const view = parseBudgetView((await port.preferenceValues?.())?.[BUDGET_VIEW_KEY]);
+      const described = evaluated.map(entry => {
+        const measure = measureBudget(entry, view);
+        return {
         id: entry.budget.id,
         name: entry.budget.name || (categoryPath(entry.categoryId, categories) ?? entry.categoryId),
         category: categoryPath(entry.categoryId, categories),
         period: entry.window.label,
         from: localDay(entry.window.start),
         to: localDay(entry.window.end),
-        allowance: money(entry.effectiveAmount.toNumber(), currency),
+        reading: measure.view === 'toDate' ? 'so_far' : measure.view === 'month' ? 'this_month' : 'whole_period',
+        months_begun: measure.months?.elapsed ?? null,
+        months_in_period: measure.months?.total ?? null,
+        measured_from: localDay(measure.start),
+        measured_to: localDay(measure.end),
+        allowance: money(measure.allowance.toNumber(), currency),
+        // The whole period's, whatever the reading.
+        period_allowance: money(entry.effectiveAmount.toNumber(), currency),
+        period_spent: money(entry.spent.toNumber(), currency),
         // The part of the allowance that came from the period before, signed,
         // under the budget's own mode; zero when nothing did.
         carried_in: money(entry.carriedIn.toNumber(), currency),
@@ -1136,11 +1150,12 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
         received_in: money(entry.receivedIn.toNumber(), currency),
         rollover_mode: entry.rolloverMode,
         rollover_to: entry.rolloverTo,
-        spent: money(entry.spent.toNumber(), currency),
-        remaining: money(entry.remaining.toNumber(), currency),
-        percent_used: Number(entry.percentage.toFixed(1)),
-        over_budget: entry.remaining.isNegative(),
-      }));
+        spent: money(measure.spent.toNumber(), currency),
+        remaining: money(measure.remaining.toNumber(), currency),
+        percent_used: Number(measure.percentage.toFixed(1)),
+        over_budget: measure.remaining.isNegative(),
+        };
+      });
       const body = { count: described.length, budgets: described };
       if (response_format === ResponseFormat.JSON) {
         return { content: [{ type: 'text', text: JSON.stringify(body, null, 2) }], structuredContent: body };
@@ -1148,6 +1163,11 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
       const lines = ['# Budgets', ''];
       lines.push(...described.map(entry =>
         `- ${entry.name}: ${entry.spent} of ${entry.allowance} (${entry.percent_used}%), ${entry.period} ${entry.from} to ${entry.to}` +
+          (entry.reading === 'so_far'
+            ? ` · so far, ${entry.months_begun} of ${entry.months_in_period} months (whole period ${entry.period_spent} of ${entry.period_allowance})`
+            : entry.reading === 'this_month'
+              ? ` · this month's share, ${entry.measured_from} to ${entry.measured_to} (whole period ${entry.period_spent} of ${entry.period_allowance})`
+              : '') +
           (entry.over_budget ? ` · OVER by ${entry.remaining.replace('-', '')}` : ` · ${entry.remaining} left`) +
           ` · id ${entry.id}`
       ));
