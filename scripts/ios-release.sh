@@ -32,7 +32,12 @@ KEY_DIR="${ASC_KEY_DIR:-$HOME/Documents/WealthTracker-signing}"
 KEY_ID="${ASC_KEY_ID:-K3X6D83JFR}"
 ISSUER_ID="${ASC_ISSUER_ID:-5eefcc4c-7800-4c5f-b6ac-3ffb9c88655a}"
 KEY_PATH="$KEY_DIR/AuthKey_${KEY_ID}.p8"
-ARCHIVE="${TMPDIR:-/tmp}/wt-ios-$(date +%s).xcarchive"
+# In Xcode's own archives folder, where Organizer lists it. Build 8 (10 Nov
+# 2026) was archived to a temp folder, the export below was refused, and the
+# owner opened Organizer to finish it by hand and could not see the build.
+ARCHIVE_DIR="$HOME/Library/Developer/Xcode/Archives/$(date +%Y-%m-%d)"
+mkdir -p "$ARCHIVE_DIR"
+ARCHIVE="$ARCHIVE_DIR/Reckley $(date +%H.%M.%S).xcarchive"
 
 # A BETA XCODE BUILDS, ARCHIVES AND SIGNS — AND THEN APPLE REFUSES THE UPLOAD.
 # Build 4 (17 Oct 2026) went all the way to "Completing upload…" under
@@ -165,6 +170,11 @@ cat > "$EXPORT_PLIST" <<PLIST
 PLIST
 
 echo "==> Exporting and uploading to App Store Connect"
+# If this fails with "Cloud signing permission error" and "No profiles for
+# <bundle id> were found", the build carries an App ID that has no App Store
+# profile yet (build 8: the widget extension) and the API key's role may not
+# create one. The archive is in Organizer: Window -> Organizer -> Distribute
+# App creates the profile once, and later builds export from here again.
 xcodebuild -exportArchive \
   -archivePath "$ARCHIVE" \
   -exportOptionsPlist "$EXPORT_PLIST" \
