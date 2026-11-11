@@ -183,6 +183,37 @@ describe('describeBudgetsForWidget — order and the empty states', () => {
   });
 });
 
+/**
+ * WHAT A BUDGET IS CALLED. The owner found a UUID in the lock-screen widget's
+ * list of budgets (11 Nov 2026): the stored name of a budget saved without
+ * one is its CATEGORY ID, and the widget was drawing the stored name first.
+ * The app has always labelled a budget by its category.
+ */
+describe('a budget is named by its category, never by an id', () => {
+  const named = (over: Partial<Budget>) =>
+    describeBudgetsForWidget({
+      evaluated: evaluateBudgets([budget({ id: 'b-x', categoryId: 'cat-fuel', ...over })], { transactions, categories: categoryList, now: NOW }),
+      activeCount: 1,
+      currency: 'GBP',
+      categories,
+      settings: settings(),
+      today: NOW,
+      instant: INSTANT,
+    }).budgets[0].name;
+
+  it('the category\u2019s own name, whatever the row stored — the case he found', () => {
+    expect(named({ name: 'cat-fuel' })).toBe('Fuel');
+    expect(named({ name: '04c411d7-b209-4776-a7e5-c23cc3668e74' })).toBe('Fuel');
+    expect(named({ name: 'An old label' })).toBe('Fuel');
+  });
+
+  it('a stored name only when the category cannot be found, and never one shaped like an id', () => {
+    expect(named({ categoryId: 'cat-gone', name: 'Holiday fund' })).toBe('Holiday fund');
+    expect(named({ categoryId: 'cat-gone', name: '04c411d7-b209-4776-a7e5-c23cc3668e74' })).toBe('Budget');
+    expect(named({ categoryId: 'cat-gone', name: undefined })).toBe('Budget');
+  });
+});
+
 describe('a long budget is read as the app reads it', () => {
   // A year from 1 October, written after the cycle model shipped so the
   // start is its anchor; read on 15 October, the first of its twelve months.

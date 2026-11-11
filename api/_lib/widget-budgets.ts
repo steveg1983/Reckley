@@ -48,7 +48,7 @@ import {
   WIDGET_HIDE_WHEN_LOCKED_KEY,
   type WidgetDisplay,
 } from '../../src/services/widget/prefs.js';
-import { categoryPath, localDay } from './budget-status.js';
+import { budgetLabel, localDay } from './budget-status.js';
 
 export const WIDGET_DOCUMENT_VERSION = 1;
 
@@ -231,7 +231,9 @@ export function describeBudgetsForWidget(input: DescribeInput): WidgetBudgetsDoc
 
     const budget: WidgetBudget = {
       id: entry.budget.id,
-      name: entry.budget.name || (categoryPath(entry.categoryId, input.categories) ?? 'Budget'),
+      // The category's own name, as the app labels the budget — never the
+      // stored name first, which can be a category id (see budgetLabel).
+      name: budgetLabel(entry.budget, entry.categoryId, input.categories),
       key: keyOrder.has(entry.budget.id),
       percent: Number(measure.percentage.toFixed(1)),
       attention,

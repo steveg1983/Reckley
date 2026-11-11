@@ -49,7 +49,7 @@ import { signTransactionAmount } from '../../../src/utils/transactionAmount.js';
 import { toDecimal } from '../../../src/utils/decimal.js';
 import { BUDGET_VIEW_KEY, measureBudget, parseBudgetView } from '../../../src/utils/budgetView.js';
 import { PortRefusal, type PortAccount, type ReckleyPort, type ReviewFilter, type TransactionPatch } from './port.js';
-import { categoryPath, evaluateRunningBudgets, localDay } from '../budget-status.js';
+import { budgetLabel, categoryPath, evaluateRunningBudgets, localDay } from '../budget-status.js';
 import { balancesAt, netWorthSeriesByCurrency, type SeriesAccount } from './netWorthSeries.js';
 
 export const READ_SCOPE = 'reckley:read';
@@ -1129,7 +1129,7 @@ Use reckley_search_transactions with review='awaiting' and an account_id for the
         const measure = measureBudget(entry, view);
         return {
         id: entry.budget.id,
-        name: entry.budget.name || (categoryPath(entry.categoryId, categories) ?? entry.categoryId),
+        name: budgetLabel(entry.budget, entry.categoryId, categories),
         category: categoryPath(entry.categoryId, categories),
         period: entry.window.label,
         from: localDay(entry.window.start),
