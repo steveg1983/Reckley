@@ -110,6 +110,21 @@ describe('the widget extension', () => {
     }
   });
 
+  // The owner, 12 Nov 2026: "Make the home screen bars follow the choice too".
+  // The bar cannot be drawn without the choice, and both widgets hand it over.
+  it('every home-screen bar follows "used or left"', () => {
+    const key = read('ReckleyWidgets/KeyBudgetsWidget.swift');
+    const one = read('ReckleyWidgets/OneBudgetWidget.swift');
+    const bar = key.slice(key.indexOf('struct BudgetBar'));
+    expect(bar).toMatch(/let asLeft: Bool\n/);
+    expect(bar).toContain('asLeft ? 100 - used : used');
+    expect(bar).toContain('space.size.width * fill / 100');
+    expect(key).toContain('document.percentAs == "left"');
+    expect(key).toContain('BudgetBar(budget: budget, asLeft: asLeft)');
+    expect(one).toContain('BudgetBar(budget: shown.budget, asLeft: entry.percentAsLeft)');
+    expect(`${key}${one}`).not.toMatch(/BudgetBar\(budget: [^,)]*\)/);
+  });
+
   // The owner's lock screen showed an amount on build 9 (11 Nov 2026): the
   // ring was percentage-only and the other two lock-screen shapes drew the
   // server's words, which are money by default. The server's words appear

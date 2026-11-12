@@ -168,10 +168,10 @@ struct KeyBudgetsView: View {
     /// The two larger sizes have room for "spent of allowance" under each bar.
     private var roomy: Bool { family == .systemLarge || family == .systemExtraLarge }
 
-    private func rows(_ budgets: [BudgetsDocument.Budget], hide: Bool) -> some View {
+    private func rows(_ budgets: [BudgetsDocument.Budget], hide: Bool, asLeft: Bool) -> some View {
         VStack(alignment: .leading, spacing: family == .systemSmall ? 7 : roomy ? 10 : 6) {
             ForEach(budgets) { budget in
-                BudgetRow(budget: budget, stacked: family == .systemSmall, detailed: roomy)
+                BudgetRow(budget: budget, asLeft: asLeft, stacked: family == .systemSmall, detailed: roomy)
                     .privacySensitive(hide)
             }
         }
@@ -186,6 +186,7 @@ struct KeyBudgetsView: View {
             message("Could not reach Reckley. This will try again.")
         case .document(let document, _):
             let shown = Array(document.forKeyBudgetsWidget.prefix(capacity))
+            let asLeft = document.percentAs == "left"
             if shown.isEmpty {
                 message(document.hasBudgets ? "No budget is running today." : "No budgets yet. Add one in Reckley.")
             } else if family == .systemExtraLarge {
@@ -193,11 +194,11 @@ struct KeyBudgetsView: View {
                 // the person's order reads top to bottom as it does elsewhere.
                 let half = (shown.count + 1) / 2
                 HStack(alignment: .top, spacing: 20) {
-                    rows(Array(shown.prefix(half)), hide: document.hideWhenLocked)
-                    rows(Array(shown.dropFirst(half)), hide: document.hideWhenLocked)
+                    rows(Array(shown.prefix(half)), hide: document.hideWhenLocked, asLeft: asLeft)
+                    rows(Array(shown.dropFirst(half)), hide: document.hideWhenLocked, asLeft: asLeft)
                 }
             } else {
-                rows(shown, hide: document.hideWhenLocked)
+                rows(shown, hide: document.hideWhenLocked, asLeft: asLeft)
             }
         }
     }
@@ -214,6 +215,8 @@ struct KeyBudgetsView: View {
 /// Colour marks only what needs attention — a budget in hand is drawn plain.
 struct BudgetRow: View {
     let budget: BudgetsDocument.Budget
+    /// The person's "used or left" choice, which the bar follows.
+    let asLeft: Bool
     let stacked: Bool
     /// Room for "spent of allowance" under the bar. Drawn only when the server sent both.
     var detailed: Bool = false
@@ -257,13 +260,25 @@ struct BudgetRow: View {
             .lineLimit(1)
     }
 
-    private var bar: some View { BudgetBar(budget: budget) }
+    private var bar: some View { BudgetBar(budget: budget, asLeft: asLeft) }
 }
 
 /// A budget's bar: full at the allowance and no further — there is no more
 /// room to draw — while the words beside it keep telling the truth past it.
+///
+/// It follows the person's "used or left" choice (owner, 12 Nov 2026, after
+/// the lock-screen bar did on build 12): filling with what is used, or
+/// starting full and draining to nothing as the budget is spent. It follows
+/// under amounts too, where the words already say what is left. `asLeft` has
+/// no default, so no bar can be drawn without deciding.
 struct BudgetBar: View {
     let budget: BudgetsDocument.Budget
+    let asLeft: Bool
+
+    private var fill: Double {
+        let used = min(max(budget.percent, 0), 100)
+        return asLeft ? 100 - used : used
+    }
 
     var body: some View {
         GeometryReader { space in
@@ -271,7 +286,7 @@ struct BudgetBar: View {
                 Capsule().fill(Palette.track)
                 Capsule()
                     .fill(Palette.mark(for: budget.attention))
-                    .frame(width: space.size.width * min(max(budget.percent, 0), 100) / 100)
+                    .frame(width: space.size.width * fill / 100)
                     .widgetAccentable()
             }
         }
