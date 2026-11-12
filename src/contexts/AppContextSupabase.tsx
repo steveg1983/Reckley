@@ -1244,7 +1244,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       )));
       return outcome.reconciled;
     } catch (error) {
-      appLogger.error('Failed to finalize reconciliation', error);
+      appLogger.error('Failed to finalise reconciliation', error);
       throw error;
     }
   }, []);

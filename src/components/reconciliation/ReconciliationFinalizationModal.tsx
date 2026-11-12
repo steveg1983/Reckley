@@ -140,7 +140,7 @@ export default function ReconciliationFinalizationModal({
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-            Finalize Reconciliation
+            Finalise Reconciliation
           </h2>
           <button
             onClick={onClose}

@@ -212,7 +212,7 @@ describe('Find — what it matches', () => {
     await settle('Pellam Tyres');
 
     const marked = within(row('Pellam Tyres'));
-    expect(marked.getByTitle(/not reconciled until you finalize/)).toHaveTextContent('C');
+    expect(marked.getByTitle(/not reconciled until you finalise/)).toHaveTextContent('C');
     expect(marked.queryByTitle('Reconciled')).not.toBeInTheDocument();
   });
 });

@@ -527,7 +527,7 @@ export default function Find(): React.JSX.Element {
                         ) : isMarkedAwaitingFinalize(transaction) ? (
                           <span
                             className="text-gray-500 dark:text-gray-400 font-semibold"
-                            title="Marked while balancing — not reconciled until you finalize"
+                            title="Marked while balancing — not reconciled until you finalise"
                           >
                             C
                           </span>

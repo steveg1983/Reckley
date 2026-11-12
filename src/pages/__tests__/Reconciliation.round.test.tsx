@@ -97,7 +97,7 @@ describe('Reconciliation — the round from the focused accounts list', () => {
 
     renderRound(`?account=${ACCOUNT.id}&from=accounts&back=accounts-reconcile`);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    fireEvent.click(screen.getByRole('button', { name: /Finalize Reconciliation/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Finalise Reconciliation/ }));
     await act(async () => {
       fireEvent.click(screen.getByText('Complete Reconciliation'));
     });
@@ -147,7 +147,7 @@ describe('Reconciliation — Complete refuses seconds while the write is in flig
 
     renderRound(`?account=${ACCOUNT.id}`);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    fireEvent.click(screen.getByRole('button', { name: /Finalize Reconciliation/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Finalise Reconciliation/ }));
     fireEvent.click(screen.getByText('Complete Reconciliation'));
 
     // In flight: the button says what it is doing and refuses more presses —

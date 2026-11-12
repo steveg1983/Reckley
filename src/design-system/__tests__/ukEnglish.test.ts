@@ -59,6 +59,9 @@ const US_SPELLINGS: { pattern: RegExp; uk: string }[] = [
   { pattern: /\borganiz(e|es|ed|ing|ation)?\b/i, uk: 'organise' },
   { pattern: /\bpersonaliz(e|es|ed|ing|ation)?\b/i, uk: 'personalise' },
   { pattern: /\boptimiz(e|es|ed|ing|ation)?\b/i, uk: 'optimise' },
+  // The owner, 12 Nov 2026, of the reconcile screen's button: "'Finalize' —
+  // isn't that the American spelling?" It was, in ten places.
+  { pattern: /\bfinaliz(e|es|ed|ing|ation)?\b/i, uk: 'finalise' },
   { pattern: /\bfavorite(s)?\b/i, uk: 'favourite' },
   { pattern: /\bcancel(ed|ing)\b/i, uk: 'cancelled / cancelling' },
 ];
@@ -144,6 +147,13 @@ function copyOn(line: string): string[] {
     if (/^[\w-]*[-_][\w-]*$/.test(text)) continue;
     found.push(text);
   }
+  // A line that is nothing but words is JSX text wrapped onto its own line —
+  // `<button …>` above, `</button>` below. None of the alternatives above sees
+  // it, which is how "Finalize Reconciliation" stood on the reconcile screen's
+  // main button, unreported, until the owner read it there (12 Nov 2026). It
+  // must be a phrase: one bare word on a line is an import or an enum member.
+  const bare = line.trim();
+  if (/^[A-Z][A-Za-z]*( [A-Za-z’'.,…-]+)+$/.test(bare)) found.push(bare);
   return found;
 }
 

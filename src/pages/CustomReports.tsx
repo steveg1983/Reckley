@@ -176,7 +176,7 @@ export default function CustomReports(): React.JSX.Element {
               Custom Reports
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Create and manage your personalized financial reports
+              Create and manage your personalised financial reports
             </p>
           </div>
           <button

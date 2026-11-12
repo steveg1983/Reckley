@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import { parseMoneyInput, toDecimal } from '../../utils/decimal';
 import MoneyInput from '../common/MoneyInput';
 import { useCurrencyDecimal } from '../../hooks/useCurrencyDecimal';
 import { formatDate } from '../../utils/dateFormatter';
 import { NEXT_ACTION_YELLOW } from '../../design-system/nextActionYellow';
 import { CONFIRM_BALANCE_HINT_ID } from './nextActionYellow';
+import { ChevronDownIcon, ChevronUpIcon } from '../icons';
 import type { ClearedSummary } from '../../hooks/useReconciliation';
 
 interface ReconciliationBalanceBarProps {
@@ -100,6 +101,27 @@ export default function ReconciliationBalanceBar({
   // bare null could not tell "nothing pending" from "pending removal" apart.
   const [pendingBankBalance, setPendingBankBalance] = useState<{ value: number | null } | null>(null);
   const editFormRef = useRef<HTMLFormElement>(null);
+  /**
+   * FOLDED AWAY, ON A PHONE (owner, 12 Nov 2026, on the iPhone Duo's front
+   * screen): this bar is sticky, and at two figures a row with its captions it
+   * stood most of a phone screen tall — "the transactions to look at are hidden
+   * behind it all and there is no way you can reconcile an account on that
+   * screen". His remedy: an arrow that minimises the box, and brings it back to
+   * finish.
+   *
+   * Folded, it is one line: the Difference, which is the figure you watch while
+   * ticking rows, and the way back. Everything else is one press away, and
+   * nothing is unmounted — the confirmation, the editor and the hint Finalise
+   * is described by all keep their state and their ids.
+   *
+   * A PHONE-ONLY FOLD, by class and not by measuring: from `md` up the four
+   * figures sit on one row and there is nothing to win, so the control is not
+   * drawn there and a folded bar is shown whole. That also means opening the
+   * Duo with the bar folded cannot strand it folded with no arrow to press.
+   * Deliberately not remembered: each reconciliation starts with the figures.
+   */
+  const [folded, setFolded] = useState(false);
+  const figuresId = useId();
 
   const displayBankBalance = pendingBankBalance ? pendingBankBalance.value : bankBalance;
   /**
@@ -149,8 +171,39 @@ export default function ReconciliationBalanceBar({
     onConfirmBalance?.(parsed);
   };
 
+  const differenceTone = difference != null && Math.abs(difference) >= 0.005
+    ? 'text-red-600 dark:text-red-400'
+    : 'text-gray-900 dark:text-white';
+
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 p-4">
+    <div
+      className={`bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 ${
+        folded ? 'px-4 py-1 md:p-4' : 'p-4'
+      }`}
+    >
+      {folded && (
+        <div className="md:hidden flex items-center justify-between gap-3">
+          <p className="min-w-0 truncate text-sm text-gray-500 dark:text-gray-400">
+            Difference{' '}
+            {difference != null ? (
+              <span className={`font-bold ${differenceTone}`}>{formatCurrency(difference, currency)}</span>
+            ) : (
+              <span className="font-bold text-gray-400">—</span>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => setFolded(false)}
+            aria-expanded={false}
+            aria-controls={figuresId}
+            className="shrink-0 min-h-[44px] flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Show balances
+            <ChevronDownIcon size={18} />
+          </button>
+        </div>
+      )}
+      <div id={figuresId} className={folded ? 'hidden md:block' : undefined}>
       {/* Four figures side by side needs ~90px each; a 375px phone has room
           for two. */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
@@ -356,11 +409,7 @@ export default function ReconciliationBalanceBar({
         <div className="text-center">
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Difference</p>
           {difference != null ? (
-            <p className={`text-lg font-bold ${
-              Math.abs(difference) < 0.005
-                ? 'text-gray-900 dark:text-white'
-                : 'text-red-600 dark:text-red-400'
-            }`}>
+            <p className={`text-lg font-bold ${differenceTone}`}>
               {formatCurrency(difference, currency)}
             </p>
           ) : (
@@ -418,6 +467,22 @@ export default function ReconciliationBalanceBar({
           </span>
         </div>
       )}
+
+      {/* The way to fold it — see `folded`. Words beside the arrow, because an
+          arrow alone does not say what it hides. */}
+      <div className="md:hidden mt-2 flex justify-center">
+        <button
+          type="button"
+          onClick={() => setFolded(true)}
+          aria-expanded
+          aria-controls={figuresId}
+          className="min-h-[44px] flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
+          Hide balances
+          <ChevronUpIcon size={18} />
+        </button>
+      </div>
+      </div>
     </div>
   );
 }

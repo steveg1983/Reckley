@@ -307,7 +307,7 @@ describe('Reconciliation — the working list keeps its marks', () => {
     expect(screen.getAllByTitle('Unmark this transaction')).toHaveLength(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    fireEvent.click(screen.getByRole('button', { name: /Finalize Reconciliation/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Finalise Reconciliation/ }));
     await act(async () => {
       fireEvent.click(screen.getByText('Complete Reconciliation'));
     });
@@ -349,14 +349,14 @@ describe('Reconciliation — finalizing is gated on a confirmed balance', () => 
   it('blocks Finalize until the balance is confirmed, and says why where it is refused', () => {
     openAccount();
 
-    const finalize = screen.getByRole('button', { name: /Finalize Reconciliation/ });
+    const finalize = screen.getByRole('button', { name: /Finalise Reconciliation/ });
     expect(finalize).toBeDisabled();
     // Named as a consequence, beside the box that has to be confirmed.
     expect(
       screen.getByText(/Confirm the closing balance to finish\. Until you do, your marks stay a working list/)
     ).toBeInTheDocument();
     // And the escape hatch is gone for good.
-    expect(screen.queryByText('Finalize Anyway')).not.toBeInTheDocument();
+    expect(screen.queryByText('Finalise Anyway')).not.toBeInTheDocument();
   });
 
   it('confirming the shown figure opens the gate, and finalize sends that figure', async () => {
@@ -366,7 +366,7 @@ describe('Reconciliation — finalizing is gated on a confirmed balance', () => 
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 
-    const finalize = screen.getByRole('button', { name: /Finalize Reconciliation/ });
+    const finalize = screen.getByRole('button', { name: /Finalise Reconciliation/ });
     expect(finalize).toBeEnabled();
     fireEvent.click(finalize);
     await act(async () => {
@@ -388,9 +388,9 @@ describe('Reconciliation — finalizing is gated on a confirmed balance', () => 
     openAccount({ ...ACCOUNT, bankBalance: 0 }, [row('t1')]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    expect(screen.getByRole('button', { name: /Finalize Reconciliation/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Finalise Reconciliation/ })).toBeEnabled();
 
-    fireEvent.click(screen.getByRole('button', { name: /Finalize Reconciliation/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Finalise Reconciliation/ }));
     await act(async () => {
       fireEvent.click(screen.getByText('Complete Reconciliation'));
     });
@@ -402,12 +402,12 @@ describe('Reconciliation — finalizing is gated on a confirmed balance', () => 
     openAccount();
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    expect(screen.getByRole('button', { name: /Finalize Reconciliation/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Finalise Reconciliation/ })).toBeEnabled();
 
     fireEvent.click(screen.getByTitle('Click to change or remove'));
     fireEvent.change(screen.getByLabelText('Closing balance'), { target: { value: '55' } });
 
-    expect(screen.getByRole('button', { name: /Finalize Reconciliation/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Finalise Reconciliation/ })).toBeDisabled();
   });
 
   it('Enter in the box confirms the figure that was typed', () => {
@@ -428,7 +428,7 @@ describe('Reconciliation — finalizing is gated on a confirmed balance', () => 
 
     // Recorded on the account AND agreed to, in one keystroke.
     expect(updateAccount).toHaveBeenCalledWith(ACCOUNT.id, expect.objectContaining({ bankBalance: 61.25 }));
-    expect(screen.getByRole('button', { name: /Finalize Reconciliation/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Finalise Reconciliation/ })).toBeEnabled();
   });
 
   it('starts from the last reconciliation when the bank has said nothing since', () => {
@@ -443,7 +443,7 @@ describe('Reconciliation — finalizing is gated on a confirmed balance', () => 
     });
 
     expect(screen.getByText('£33.33')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Finalize Reconciliation/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Finalise Reconciliation/ })).toBeDisabled();
     expect(screen.getByText(/Last reconciled: 30\/04\/2026 · ending balance £33\.33/)).toBeInTheDocument();
   });
 
@@ -458,12 +458,12 @@ describe('Reconciliation — finalizing is gated on a confirmed balance', () => 
     });
     renderReconciliation();
 
-    expect(screen.getByRole('button', { name: /Finalize Reconciliation/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Finalise Reconciliation/ })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    fireEvent.click(screen.getByRole('button', { name: /Finalize Reconciliation/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Finalise Reconciliation/ }));
 
-    const dialog = screen.getByText('Finalize Reconciliation', { selector: 'h2' }).parentElement!
+    const dialog = screen.getByText('Finalise Reconciliation', { selector: 'h2' }).parentElement!
       .parentElement as HTMLElement;
     expect(within(dialog).getByText('Create Adjustment')).toBeInTheDocument();
     // Bank 100 − cleared 20 = 80 to explain.

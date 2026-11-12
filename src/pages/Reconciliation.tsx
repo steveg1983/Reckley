@@ -790,7 +790,7 @@ export default function Reconciliation() {
             }`}
           >
             <CheckCircleIcon size={18} />
-            Finalize Reconciliation
+            Finalise Reconciliation
           </button>
         </div>
 

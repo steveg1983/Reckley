@@ -44,8 +44,8 @@ const FILTER_LABELS: Record<FilterMode, string> = {
 /** What each view is, said where the choice is made. */
 const FILTER_TITLES: Record<FilterMode, string> = {
   all: 'Every transaction on this account, including ones already reconciled.',
-  unreconciled: 'Everything this reconciliation still has to settle. Marked rows stay here, showing C, until you finalize.',
-  marked: 'The rows marked C — what Finalize would reconcile if you pressed it now.',
+  unreconciled: 'Everything this reconciliation still has to settle. Marked rows stay here, showing C, until you finalise.',
+  marked: 'The rows marked C — what Finalise would reconcile if you pressed it now.',
 };
 
 /**
@@ -272,7 +272,7 @@ export default function ReconciliationTransactionList({
           onClick={handleMarkAll}
           disabled={visibleUnmarkedIds.length === 0}
           className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
-          title="Tick every unmarked transaction shown. They stay in this list, showing C, until you finalize."
+          title="Tick every unmarked transaction shown. They stay in this list, showing C, until you finalise."
         >
           Mark all
         </button>
