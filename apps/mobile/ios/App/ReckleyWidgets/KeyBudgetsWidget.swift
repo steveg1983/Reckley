@@ -2,11 +2,16 @@ import SwiftUI
 import WidgetKit
 
 /// "Key Budgets": the budgets the person starred on the Dashboard, on the
-/// home screen. Small draws three, medium four, large six and extra large
-/// twelve in two columns (the owner, 11 Nov 2026: "Can we have bigger budget
+/// home screen. Small draws three, medium four, large five and extra large
+/// ten in two columns (the owner, 11 Nov 2026: "Can we have bigger budget
 /// widgets? … the 2 biggest are greyed out"). The two larger sizes have room
 /// for a second line under each bar — spent of the allowance — which the
 /// server sends only when the person shows amounts.
+///
+/// Large was six and extra large twelve until build 13, sized on a simulator
+/// where six fitted. On the owner's phone (12 Nov 2026) six rows with their
+/// second line clipped the heading above and the last line below. He chose
+/// five with the line kept over six without it.
 ///
 /// ── IT FETCHES FOR ITSELF ───────────────────────────────────────────────────
 ///
@@ -159,8 +164,8 @@ struct KeyBudgetsView: View {
     private var capacity: Int {
         switch family {
         case .systemSmall: return 3
-        case .systemLarge: return 6
-        case .systemExtraLarge: return 12
+        case .systemLarge: return 5
+        case .systemExtraLarge: return 10
         default: return 4
         }
     }
