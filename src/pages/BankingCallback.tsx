@@ -71,7 +71,7 @@ export default function BankingCallback() {
 
     const run = async () => {
       setStatus('working');
-      setMessage('Finalizing your bank connection...');
+      setMessage('Finalising your bank connection...');
       try {
         bankConnectionService.setAuthTokenProvider(() => getToken());
         const connection = await bankConnectionService.handleOAuthCallback(code, state);

@@ -158,7 +158,7 @@ export default function MerchantEnrichment({ onDataChange: _onDataChange }: Merc
           Merchant Enrichment
         </h3>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          View and manage merchant data enrichment and categorization
+          View and manage merchant data enrichment and categorisation
         </p>
       </div>
 

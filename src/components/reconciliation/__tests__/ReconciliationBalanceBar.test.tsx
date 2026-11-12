@@ -48,6 +48,58 @@ describe('ReconciliationBalanceBar', () => {
     vi.clearAllMocks();
   });
 
+  /**
+   * FOLDED AWAY ON A PHONE (owner, 12 Nov 2026): on the Duo's front screen this
+   * sticky bar hid the transactions it is there to reconcile. An arrow folds it
+   * to one line and brings it back.
+   */
+  describe('folds to one line on a phone', () => {
+    it('starts whole, with a labelled way to fold it that is not drawn from md up', () => {
+      renderBar(220);
+      const hide = screen.getByRole('button', { name: /Hide balances/ });
+      expect(hide).toHaveAttribute('aria-expanded', 'true');
+      expect(hide.parentElement).toHaveClass('md:hidden');
+      expect(screen.queryByRole('button', { name: /Show balances/ })).not.toBeInTheDocument();
+    });
+
+    it('folded: one line with the Difference and the way back, the figures hidden only below md', () => {
+      renderBar(220);
+      fireEvent.click(screen.getByRole('button', { name: /Hide balances/ }));
+
+      const show = screen.getByRole('button', { name: /Show balances/ });
+      expect(show).toHaveAttribute('aria-expanded', 'false');
+      const line = show.parentElement!;
+      expect(line).toHaveClass('md:hidden');
+      // 220 closing against 200 cleared: a real difference, in the expense tone.
+      expect(line).toHaveTextContent(/Difference/);
+      expect(line.querySelector('span')).toHaveClass('text-red-600');
+
+      // The figures stay mounted — hidden on a phone, whole from md up, so an
+      // opened Duo cannot be left with a folded bar and no arrow.
+      const figures = document.getElementById(show.getAttribute('aria-controls')!)!;
+      expect(figures).toHaveClass('hidden', 'md:block');
+      expect(figures).toContainElement(screen.getByText('Closing Balance'));
+    });
+
+    it('unfolds to exactly what it was, the hint Finalise is described by included', () => {
+      renderBar(220);
+      fireEvent.click(screen.getByRole('button', { name: /Hide balances/ }));
+      // Folding unmounts nothing: the described-by target is still there.
+      expect(document.getElementById(CONFIRM_BALANCE_HINT_ID)).not.toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: /Show balances/ }));
+      const figures = screen.getByText('Closing Balance').closest('[id]')!;
+      expect(figures).not.toHaveClass('hidden');
+      expect(screen.getByRole('button', { name: /Hide balances/ })).toBeInTheDocument();
+    });
+
+    it('folded with no closing balance says not known, never zero', () => {
+      renderBar(null);
+      fireEvent.click(screen.getByRole('button', { name: /Hide balances/ }));
+      expect(screen.getByRole('button', { name: /Show balances/ }).parentElement).toHaveTextContent('Difference —');
+    });
+  });
+
   it('shows the difference against a recorded bank balance', () => {
     renderBar(220);
     expect(screen.getByText('Difference')).toBeInTheDocument();

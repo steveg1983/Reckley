@@ -96,7 +96,7 @@ const WEARING = TOKEN.join(' ');
 const BARE = '';
 
 const finalizeButton = (): HTMLElement =>
-  screen.getByRole('button', { name: /Finalize Reconciliation/ });
+  screen.getByRole('button', { name: /Finalise Reconciliation/ });
 const figure = (): HTMLElement => screen.getByTitle('Click to change or remove');
 
 /**
@@ -270,7 +270,7 @@ describe('Reconciliation — Money’s word for the figure', () => {
     // the branch of the dialog that names both figures.
     openAccount({ ...ACCOUNT, bankBalance: 100 });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    fireEvent.click(screen.getByRole('button', { name: /Finalize Reconciliation/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Finalise Reconciliation/ }));
 
     expect(screen.getByText(/Difference between closing balance and cleared balance/))
       .toBeInTheDocument();

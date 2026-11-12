@@ -83,7 +83,7 @@ describe('ReconciliationFinalizationModal', () => {
     // It cannot be rendered without a confirmed balance (the type says so), so
     // there is no branch left that finalizes against nothing.
     renderModal({ confirmedBalance: 100, clearedBalance: 87.96 });
-    expect(screen.queryByText('Finalize Anyway')).not.toBeInTheDocument();
+    expect(screen.queryByText('Finalise Anyway')).not.toBeInTheDocument();
     expect(screen.queryByText('No Bank Balance Set')).not.toBeInTheDocument();
   });
 

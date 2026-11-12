@@ -74,7 +74,7 @@ export default function RegisterSelectionBar({
           title={
             unmarkedCount === 0
               ? 'Every selected transaction is marked already'
-              : 'Tick these off against a statement. Nothing is reconciled until you finalize a reconciliation.'
+              : 'Tick these off against a statement. Nothing is reconciled until you finalise a reconciliation.'
           }
           className={`${buttonClass} border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700`}
         >

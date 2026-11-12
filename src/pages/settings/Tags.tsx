@@ -251,7 +251,7 @@ export default function Tags() {
               No tags yet
             </h3>
             <p className="text-gray-500 dark:text-gray-400 mb-4">
-              Create your first tag to start organizing your transactions
+              Create your first tag to start organising your transactions
             </p>
           </div>
         ) : (
