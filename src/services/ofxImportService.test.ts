@@ -862,6 +862,24 @@ NEWFILEUID:NONE
       expect(result.transactions[2].description).toBe('Check #1234');
     });
 
+    it("keeps the bank's own reference number out of the notes", async () => {
+      // Owner, 12 Nov 2026, of a Coutts statement: every row arrived with
+      // "Ref: <nine digits>" in Notes. REFNUM is the bank's serial, a second
+      // id beside the FITID; nobody wrote it and no statement prints it.
+      const withRefs = validOFXContent.replace(/(<FITID>[^<\n]*)/g, '$1\n<REFNUM>700000001');
+      expect(ofxImportService.parseOFX(withRefs).transactions[0].refNum).toBe('700000001');
+
+      const result = await ofxImportService.importTransactions(withRefs, mockAccounts, []);
+
+      expect(result.transactions).toHaveLength(3);
+      for (const transaction of result.transactions) {
+        expect(transaction.notes ?? '').not.toMatch(/Ref|700000001/);
+      }
+      // What a person wrote or can find the row by is still there.
+      expect(result.transactions[0].notes).toBe('Grocery shopping');
+      expect(result.transactions[2].notes).toBe('Check #: 1234');
+    });
+
     it('correctly determines transaction types', async () => {
       const ofxWithVariousTypes = validOFXContent + `
 <STMTTRN>
