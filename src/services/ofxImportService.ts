@@ -574,10 +574,17 @@ export class OFXImportService {
       // filling the notes column with a 31-digit number (owner, 29 Sep 2026).
       // readFitId in utils/statementDuplicates still reads the OLD notes, so
       // rows written before this keep their certainty.
+      //
+      // No REFNUM line either, for the same reason (owner, 12 Nov 2026, of a
+      // Coutts statement: "a field that keeps getting inserted into Notes").
+      // Coutts fills REFNUM on every row with its own nine-digit serial, a
+      // second id beside the FITID that no person wrote and no statement
+      // prints, so every row arrived with "Ref: 722957308" in a column meant
+      // for the user's words. A cheque number stays: that one is on the
+      // cheque stub and is how a person finds the row.
       const notes = [
         memoWorthKeeping(ofxTrx.memo, ofxTrx.name) ? ofxTrx.memo : null,
-        ofxTrx.checkNum ? `Check #: ${ofxTrx.checkNum}` : null,
-        ofxTrx.refNum ? `Ref: ${ofxTrx.refNum}` : null
+        ofxTrx.checkNum ? `Check #: ${ofxTrx.checkNum}` : null
       ].filter(Boolean).join('\n');
 
       const transaction: Omit<Transaction, 'id'> = {
