@@ -110,6 +110,14 @@ describe('the widget extension', () => {
     }
   });
 
+  // Six rows with their second line clipped the heading and the last line on
+  // the owner's phone (build 13, 12 Nov 2026). He chose five with the line.
+  it('the large Key Budgets size draws five budgets, and extra large five a column', () => {
+    const key = read('ReckleyWidgets/KeyBudgetsWidget.swift');
+    expect(key).toContain('case .systemLarge: return 5');
+    expect(key).toContain('case .systemExtraLarge: return 10');
+  });
+
   // The owner, 12 Nov 2026: "Make the home screen bars follow the choice too".
   // The bar cannot be drawn without the choice, and both widgets hand it over.
   it('every home-screen bar follows "used or left"', () => {

@@ -129,7 +129,7 @@ build.
 
 The first native surface the shell has: a WidgetKit extension,
 `ios/App/ReckleyWidgets`. The first widget is **Key Budgets**: small (three
-budgets), medium (four), large (six) and extra large (twelve, two columns) —
+budgets), medium (four), large (five) and extra large (ten, two columns) —
 the two larger sizes add "spent of allowance" under each bar.
 It fetches for itself (owner's ruling, 10 Nov): it holds a read-only key and
 asks `GET /api/widget/budgets`, so it is current while the app is closed.
