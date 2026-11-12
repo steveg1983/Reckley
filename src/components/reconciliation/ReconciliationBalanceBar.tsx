@@ -204,6 +204,25 @@ export default function ReconciliationBalanceBar({
         </div>
       )}
       <div id={figuresId} className={folded ? 'hidden md:block' : undefined}>
+      {/* The way to fold it — see `folded`. Words beside the arrow, because an
+          arrow alone does not say what it hides. AT THE TOP, where "Show
+          balances" will stand: it first shipped under the figures, and on the
+          very screen it was built for the box's foot sat behind the nav pill,
+          so the control could not be seen or pressed (owner, 12 Nov 2026: "I
+          can't see the hide balances?"). The top of a sticky box is the one
+          part of it that is always on screen. */}
+      <div className="md:hidden -mt-3 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setFolded(true)}
+          aria-expanded
+          aria-controls={figuresId}
+          className="min-h-[44px] flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
+          Hide balances
+          <ChevronUpIcon size={18} />
+        </button>
+      </div>
       {/* Four figures side by side needs ~90px each; a 375px phone has room
           for two. */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
@@ -467,21 +486,6 @@ export default function ReconciliationBalanceBar({
           </span>
         </div>
       )}
-
-      {/* The way to fold it — see `folded`. Words beside the arrow, because an
-          arrow alone does not say what it hides. */}
-      <div className="md:hidden mt-2 flex justify-center">
-        <button
-          type="button"
-          onClick={() => setFolded(true)}
-          aria-expanded
-          aria-controls={figuresId}
-          className="min-h-[44px] flex items-center gap-1 text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Hide balances
-          <ChevronUpIcon size={18} />
-        </button>
-      </div>
       </div>
     </div>
   );
