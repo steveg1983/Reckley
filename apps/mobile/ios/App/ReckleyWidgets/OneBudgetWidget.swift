@@ -231,7 +231,7 @@ struct OneBudgetView: View {
                         .minimumScaleFactor(0.6)
                         .lineLimit(2)
                     Spacer(minLength: 6)
-                    BudgetBar(budget: shown.budget)
+                    BudgetBar(budget: shown.budget, asLeft: entry.percentAsLeft)
                     Text(detail(for: shown.budget))
                         .font(.caption2)
                         .foregroundStyle(Palette.quiet)

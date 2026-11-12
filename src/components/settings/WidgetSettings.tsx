@@ -350,7 +350,8 @@ export default function WidgetSettings(): React.JSX.Element | null {
         <legend className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Show percentages as</legend>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
           The lock screen always shows a percentage, never an amount. So does the home screen under
-          “Percentages only”.
+          “Percentages only”. Every bar follows this too: it fills as you spend, or starts full and
+          drains.
         </p>
         <div className="flex flex-col gap-2">
           {PERCENT_CHOICES.map(({ value, label, detail }) => (
