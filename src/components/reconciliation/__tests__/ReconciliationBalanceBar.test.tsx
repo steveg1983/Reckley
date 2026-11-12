@@ -59,6 +59,10 @@ describe('ReconciliationBalanceBar', () => {
       const hide = screen.getByRole('button', { name: /Hide balances/ });
       expect(hide).toHaveAttribute('aria-expanded', 'true');
       expect(hide.parentElement).toHaveClass('md:hidden');
+      // ABOVE the figures. Under them, the box's foot sat behind the nav pill
+      // on the Duo's front screen and the control could not be reached.
+      const closing = screen.getByText('Closing Balance');
+      expect(hide.compareDocumentPosition(closing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.queryByRole('button', { name: /Show balances/ })).not.toBeInTheDocument();
     });
 
