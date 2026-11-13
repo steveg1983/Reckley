@@ -42,6 +42,15 @@
  * DETERMINISTIC by construction — a seeded PRNG and a fixed "today", so two
  * runs produce byte-identical ledgers and a tweak re-runs in seconds.
  *
+ * KEEPING IT CURRENT (owner, 13 Nov 2026, about to show the account to an
+ * accountant friend): seeded on 29 Aug, by November every monthly budget read
+ * "nothing spent" and the ledger looked abandoned. `TODAY` is now the ONE date
+ * to move. The window still opens in September 2016 and runs to the month
+ * TODAY falls in; the unfinished edges (uncleared, unreconciled, to review)
+ * are placed relative to it; and nothing dated after it is written, so the
+ * current month is a month in progress — salary not yet in, half the shopping
+ * done — and never a row from the future. Move TODAY, dry-run, reseed.
+ *
  * Usage:
  *   npx tsx scripts/seedShowcaseUser.mts --dry-run
  *     → prints the year-by-year story and final balances; touches nothing.
@@ -103,8 +112,16 @@ const dayNear = (base: number): number =>
 // ── The clock ────────────────────────────────────────────────────────────────
 
 const START = { y: 2016, m: 9 };            // September 2016
-const MONTHS = 120;                          // ten years
-const TODAY = '2026-08-29';                  // fixed, for determinism
+const TODAY = '2026-11-13';                  // fixed, for determinism — the ONE date to move
+/** September 2016 to the month TODAY falls in, inclusive: ten years and a little. */
+const MONTHS = (Number(TODAY.slice(0, 4)) * 12 + Number(TODAY.slice(5, 7)) - 1)
+  - (START.y * 12 + (START.m - 1)) + 1;
+/** TODAY moved by whole days, as a date string. Noon UTC, so no zone can turn the day. */
+const daysFromToday = (days: number): string => {
+  const at = new Date(`${TODAY}T12:00:00Z`);
+  at.setUTCDate(at.getUTCDate() + days);
+  return at.toISOString().slice(0, 10);
+};
 /** Month index → { y, m } (m is 1-12). */
 const ym = (i: number): { y: number; m: number } => {
   const t = (START.y * 12 + (START.m - 1)) + i;
@@ -530,8 +547,12 @@ const monthlyNetWorth: Array<{ date: string; value: number }> = [];
 
 // The last weeks stay unfinished on purpose — the Reconciliation and To
 // Review screenshots need work to show.
-const CLEARED_UP_TO = '2026-08-07';
-const RECONCILED_UP_TO = '2026-06-30';
+// Three weeks uncleared; reconciled to the end of the month before last
+// (day 0 of last month is the last day of the one before it).
+const CLEARED_UP_TO = daysFromToday(-22);
+const RECONCILED_UP_TO = new Date(Date.UTC(
+  Number(TODAY.slice(0, 4)), Number(TODAY.slice(5, 7)) - 2, 0, 12,
+)).toISOString().slice(0, 10);
 
 for (let i = 0; i < MONTHS; i += 1) {
   const { y, m } = ym(i);
@@ -767,16 +788,40 @@ for (let i = 0; i < MONTHS; i += 1) {
 // ── The unfinished edges (the whole point of two of the screenshots) ─────────
 
 // Recent card arrivals still awaiting review, feed-style.
-const REVIEW_ROWS: Array<[string, string, string, number]> = [
-  ['amex', '2026-08-26', 'PRET A MANGER 441', -6.4],
-  ['amex', '2026-08-27', 'SHELL WEYBRIDGE', -58.2],
-  ['visa', '2026-08-27', 'WAITROSE & PARTNERS 220', -84.15],
-  ['current', '2026-08-28', 'FPS CREDIT R HARRIS', 120.0],
-  ['visa', '2026-08-28', 'AMAZON.CO.UK MKTP', -31.99],
-  ['amex', '2026-08-28', 'TFL TRAVEL CHARGE', -8.4],
+const REVIEW_ROWS: Array<[string, number, string, number]> = [
+  ['amex', -3, 'PRET A MANGER 441', -6.4],
+  ['amex', -2, 'SHELL WEYBRIDGE', -58.2],
+  ['visa', -2, 'WAITROSE & PARTNERS 220', -84.15],
+  ['current', -1, 'FPS CREDIT R HARRIS', 120.0],
+  ['visa', -1, 'AMAZON.CO.UK MKTP', -31.99],
+  ['amex', -1, 'TFL TRAVEL CHARGE', -8.4],
 ];
-for (const [acct, date, desc, amt] of REVIEW_ROWS) {
-  add(acct, date, desc, amt, null, { needsReview: true, uncleared: true });
+for (const [acct, daysAgo, desc, amt] of REVIEW_ROWS) {
+  add(acct, daysFromToday(daysAgo), desc, amt, null, { needsReview: true, uncleared: true });
+}
+
+// ── Nothing from the future ──────────────────────────────────────────────────
+// The engine above writes each month whole, the current one included. A ledger
+// seeded mid-month would otherwise hold a salary dated the 25th and shopping
+// dated next week. Drop what has not happened yet — both legs of a transfer
+// together — BEFORE anything is reported or written. Every balance below is
+// summed from `txns`, so the registers and their balances still agree to the
+// penny. No holding is bought in the dropped stretch unless TODAY falls before
+// the 10th of a quarter's first month; the check says so rather than assuming.
+{
+  const before = txns.length;
+  const kept = txns.filter(t => t.date <= TODAY);
+  txns.length = 0;
+  txns.push(...kept);
+  const pairs = transferPairs.filter(pair => pair.out.date <= TODAY && pair.into.date <= TODAY);
+  transferPairs.length = 0;
+  transferPairs.push(...pairs);
+  for (const h of [...isaHoldings, ...pensionHoldings]) {
+    if (h.buys.some(b => b.date > TODAY)) {
+      fail(`a holding (${h.inst.symbol}) is bought after ${TODAY}: move TODAY past that purchase or before its month`);
+    }
+  }
+  console.log(`\nnot yet happened on ${TODAY}: ${before - txns.length} rows left out of the current month`);
 }
 
 // ── Dry-run report ───────────────────────────────────────────────────────────
@@ -819,7 +864,25 @@ const netWorth = last.house + last.mortgage + last.pension + last.isa + last.sav
   }
 }
 
-console.log(`\nNET WORTH TODAY: ${fmt(netWorth)}  (owner's band: £1.72m–£1.75m — the third cut landed £1.73m)`);
+console.log(`\nNET WORTH at the END of the current month, as the engine runs it: ${fmt(netWorth)}`);
+console.log("  (the owner's band of 29 Aug was £1.72m–£1.75m for a ledger ending that month; later months sit above it)");
+console.log(`\nregister balances on ${TODAY} — what the accounts will show:`);
+for (const a of ACCOUNTS) {
+  const pence = txns.filter(t => t.account === a.key).reduce((s, t) => s + Math.round(t.amount * 100), 0);
+  console.log(`  ${a.name.padEnd(30)} ${fmt((Math.round(a.initial * 100) + pence) / 100)}`);
+}
+{
+  const month = TODAY.slice(0, 7);
+  const spent = new Map<string, number>();
+  for (const t of txns) {
+    if (!t.date.startsWith(month) || t.type !== 'expense' || t.category === null) continue;
+    spent.set(t.category, (spent.get(t.category) ?? 0) + Math.round(-t.amount * 100));
+  }
+  console.log(`\nspent so far in ${month}, the budgeted categories:`);
+  for (const name of ['Food Shopping', 'Dining Out', 'Fuel Costs', 'Coffee Shops']) {
+    console.log(`  ${name.padEnd(16)} ${fmt((spent.get(`CAT:${name}`) ?? 0) / 100)}`);
+  }
+}
 console.log('\nISA holdings today:');
 for (const h of isaHoldings) {
   const price = priceAt(h, MONTHS - 1);
@@ -1132,7 +1195,7 @@ for (const a of ACCOUNTS) {
       access_token_encrypted: 'demo-showcase-not-a-token',
       status: 'connected',
       last_sync: new Date(`${TODAY}T06:30:00Z`).toISOString(),
-      expires_at: new Date('2026-11-20T00:00:00Z').toISOString(),
+      expires_at: new Date(`${daysFromToday(83)}T00:00:00Z`).toISOString(),
     });
     if (error) fail(`bank_connections (${c.name}): ${error.message}`);
     const { error: linkErr } = await sb.from('linked_accounts').insert({
