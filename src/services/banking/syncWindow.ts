@@ -59,3 +59,35 @@ export function syncWindowStart(lastSync: string | null | undefined, now: Date):
   // protected-resource request and start the whole cycle again.
   return new Date(Math.max(lastSyncedAt.getTime() - ROUTINE_SYNC_OVERLAP_DAYS * DAY_MS, longWindowStart));
 }
+
+/**
+ * How far back a re-read THE OWNER ASKS FOR may reach: one day inside the long
+ * window.
+ *
+ * The owner, 13 Nov 2026, of a payment the feed had skipped six weeks before:
+ * "if I re-synced the bank, shouldn't it bring in the missing amount?" It
+ * should, and the bank would have served it — the app never asked that far
+ * back. The routine sync reaches a week behind its last success and "Re-read
+ * 30 days" thirty, so a gap older than a month could only be closed by hand.
+ *
+ * One day inside, not the ninetieth day itself: some providers treat that day
+ * as a protected resource (the header above), refuse it, and the refusal reads
+ * as "this connection needs reauthorizing" — the daily ritual this file exists
+ * to end. A re-read must never be able to cause it.
+ */
+export const REREAD_REACH_DAYS = FIRST_SYNC_WINDOW_DAYS - 1;
+
+/** The earliest day a re-read may start from, YYYY-MM-DD, by `now`'s UTC day. */
+export function earliestRereadDay(now: Date): string {
+  const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  day.setUTCDate(day.getUTCDate() - REREAD_REACH_DAYS);
+  return day.toISOString().slice(0, 10);
+}
+
+/**
+ * Whether a start (an ISO date or date-time) is further back than a re-read
+ * may reach. The server refuses these by name before any provider call.
+ */
+export function isBeyondRereadReach(start: string, now: Date): boolean {
+  return start.slice(0, 10) < earliestRereadDay(now);
+}

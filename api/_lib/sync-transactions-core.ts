@@ -21,7 +21,7 @@ import { partitionOfferedRows } from '../../src/services/banking/ownerDeletions.
 import { applyFeedRules } from '../../src/services/banking/feedRules.js';
 import { stampBackfillDecision } from '../../src/services/banking/backfillStamp.js';
 import { lastSuccessfulTransactionSyncAt } from './sync-window-anchor.js';
-import { syncWindowStart } from '../../src/services/banking/syncWindow.js';
+import { earliestRereadDay, isBeyondRereadReach, syncWindowStart } from '../../src/services/banking/syncWindow.js';
 
 /**
  * THE TRANSACTION SYNC, WITHOUT THE HTTP.
@@ -97,6 +97,17 @@ const getDateRange = (
   }
   if (typeof body.endDate === 'string' && !to) {
     throw new Error('Invalid endDate. Use YYYY-MM-DD or ISO-8601 date.');
+  }
+  // A start further back than a bank serves without a fresh sign-in is refused
+  // HERE, by name. Sent on, the provider answers "protected resource", which
+  // reads as a connection needing reauthorization — and a re-read the owner
+  // asked for would have marked his bank as broken (syncWindow's header).
+  if (from && isBeyondRereadReach(from, now)) {
+    throw new SyncRefusal(
+      400,
+      `A re-read can start no earlier than ${earliestRereadDay(now)}.`,
+      'start_too_old'
+    );
   }
 
   const resolvedFrom = from ?? defaultFrom;

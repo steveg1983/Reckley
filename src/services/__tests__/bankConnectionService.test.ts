@@ -391,10 +391,30 @@ describe('BankConnectionService', () => {
 
     const result = await service.syncTransactionsOnly('conn_123', { startDate: '2026-09-01' });
 
-    expect(result).toEqual({ success: true, accountsUpdated: 0, transactionsImported: 24, errors: [] });
+    expect(result).toEqual({
+      success: true, accountsUpdated: 0, transactionsImported: 24,
+      alreadyHeld: 0, matchedToOwnRows: 0, errors: []
+    });
     expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/banking/sync-transactions');
     expect(getJsonBody(fetchMock.mock.calls[0]?.[1])).toEqual({ connectionId: 'conn_123', startDate: '2026-09-01' });
     expect(fetchMock.mock.calls.map(call => call[0])).not.toContain('/api/banking/sync-accounts');
+  });
+
+  it('a re-read reports what it found besides new rows, so the panel can say what it did', async () => {
+    // Owner, 13 Nov 2026: a re-read from a date he chooses. The bank's rows
+    // the ledger already held, and the rows he had entered himself that the
+    // feed now recognises, are counted apart from what was added.
+    const fetchMock = createFetchMock();
+    fetchMock.mockResolvedValueOnce(jsonResponse({
+      success: true, transactionsImported: 1, duplicatesSkipped: 30,
+      idChurnRepaired: 1, transfersAdopted: 2, importedRowsAdopted: 1
+    }));
+    fetchMock.mockResolvedValueOnce(jsonResponse([] satisfies ConnectionsResponse));
+    const { service } = createService(fetchMock);
+
+    const result = await service.syncTransactionsOnly('conn_123', { startDate: '2026-09-01' });
+
+    expect(result).toMatchObject({ transactionsImported: 1, alreadyHeld: 31, matchedToOwnRows: 3 });
   });
 
   it('a throttle comes back named, so the panel can say "too often" rather than "lost transactions"', async () => {
