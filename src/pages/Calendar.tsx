@@ -22,6 +22,7 @@ import type { Transaction } from '../types';
 import type { SplitExpandedTransaction } from '../utils/transactionSplits';
 import { createCategoryLabeller } from '../utils/categoryLabel';
 import { WholePoundsScope, WholePoundsToggle } from '../contexts/WholePoundsContext';
+import { NegativesInRedToggle, useNegativeTone } from '../contexts/NegativesInRedContext';
 
 interface DayData {
   date: Date;
@@ -58,6 +59,10 @@ function CalendarView() {
     if (suggestionDismissalsStatus === 'idle') void refreshSuggestionDismissals();
   }, [suggestionDismissalsStatus, refreshSuggestionDismissals]);
   const { formatCurrency } = useCurrencyDecimal();
+  // "Negatives in red" (owner, 14 Nov 2026). This page colours money in
+  // and money out already; what the setting adds is the day view's
+  // transfers and unfiled rows, which are deliberately neutral.
+  const negativeTone = useNegativeTone();
   // The seams (the long tail's conversion, 23 Aug): day tiles convert each
   // movement at its own day's rate; the running balance values each day's
   // per-account natives at that day's rate. Native while the history is
@@ -799,6 +804,7 @@ function CalendarView() {
         {/* Display choices, every view: whole pounds always; the daily
             net-worth line is month-view's own (owner: not a default). */}
         <div className="flex justify-end items-center gap-4 px-4 py-1.5 border-b border-gray-100 dark:border-gray-700">
+          <NegativesInRedToggle />
           <WholePoundsToggle />
           {view === 'month' && (
             <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
@@ -1074,7 +1080,7 @@ function CalendarView() {
                             </span>
                             <span className={`text-sm tabular-nums shrink-0 ${
                               section.key === 'transfer' || section.key === 'uncategorized'
-                                ? 'text-gray-600 dark:text-gray-300'
+                                ? negativeTone(row.amount, 'text-gray-600 dark:text-gray-300')
                                 : row.amount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                             }`}>
                               {row.amount >= 0 ? `+${formatCurrency(row.amount)}` : formatCurrency(row.amount)}

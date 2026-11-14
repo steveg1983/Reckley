@@ -32,6 +32,7 @@ import { useReportDrill } from './useReportDrill';
 import { useHistoricalAccounts } from '../../../hooks/useHistoricalAccounts';
 import { useNetWorthConversion } from '../../../hooks/useNetWorthConversion';
 import { useFlowConvert } from '../../../hooks/useFlowConvert';
+import { useNegativeTone } from '../../../contexts/NegativesInRedContext';
 
 /**
  * Compact, live versions of the Reports-hub reports for the Dashboard's
@@ -150,6 +151,7 @@ export function NetWorthWidget({ picker, pin }: {
     [accounts, transactions, picker.range, seriesConversion, valuation]
   );
   const latest = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+  const negativeTone = useNegativeTone();
 
   const open = (focus?: string): void =>
     openReport('net-worth-over-time', { period: picker, focus });
@@ -159,7 +161,7 @@ export function NetWorthWidget({ picker, pin }: {
       title={NET_WORTH_TITLE}
       subtitle={
         <>
-          <span className="min-w-0 text-xl font-bold text-gray-900 dark:text-white truncate">
+          <span className={`min-w-0 text-xl font-bold truncate ${negativeTone(latest?.netWorth, 'text-gray-900 dark:text-white')}`}>
             {latest ? `${holdsForeign ? '≈ ' : ''}${formatCurrency(latest.netWorth)}` : '—'}
           </span>
           {pin && <CardPeriodControl cardLabel={NET_WORTH_TITLE} picker={picker} pin={pin} />}

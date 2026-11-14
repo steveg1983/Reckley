@@ -6,7 +6,7 @@ import { dataPort } from '@data';
 import { preserveDemoParam } from '../utils/navigation';
 import { DEPTH_LEVEL_1, DEPTH_LEVEL_2 } from '../styles/depthShading';
 import { WholePoundsScope, WholePoundsToggle } from '../contexts/WholePoundsContext';
-import { NegativesInRedScope, NegativesInRedToggle, useNegativeTone } from '../contexts/NegativesInRedContext';
+import { NegativesInRedToggle, useNegativeTone } from '../contexts/NegativesInRedContext';
 import { CHROME_HAS_BANK_FEEDS } from '@chrome';
 import AddAccountModal from '../components/AddAccountModal';
 import AccountSettingsModal from '../components/AccountSettingsModal';
@@ -234,9 +234,7 @@ export default function Accounts() {
   // page-specific decimal display).
   return (
     <WholePoundsScope page="accounts">
-      <NegativesInRedScope page="accounts">
-        <AccountsList />
-      </NegativesInRedScope>
+      <AccountsList />
     </WholePoundsScope>
   );
 }
@@ -2616,6 +2614,7 @@ function AccountsList() {
               // reads as two different kinds of number. provenance is null
               // exactly when nothing converted.
               netWorth={`${spansCurrencies && convertedNetWorth.provenance ? '≈ ' : ''}${formatDisplayCurrency(spansCurrencies ? convertedNetWorth.netWorth : totalBalance)}`}
+              netWorthAmount={Number(spansCurrencies ? convertedNetWorth.netWorth : totalBalance)}
               assets={`${spansCurrencies && convertedNetWorth.provenance ? '≈ ' : ''}${formatDisplayCurrency(spansCurrencies ? convertedNetWorth.assets : totalAssets)}`}
               liabilities={`${spansCurrencies && convertedNetWorth.provenance ? '≈ ' : ''}${formatDisplayCurrency(spansCurrencies ? convertedNetWorth.liabilities : totalLiabilities)}`}
               onSelect={figure => setBreakdownView(figure)}

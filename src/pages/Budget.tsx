@@ -17,6 +17,7 @@ import type { Budget } from '../types';
 import PageWrapper from '../components/PageWrapper';
 import { lazyWithRecovery } from '../utils/lazyWithRecovery';
 import { WholePoundsScope, WholePoundsToggle } from '../contexts/WholePoundsContext';
+import { NegativesInRedToggle, useNegativeTone } from '../contexts/NegativesInRedContext';
 import PageTip from '../components/PageTip';
 import EmptyState from '../components/EmptyState';
 import { foreignCurrencyAccountIds } from '../utils/budgetSpending';
@@ -103,6 +104,12 @@ function BudgetView() {
     });
   const [isLoading, setIsLoading] = useState(true);
   const { formatCurrency, displayCurrency } = useCurrencyDecimal();
+  // "Negatives in red" (owner, 14 Nov 2026): one setting for the whole app.
+  // Nearly every figure here already has a colour with a meaning — over or
+  // under, remaining — and keeps it. What follows the setting is the plain
+  // figure that can fall below zero: an overspend carried into a period, and
+  // a total that a large enough carry has turned negative.
+  const negativeTone = useNegativeTone();
   const formatPercentage = (value: number | DecimalInstance, decimals: number = 0) => {
     return formatDecimal(value, decimals);
   };
@@ -401,7 +408,7 @@ function BudgetView() {
   ): React.JSX.Element => {
     const colour = (value: DecimalInstance): string =>
       tone === 'plain' || value.isZero()
-        ? 'text-gray-900 dark:text-white'
+        ? negativeTone(value.toNumber(), 'text-gray-900 dark:text-white')
         : value.greaterThan(0) ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
     if (rhythmTotals.length === 1) {
       const value = pick(rhythmTotals[0]);
@@ -508,6 +515,7 @@ function BudgetView() {
         {budgetsWithSpent.some(b => b.hasMonths) && (
           <BudgetViewChoice id="budget-view" view={budgetView} onChange={setBudgetView} />
         )}
+        <NegativesInRedToggle />
         <WholePoundsToggle />
       </div>
       {/* The budgets — the page itself. */}
@@ -666,7 +674,7 @@ function BudgetView() {
                   nothing was carried (a zero earns no line). */}
               {!budget.carriedIn.isZero() && budget.carriedFrom && (
                 <p className="text-dense text-gray-500 dark:text-gray-400" data-testid="budget-carry">
-                  Includes {formatCurrency(budget.carriedIn)} carried over from {describeBudgetWindow(budget.carriedFrom)}
+                  Includes <span className={negativeTone(budget.carriedIn.toNumber(), '')}>{formatCurrency(budget.carriedIn)}</span> carried over from {describeBudgetWindow(budget.carriedFrom)}
                 </p>
               )}
               {/* WHAT OTHERS SENT (owner, 7 Nov 2026: where a surplus goes).

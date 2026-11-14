@@ -20,6 +20,7 @@
  */
 
 import { useMemo, useState } from 'react';
+import { useNegativeTone } from '../contexts/NegativesInRedContext';
 import { useApp } from '../contexts/AppContextSupabase';
 import { useCurrencyDecimal } from '../hooks/useCurrencyDecimal';
 import { evaluateBudgetHistory } from '../utils/budgetEvaluation';
@@ -38,6 +39,7 @@ const PAGE = 12;
 export default function BudgetCycleHistory({ budget, evaluatedAt }: BudgetCycleHistoryProps): React.JSX.Element {
   const { transactions, transactionSplits, categories, accounts, budgets } = useApp();
   const { formatCurrency, displayCurrency } = useCurrencyDecimal();
+  const negativeTone = useNegativeTone();
   const [showAll, setShowAll] = useState(false);
 
   const past = useMemo(
@@ -103,7 +105,9 @@ export default function BudgetCycleHistory({ budget, evaluatedAt }: BudgetCycleH
                   : formatCurrency(cycle.remaining)}
               </td>
               {carries && (
-                <td className="py-1 pl-2 text-right text-gray-700 dark:text-gray-200">{figure(cycle.carriedOut)}</td>
+                /* An overspend carried on is below zero and otherwise plain:
+                   the one figure in this table "Negatives in red" governs. */
+                <td className={`py-1 pl-2 text-right ${negativeTone(cycle.carriedOut.toNumber(), 'text-gray-700 dark:text-gray-200')}`}>{figure(cycle.carriedOut)}</td>
               )}
               {sends && (
                 <td className="py-1 pl-2 text-right text-gray-700 dark:text-gray-200">{figure(cycle.sentOn)}</td>

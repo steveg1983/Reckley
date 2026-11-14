@@ -11,6 +11,7 @@ import { buildPlWindow, bucketIndexOf, dayOf } from '../utils/plWindow';
 import type { PlWindowKind } from '../utils/plWindow';
 import { ArrowDownIcon, ArrowUpIcon, ChevronDownIcon, ChevronRightIcon } from '../components/icons';
 import { WholePoundsScope, WholePoundsToggle } from '../contexts/WholePoundsContext';
+import { NegativesInRedToggle, useNegativeTone } from '../contexts/NegativesInRedContext';
 import { DEPTH_LEVEL_1, DEPTH_LEVEL_2, DEPTH_LEVEL_2_STICKY } from '../styles/depthShading';
 import { dataPort } from '@data';
 import { useFlowConvert } from '../hooks/useFlowConvert';
@@ -107,6 +108,11 @@ function ForecastStatement(): React.JSX.Element {
     suggestionDismissals, suggestionDismissalsStatus, refreshSuggestionDismissals,
   } = useApp();
   const { formatCurrency } = useCurrencyDecimal();
+  // "Negatives in red" (owner, 14 Nov 2026). The NET figures follow it: a
+  // month that ran at a loss is a figure below zero. Expenditure lines are
+  // printed in brackets by this statement's convention and are spending,
+  // not a balance; they keep their ink.
+  const negativeTone = useNegativeTone();
   // The flows seam: per-row factors at each row's own date, undefined while
   // the ECB history is absent (the totals then stay native, disclosed).
   const convert = useFlowConvert(accounts);
@@ -845,7 +851,8 @@ function ForecastStatement(): React.JSX.Element {
                       : <ArrowUpIcon size={12} className="shrink-0" />}
                   </button>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <NegativesInRedToggle />
                   <WholePoundsToggle />
                   <button
                     type="button"
@@ -884,14 +891,14 @@ function ForecastStatement(): React.JSX.Element {
                           {netLabel}
                         </td>
                         {statement.netPerBucket.map((value, i) => (
-                          <td key={plWindow.buckets[i].key} className="py-2 px-2 text-right text-sm tabular-nums font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                          <td key={plWindow.buckets[i].key} className={`py-2 px-2 text-right text-sm tabular-nums font-medium whitespace-nowrap ${negativeTone(value, 'text-gray-900 dark:text-white')}`}>
                             {value === 0 ? '—' : netText(value)}
                           </td>
                         ))}
                         <td className={`py-2 pl-3 text-right text-sm tabular-nums font-semibold whitespace-nowrap ${netColour}`}>
                           {netText(statement.net)}
                         </td>
-                        <td className="py-2 pl-3 text-right text-sm tabular-nums text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                        <td className={`py-2 pl-3 text-right text-sm tabular-nums whitespace-nowrap ${negativeTone(average(statement.net), 'text-gray-500 dark:text-gray-400')}`}>
                           {formatCurrency(average(statement.net))}
                         </td>
                       </tr>
@@ -908,7 +915,7 @@ function ForecastStatement(): React.JSX.Element {
                       <span className={`block text-body font-semibold tabular-nums ${netColour}`}>
                         {netText(statement.net)}
                       </span>
-                      <span className="block text-dense tabular-nums text-gray-500 dark:text-gray-400">
+                      <span className={`block text-dense tabular-nums ${negativeTone(average(statement.net), 'text-gray-500 dark:text-gray-400')}`}>
                         {formatCurrency(average(statement.net))} a month
                       </span>
                     </span>
