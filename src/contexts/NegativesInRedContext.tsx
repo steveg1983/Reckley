@@ -1,80 +1,89 @@
-/* eslint-disable react-refresh/only-export-components -- a context file
-   exports its hook beside its provider, exactly as WholePoundsContext does */
-import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+/* eslint-disable react-refresh/only-export-components -- this file exports
+   its hook beside its toggle, exactly as WholePoundsContext does */
+import React, { useCallback, useSyncExternalStore } from 'react';
 import { preferences } from '../services/preferencesService';
 
 /**
- * NEGATIVES IN RED, PER PAGE — and only if the person asks.
+ * NEGATIVES IN RED — one choice for the whole app, and only if the person asks.
  *
  * The owner's ask (14 Nov 2026), of the Accounts page: "next to Hide Decimals
  * we should have 'negatives in red', as a tick box for the user to change the
- * view to have all negative balances show in red if they wish".
+ * view to have all negative balances show in red if they wish". He liked it on
+ * sight and asked for it "throughout" the same day, ruling that it is ONE
+ * setting: tick it on any page and every page follows.
  *
- * OFF BY DEFAULT, and that is the design pass's rule, not an oversight:
- * colour marks what needs attention, and a card that is owed money or a
- * mortgage with a balance is the account doing what it is for. A list of
- * ninety accounts with every liability in red asks for attention forty times.
- * But a person scanning for what is overdrawn is asking a real question, and
- * the old Microsoft Money answered it exactly this way. So it is a choice,
- * the person's, made beside the other choice about how figures are drawn.
+ * That is where it parts from "Hide decimals", which he ruled page-specific
+ * (19 Aug): whether pennies are noise depends on how much a page shows, but
+ * whether a debt should be red is a matter of how a person reads money, and
+ * that does not change between pages. So there is no scope to wrap a page in.
+ * The tick box is drawn beside "Hide decimals" wherever that is, and every one
+ * of them is the same switch.
  *
- * The same shape as WholePoundsScope: a page wraps itself, remembers its own
- * answer under its own key, and everything inside that draws a balance asks
- * `useNegativeTone` for the class. Display only — no figure, total or export
- * changes.
+ * OFF BY DEFAULT, and that is the design pass's rule, not an oversight: colour
+ * marks what needs attention, and a card that is owed money or a mortgage with
+ * a balance is the account doing what it is for. The choice is the person's.
+ *
+ * WHAT IT PAINTS: a figure that is otherwise plain and is below zero. A figure
+ * that already carries a colour with a meaning — income green, spending red,
+ * over budget, a gain or a loss — keeps that meaning; callers simply do not
+ * ask for a tone there. Display only: no figure, total or export changes.
  */
 
-interface NegativesInRedValue {
-  negativesInRed: boolean;
-  setNegativesInRed: (value: boolean) => void;
-}
+const KEY = 'money_management_negatives_in_red';
+/**
+ * The first day's key, when the setting belonged to the Accounts page alone.
+ * Honoured only until the app-wide key has been written once, so the choice
+ * the owner made that morning carries over and a later untick is not undone.
+ */
+const FIRST_DAY_ACCOUNTS_KEY = 'money_management_negatives_in_red_accounts';
 
-/** Outside any scope: nothing is tinted, and the toggle (if rendered) does nothing. */
-const NegativesInRedContext = createContext<NegativesInRedValue>({
-  negativesInRed: false,
-  setNegativesInRed: () => {},
-});
+const readSetting = (): boolean => {
+  const appWide = preferences.getItem(KEY);
+  if (appWide !== null) return appWide === 'true';
+  return preferences.getItem(FIRST_DAY_ACCOUNTS_KEY) === 'true';
+};
+
+const writeSetting = (value: boolean): void => {
+  preferences.setItem(KEY, value ? 'true' : 'false');
+};
+
+/** Is "Negatives in red" on? Follows the preferences document, so a change on one page reaches every other. */
+export const useNegativesInRed = (): boolean =>
+  useSyncExternalStore(preferences.subscribe, readSetting, readSetting);
 
 /** The app's negative-figure red in both themes; `semantic-contrast.test.ts` measures it. */
 export const NEGATIVE_FIGURE_CLASS = 'text-red-600 dark:text-red-400';
 
 /**
- * The class for a balance: red when the scope is on and the amount is below
- * zero by a penny or more, otherwise `fallback` (the figure's ordinary
- * colour). Half a penny is the threshold so a float's dust — a balance of
- * minus nothing — is not painted as a debt.
+ * Whether an amount counts as below zero for this purpose: by half a penny or
+ * more, so a float's dust — a balance of minus nothing — is not painted as a
+ * debt. Exported for the few places that tint something other than a class
+ * (a chart label, an SVG fill).
+ */
+export const isBelowZero = (amount: number | null | undefined): boolean =>
+  typeof amount === 'number' && amount <= -0.005;
+
+/**
+ * The class for a figure: red when the setting is on and the amount is below
+ * zero, otherwise `fallback` (the figure's ordinary colour).
  */
 export const useNegativeTone = (): ((amount: number | null | undefined, fallback: string) => string) => {
-  const { negativesInRed } = useContext(NegativesInRedContext);
+  const on = useNegativesInRed();
   return useCallback(
-    (amount, fallback) =>
-      negativesInRed && typeof amount === 'number' && amount <= -0.005 ? NEGATIVE_FIGURE_CLASS : fallback,
-    [negativesInRed]
+    (amount, fallback) => (on && isBelowZero(amount) ? NEGATIVE_FIGURE_CLASS : fallback),
+    [on]
   );
 };
 
-/** One page's scope. `page` is the storage key's tail, as in WholePoundsScope. */
-export function NegativesInRedScope({ page, children }: { page: string; children: ReactNode }): React.JSX.Element {
-  const key = `money_management_negatives_in_red_${page}`;
-  const [negativesInRed, setState] = useState((): boolean => preferences.getItem(key) === 'true');
-  const setNegativesInRed = useCallback((value: boolean): void => {
-    setState(value);
-    preferences.setItem(key, value ? 'true' : 'false');
-  }, [key]);
-  const value = useMemo(() => ({ negativesInRed, setNegativesInRed }), [negativesInRed, setNegativesInRed]);
-  return <NegativesInRedContext.Provider value={value}>{children}</NegativesInRedContext.Provider>;
-}
-
 /** The checkbox, spelt and sized like "Hide decimals" so the two sit as a pair. */
 export function NegativesInRedToggle({ className = '' }: { className?: string }): React.JSX.Element {
-  const { negativesInRed, setNegativesInRed } = useContext(NegativesInRedContext);
+  const on = useNegativesInRed();
   return (
     <label className={`flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none ${className}`}>
       <input
         type="checkbox"
-        checked={negativesInRed}
-        onChange={event => setNegativesInRed(event.target.checked)}
+        checked={on}
+        onChange={event => writeSetting(event.target.checked)}
         className="rounded border-gray-300 dark:border-gray-600"
       />
       Negatives in red

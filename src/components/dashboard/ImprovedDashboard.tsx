@@ -35,6 +35,7 @@ import IncomeExpenseBreakdownModal from '../IncomeExpenseBreakdownModal';
 import { Modal, ModalBody } from '../common/Modal';
 import PeriodBar from '../../components/PeriodBar';
 import { WholePoundsToggle } from '../../contexts/WholePoundsContext';
+import { NegativesInRedToggle, useNegativeTone } from '../../contexts/NegativesInRedContext';
 import NetWorthSummary from '../../components/NetWorthSummary';
 import FirstSteps from './FirstSteps';
 import HistoryPathCard from './HistoryPathCard';
@@ -171,6 +172,11 @@ export function ImprovedDashboard() {
   // fetch.
   const { accounts, transactions, transactionSplits, budgets, categories, customReports, serverBalances, isLoading } = useApp();
   const { formatCurrency: formatCurrencyWithSymbol, displayCurrency } = useCurrencyDecimal();
+  // "Negatives in red" (owner, 14 Nov 2026) — for the figures here that are
+  // otherwise plain. The key-account tile and the distribution legend already
+  // mark a negative balance in red by an earlier ruling and are left as they
+  // are: a figure that carries a colour with a meaning keeps it.
+  const negativeTone = useNegativeTone();
   /**
    * THE HISTORY GUIDE SUPERSEDES FIRST STEPS (owner's ruling, 1 Sep 2026).
    *
@@ -936,7 +942,12 @@ export function ImprovedDashboard() {
           Directly under the page heading, so its position states its scope. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PeriodBar picker={period} label="Period for this dashboard" />
-        <WholePoundsToggle />
+        {/* The two choices about how figures are drawn, kept together on the
+            right. "Negatives in red" is one setting for the whole app. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <NegativesInRedToggle />
+          <WholePoundsToggle />
+        </div>
       </div>
 
       {/* Net worth and the two figures it is made of — one card, three
@@ -956,6 +967,7 @@ export function ImprovedDashboard() {
           netWorth={`${spansCurrencies && convertedNetWorth.provenance ? '≈ ' : ''}${formatCurrencyWithSymbol(spansCurrencies ? convertedNetWorth.netWorth : metrics.netWorth)}`}
           assets={`${spansCurrencies && convertedNetWorth.provenance ? '≈ ' : ''}${formatCurrencyWithSymbol(spansCurrencies ? convertedNetWorth.assets : metrics.totalAssets)}`}
           liabilities={`${spansCurrencies && convertedNetWorth.provenance ? '≈ ' : ''}${formatCurrencyWithSymbol(spansCurrencies ? convertedNetWorth.liabilities : metrics.totalLiabilities)}`}
+          netWorthAmount={Number(spansCurrencies ? convertedNetWorth.netWorth : metrics.netWorth)}
           onSelect={figure => setBreakdownView(figure)}
           provenance={spansCurrencies ? convertedNetWorth.provenance : null}
           unconverted={spansCurrencies ? convertedNetWorth.unconverted : []}
@@ -1698,7 +1710,7 @@ export function ImprovedDashboard() {
                           <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
                             {account.name}
                           </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto whitespace-nowrap">
+                          <span className={`text-xs ml-auto whitespace-nowrap ${negativeTone(getAccountBalance(account), 'text-gray-500 dark:text-gray-400')}`}>
                             {formatCurrencyWithSymbol(getAccountBalance(account), account.currency)}
                           </span>
                         </button>

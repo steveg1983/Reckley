@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNegativeTone } from '../contexts/NegativesInRedContext';
 import ConvertedTotalNote from './ConvertedTotalNote';
 import type { RatesProvenance } from '../utils/currency-decimal';
 
@@ -36,6 +37,12 @@ import type { RatesProvenance } from '../utils/currency-decimal';
 export type NetWorthFigure = 'net' | 'assets' | 'liabilities';
 
 interface NetWorthSummaryProps {
+  /**
+   * Net worth as a number, for "Negatives in red". The card is handed
+   * formatted strings and cannot read a sign off one. Absent: the headline
+   * keeps its colour whatever the setting.
+   */
+  netWorthAmount?: number | null;
   /** Already formatted, in the display currency. */
   netWorth: string;
   assets: string;
@@ -93,7 +100,9 @@ export default function NetWorthSummary({
   displayCurrency,
   assetsLabel = 'What you own',
   liabilitiesLabel = 'What you owe',
+  netWorthAmount = null,
 }: NetWorthSummaryProps): React.JSX.Element {
+  const negativeTone = useNegativeTone();
   /**
    * ALL THREE figures are navy. None of them is a direction of travel.
    *
@@ -137,7 +146,13 @@ export default function NetWorthSummary({
      worth figure is not in line with the what you own and what you owe
      figures"). Below `lg` all three figures share the 24px size and the
      baseline; from `lg` the net figure is the headline again. */
-  const NET_FIGURE_CLASS = 'text-page lg:text-display font-semibold text-gray-900 dark:text-white';
+  // The one exception to "all three are navy", and it is the person's, not
+  // the card's: with "Negatives in red" ticked (owner, 14 Nov 2026) a net
+  // worth below zero is drawn red like every other balance below zero. The
+  // other two cells are magnitudes and are never below zero, so they never
+  // change. Unticked, nothing here differs from the argument above.
+  const NET_FIGURE_CLASS =
+    `text-page lg:text-display font-semibold ${negativeTone(netWorthAmount, 'text-gray-900 dark:text-white')}`;
   const COMPONENT_FIGURE_CLASS = 'text-page font-semibold text-gray-900 dark:text-white';
 
   const cells: ReadonlyArray<{

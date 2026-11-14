@@ -1,114 +1,144 @@
 /**
- * "NEGATIVES IN RED" — the person's choice, off unless ticked.
+ * "NEGATIVES IN RED" — the person's choice, off unless ticked, and ONE choice.
  *
  * Owner, 14 Nov 2026, of the Accounts page: a tick box beside "Hide decimals"
- * so "all negative balances show in red if they wish". The design pass's rule
- * is that colour marks what needs attention, so the default stays plain; what
- * these hold is that the choice is real, remembered per page, and paints only
- * what is actually below zero.
+ * so "all negative balances show in red if they wish". The same day he asked
+ * for it "throughout" and ruled it a single setting: tick it on any page and
+ * every page follows. The design pass's rule is that colour marks what needs
+ * attention, so the default stays plain; what these hold is that the choice
+ * is real, is the same switch wherever it is drawn, and paints only what is
+ * actually below zero.
  */
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
 
-const store = new Map<string, string>();
+const { store, listeners } = vi.hoisted(() => ({
+  store: new Map<string, string>(),
+  listeners: new Set<() => void>(),
+}));
 vi.mock('../../services/preferencesService', () => ({
   preferences: {
     getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => { store.set(key, value); },
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+      for (const listener of listeners) listener();
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
   }
 }));
 
 import {
   NEGATIVE_FIGURE_CLASS,
-  NegativesInRedScope,
   NegativesInRedToggle,
+  isBelowZero,
   useNegativeTone,
 } from '../NegativesInRedContext';
 import { AccountBalanceCell } from '../../components/AccountRowColumns';
 
 const PLAIN = 'text-gray-900 dark:text-white';
+const KEY = 'money_management_negatives_in_red';
+const FIRST_DAY_KEY = 'money_management_negatives_in_red_accounts';
 
 function Figure({ amount, label }: { amount: number | null; label: string }): React.JSX.Element {
   const tone = useNegativeTone();
   return <span data-testid={label} className={tone(amount, PLAIN)}>{label}</span>;
 }
 
-const page = (name = 'accounts'): void => {
+/** Two "pages" at once: each has its own tick box and its own figure. */
+const twoPages = (): void => {
   render(
-    <NegativesInRedScope page={name}>
-      <NegativesInRedToggle />
-      <Figure amount={-250} label="owed" />
+    <>
+      <section aria-label="accounts"><NegativesInRedToggle /><Figure amount={-250} label="owed" /></section>
+      <section aria-label="dashboard"><NegativesInRedToggle /><Figure amount={-40} label="overdrawn" /></section>
       <Figure amount={250} label="held" />
       <Figure amount={0} label="nothing" />
       <Figure amount={-0.001} label="dust" />
       <Figure amount={null} label="unknown" />
-    </NegativesInRedScope>
+    </>
   );
 };
 
-beforeEach(() => store.clear());
+beforeEach(() => { store.clear(); listeners.clear(); });
 afterEach(cleanup);
 
 describe('negatives in red', () => {
   it('is off until ticked: a debt is drawn like any other figure', () => {
-    page();
-    expect(screen.getByLabelText('Negatives in red')).not.toBeChecked();
-    expect(screen.getByTestId('owed')).toHaveClass('text-gray-900');
-    expect(screen.getByTestId('owed')).not.toHaveClass('text-red-600');
+    twoPages();
+    for (const box of screen.getAllByLabelText('Negatives in red')) expect(box).not.toBeChecked();
+    expect(screen.getByTestId('owed').className).toBe(PLAIN);
   });
 
-  it('ticked: what is below zero turns red, and nothing else does', () => {
-    page();
-    fireEvent.click(screen.getByLabelText('Negatives in red'));
+  it('ticked on one page, every page follows: it is one switch', () => {
+    twoPages();
+    const [onAccounts, onDashboard] = screen.getAllByLabelText('Negatives in red');
+    fireEvent.click(onAccounts);
 
+    expect(onDashboard).toBeChecked();
     expect(screen.getByTestId('owed').className).toBe(NEGATIVE_FIGURE_CLASS);
+    expect(screen.getByTestId('overdrawn').className).toBe(NEGATIVE_FIGURE_CLASS);
+    expect(store.get(KEY)).toBe('true');
+
+    // And off again from the other page.
+    fireEvent.click(onDashboard);
+    expect(onAccounts).not.toBeChecked();
+    expect(screen.getByTestId('owed').className).toBe(PLAIN);
+    expect(store.get(KEY)).toBe('false');
+  });
+
+  it('paints only what is below zero', () => {
+    store.set(KEY, 'true');
+    twoPages();
     for (const label of ['held', 'nothing', 'unknown']) {
       expect(screen.getByTestId(label).className).toBe(PLAIN);
     }
     // A float's dust is a balance of nothing, not a debt.
     expect(screen.getByTestId('dust').className).toBe(PLAIN);
+    expect(isBelowZero(-0.005)).toBe(true);
+    expect(isBelowZero(-0.004)).toBe(false);
+    expect(isBelowZero(undefined)).toBe(false);
   });
 
-  it('is remembered, under the page\'s own key', () => {
-    page();
-    fireEvent.click(screen.getByLabelText('Negatives in red'));
-    expect(store.get('money_management_negatives_in_red_accounts')).toBe('true');
+  it('a change that arrives from elsewhere (another device, the document loading) is followed', () => {
+    twoPages();
+    expect(screen.getByTestId('owed').className).toBe(PLAIN);
+    act(() => {
+      store.set(KEY, 'true');
+      for (const listener of listeners) listener();
+    });
+    expect(screen.getByTestId('owed').className).toBe(NEGATIVE_FIGURE_CLASS);
+  });
+});
+
+describe('the first day\'s choice, made on the Accounts page alone, carries over', () => {
+  it('is honoured while the app-wide setting has never been written', () => {
+    store.set(FIRST_DAY_KEY, 'true');
+    twoPages();
+    expect(screen.getAllByLabelText('Negatives in red')[0]).toBeChecked();
+    expect(screen.getByTestId('overdrawn').className).toBe(NEGATIVE_FIGURE_CLASS);
+  });
+
+  it('and does not undo a later untick', () => {
+    store.set(FIRST_DAY_KEY, 'true');
+    twoPages();
+    fireEvent.click(screen.getAllByLabelText('Negatives in red')[0]);
+
+    expect(store.get(KEY)).toBe('false');
+    expect(screen.getByTestId('owed').className).toBe(PLAIN);
     cleanup();
 
-    page();
-    expect(screen.getByLabelText('Negatives in red')).toBeChecked();
-    expect(screen.getByTestId('owed')).toHaveClass('text-red-600');
-    cleanup();
-
-    // Another page has its own answer.
-    page('dashboard');
-    expect(screen.getByLabelText('Negatives in red')).not.toBeChecked();
-  });
-
-  it('unticking puts the plain colour back', () => {
-    page();
-    const box = screen.getByLabelText('Negatives in red');
-    fireEvent.click(box);
-    fireEvent.click(box);
-    expect(screen.getByTestId('owed').className).toBe(PLAIN);
-    expect(store.get('money_management_negatives_in_red_accounts')).toBe('false');
-  });
-
-  it('outside any scope nothing is tinted', () => {
-    render(<Figure amount={-250} label="owed" />);
-    expect(screen.getByTestId('owed').className).toBe(PLAIN);
+    twoPages();
+    expect(screen.getAllByLabelText('Negatives in red')[0]).not.toBeChecked();
   });
 });
 
 describe('the Accounts row\'s balance cell follows it', () => {
   const cell = (ticked: boolean, amount: number | null | undefined): HTMLElement => {
-    if (ticked) store.set('money_management_negatives_in_red_accounts', 'true');
-    render(
-      <NegativesInRedScope page="accounts">
-        <AccountBalanceCell label="Account Bal" value="FIGURE" amount={amount} />
-      </NegativesInRedScope>
-    );
+    if (ticked) store.set(KEY, 'true');
+    render(<AccountBalanceCell label="Account Bal" value="FIGURE" amount={amount} />);
     return screen.getByText('FIGURE');
   };
 

@@ -39,6 +39,7 @@ import { formatDecimal } from '../utils/decimal-format';
 import { describeRate } from '../utils/fx';
 import PageWrapper from '../components/PageWrapper';
 import { WholePoundsScope, WholePoundsToggle } from '../contexts/WholePoundsContext';
+import { NegativesInRedToggle, useNegativeTone } from '../contexts/NegativesInRedContext';
 import ToggleSwitch from '../components/ui/ToggleSwitch';
 import { buildPortfolioSummary, buildPortfolioHistory } from '../utils/portfolioSummary';
 import { useNetWorthConversion } from '../hooks/useNetWorthConversion';
@@ -153,6 +154,17 @@ function InvestmentsView() {
     addCategory,
   } = useApp();
   const { formatCurrency, displayCurrency } = useCurrencyDecimal();
+  /**
+   * "Negatives in red" (owner, 14 Nov 2026): one setting for the whole app.
+   * What follows it here is every VALUE that is otherwise plain — a portfolio,
+   * an account, a cash sleeve (which can legitimately sit below zero), a debt
+   * secured against the portfolio. Gains and losses already carry green and
+   * red and keep them; a movement (a sale's proceeds, a transfer) is not a
+   * balance and is left alone.
+   */
+  const negativeTone = useNegativeTone();
+  const valueTone = (value: { toNumber(): number } | number | null | undefined, fallback: string): string =>
+    negativeTone(value == null ? null : typeof value === 'number' ? value : value.toNumber(), fallback);
   /**
    * THE APP'S PERIOD VOCABULARY, spoken here too.
    *
@@ -1485,7 +1497,8 @@ function InvestmentsView() {
         )
       }
     >
-      <div className="flex justify-end mb-2">
+      <div className="flex flex-wrap justify-end gap-x-4 gap-y-1 mb-2">
+        <NegativesInRedToggle />
         <WholePoundsToggle />
       </div>
       {/* THE PAGE'S ONE RATE-BASIS LINE (ruling §6.2), now that the chain
@@ -1584,7 +1597,10 @@ function InvestmentsView() {
                   ? 'Portfolio Value (net)'
                   : 'Portfolio Value'}
               </p>
-              <p className="text-page font-bold text-gray-900 dark:text-white">
+              <p className={`text-page font-bold ${valueTone(
+                showNetPosition && securedAgainstPortfolio.names.length > 0 ? netPortfolioValue : performance.endValue,
+                'text-gray-900 dark:text-white'
+              )}`}>
                 {scopeApprox}{formatCurrency(
                   showNetPosition && securedAgainstPortfolio.names.length > 0
                     ? netPortfolioValue
@@ -1784,14 +1800,14 @@ function InvestmentsView() {
                   {drillRows.rows.map(row => (
                     <li key={row.accountId} className="py-2 flex items-baseline justify-between gap-4 border-t border-gray-50 dark:border-gray-700/50 first:border-0">
                       <span className="text-sm text-gray-900 dark:text-white truncate">{row.name}</span>
-                      <span className="text-sm tabular-nums text-gray-900 dark:text-white shrink-0">
+                      <span className={`text-sm tabular-nums shrink-0 ${valueTone(row.value, 'text-gray-900 dark:text-white')}`}>
                         {formatCurrency(row.value)}
                       </span>
                     </li>
                   ))}
                   <li className="py-2 flex items-baseline justify-between gap-4 border-t-2 border-gray-200 dark:border-gray-600">
                     <span className="text-sm font-semibold text-gray-900 dark:text-white">Total</span>
-                    <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white shrink-0">
+                    <span className={`text-sm font-semibold tabular-nums shrink-0 ${valueTone(drillRows.total, 'text-gray-900 dark:text-white')}`}>
                       {formatCurrency(drillRows.total)}
                     </span>
                   </li>
@@ -1850,7 +1866,10 @@ function InvestmentsView() {
                         >
                           <span className="flex justify-between gap-3">
                             <span className="min-w-0 truncate text-body text-gray-700 dark:text-gray-300">{line.name}</span>
-                            <span className="tabular-nums shrink-0 text-body text-gray-900 dark:text-white">
+                            <span className={`tabular-nums shrink-0 text-body ${valueTone(
+                              openBreakdown === 'contributions' ? pairPerf?.netFlows : null,
+                              'text-gray-900 dark:text-white'
+                            )}`}>
                               {pairPerf
                                 ? formatCurrency(openBreakdown === 'contributions' ? pairPerf.netFlows : pairPerf.gain)
                                 : '—'}
@@ -1861,7 +1880,7 @@ function InvestmentsView() {
                     })}
                     <p className="flex justify-between gap-3 pt-3 font-semibold text-body text-gray-900 dark:text-white">
                       <span>Total</span>
-                      <span className="tabular-nums">
+                      <span className={`tabular-nums ${valueTone(openBreakdown === 'contributions' ? performance.netFlows : null, '')}`}>
                         {formatCurrency(openBreakdown === 'contributions' ? performance.netFlows : performance.gain)}
                       </span>
                     </p>
@@ -1908,7 +1927,7 @@ function InvestmentsView() {
                       <div className="mb-4 space-y-1">
                         <p className="flex justify-between text-body text-gray-600 dark:text-gray-400">
                           <span>Started at</span>
-                          <span className="tabular-nums">{formatCurrency(pairPerf.startValue)}</span>
+                          <span className={`tabular-nums ${valueTone(pairPerf.startValue, '')}`}>{formatCurrency(pairPerf.startValue)}</span>
                         </p>
                         <p className="flex justify-between text-body text-gray-600 dark:text-gray-400">
                           <span>Put in</span>
@@ -1924,7 +1943,7 @@ function InvestmentsView() {
                         </p>
                         <p className="flex justify-between font-semibold text-body text-gray-900 dark:text-white border-t border-gray-200 dark:border-gray-700 pt-1">
                           <span>Ended at</span>
-                          <span className="tabular-nums">{formatCurrency(pairPerf.endValue)}</span>
+                          <span className={`tabular-nums ${valueTone(pairPerf.endValue, '')}`}>{formatCurrency(pairPerf.endValue)}</span>
                         </p>
                       </div>
                     );
@@ -1957,7 +1976,7 @@ function InvestmentsView() {
                       })}
                       <p className="flex justify-between gap-3 pt-2 font-semibold text-body text-gray-900 dark:text-white">
                         <span>Net contributions</span>
-                        <span className="tabular-nums">{formatCurrency(drillLine.netContributions)}</span>
+                        <span className={`tabular-nums ${valueTone(drillLine.netContributions, '')}`}>{formatCurrency(drillLine.netContributions)}</span>
                       </p>
                     </div>
                   )}
@@ -2102,7 +2121,7 @@ function InvestmentsView() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-3">
                 {([
-                  ['Started at', `${scopeApprox}${formatCurrency(performance.startValue)}`, ''],
+                  ['Started at', `${scopeApprox}${formatCurrency(performance.startValue)}`, valueTone(performance.startValue, '')],
                   ['Put in', `${scopeApprox}${formatCurrency(performance.moneyIn)}`, ''],
                   ['Taken out', `${scopeApprox}${formatCurrency(performance.moneyOut)}`, ''],
                   ['Gain', performance.gain.greaterThan(0)
@@ -2112,7 +2131,7 @@ function InvestmentsView() {
                     : performance.gain.greaterThan(0)
                       ? 'text-green-600 dark:text-green-400'
                       : 'text-red-600 dark:text-red-400'],
-                  ['Ended at', `${scopeApprox}${formatCurrency(performance.endValue)}`, ''],
+                  ['Ended at', `${scopeApprox}${formatCurrency(performance.endValue)}`, valueTone(performance.endValue, '')],
                 ] as const).map(([label, figure, colour]) => (
                   <div key={label}>
                     <p className="text-label uppercase tracking-wider text-gray-500 dark:text-gray-400">{label}</p>
@@ -2256,7 +2275,7 @@ function InvestmentsView() {
                       <h3 className="text-dense uppercase tracking-wide font-semibold text-gray-500 dark:text-gray-400">
                         {institution}
                       </h3>
-                      <span className="text-dense tabular-nums text-gray-500 dark:text-gray-400">
+                      <span className={`text-dense tabular-nums ${valueTone(lines.reduce((t, l) => t.plus(l.value), toDecimal(0)), 'text-gray-500 dark:text-gray-400')}`}>
                         {formatCurrency(lines.reduce((t, l) => t.plus(l.value), toDecimal(0)))}
                       </span>
                     </div>
@@ -2284,7 +2303,7 @@ function InvestmentsView() {
                               {line.name}
                             </h3>
                           </div>
-                          <p className="font-semibold text-gray-900 dark:text-white shrink-0 ml-3">{formatCurrency(line.value)}</p>
+                          <p className={`font-semibold shrink-0 ml-3 ${valueTone(line.value, 'text-gray-900 dark:text-white')}`}>{formatCurrency(line.value)}</p>
                         </div>
                         {/* EACH SLEEVE IS A DOOR (owner, 17 August): the word
                             opens that sleeve's own register — Investments is
@@ -2301,7 +2320,7 @@ function InvestmentsView() {
                           >
                             Investments
                           </Link>
-                          <span className="tabular-nums">{formatCurrency(invested)}</span>
+                          <span className={`tabular-nums ${valueTone(invested, '')}`}>{formatCurrency(invested)}</span>
                         </p>
                         {line.cash.length === 1 && (
                           <p className="ml-5 mb-2 flex justify-between text-dense text-gray-500 dark:text-gray-400">
@@ -2312,7 +2331,7 @@ function InvestmentsView() {
                             >
                               Cash
                             </Link>
-                            <span className="tabular-nums">{formatCurrency(cashTotal)}</span>
+                            <span className={`tabular-nums ${valueTone(cashTotal, '')}`}>{formatCurrency(cashTotal)}</span>
                           </p>
                         )}
                         {line.cash.length > 1 && line.cash.map(cashLine => (
@@ -2324,7 +2343,7 @@ function InvestmentsView() {
                             >
                               {accountsById.get(cashLine.accountId)?.name ?? 'Cash'}
                             </Link>
-                            <span className="tabular-nums shrink-0 ml-3">{formatCurrency(cashLine.value)}</span>
+                            <span className={`tabular-nums shrink-0 ml-3 ${valueTone(cashLine.value, '')}`}>{formatCurrency(cashLine.value)}</span>
                           </p>
                         ))}
                         <div className="flex items-center gap-2">
@@ -2382,7 +2401,7 @@ function InvestmentsView() {
                                 >
                                   {debt.name}
                                 </Link>
-                                <span className="tabular-nums shrink-0 ml-3">
+                                <span className={`tabular-nums shrink-0 ml-3 ${valueTone(debt.balance ?? 0, '')}`}>
                                   {formatCurrency(toDecimal(debt.balance ?? 0), debt.currency)}
                                 </span>
                               </p>
@@ -2610,7 +2629,7 @@ function InvestmentsView() {
                   <div key={row.label} className="flex items-center justify-between gap-3 text-body">
                     <span className="text-gray-700 dark:text-gray-300">{row.label}</span>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-gray-500 dark:text-gray-400 tabular-nums">
+                      <span className={`tabular-nums ${valueTone(row.value, 'text-gray-500 dark:text-gray-400')}`}>
                         {formatCurrency(row.value)}
                       </span>
                       <span className="text-gray-900 dark:text-white font-medium tabular-nums w-16 text-right">
