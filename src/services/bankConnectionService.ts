@@ -70,6 +70,16 @@ export interface SyncResult {
    * through" over a re-read that had brought back every one of them).
    */
   code?: string;
+  /**
+   * What a re-read found besides new rows — present on a transactions-only
+   * sync. `alreadyHeld` is every row the bank offered that the ledger had
+   * (by its bank id, or re-issued under a new one); `matchedToOwnRows` is the
+   * rows the owner had entered or imported himself, now recognised as the
+   * bank's and not doubled. A re-read that brings nothing new still did
+   * something, and the panel should be able to say what.
+   */
+  alreadyHeld?: number;
+  matchedToOwnRows?: number;
 }
 
 /** The refusal code off a thrown request, if the API gave one. */
@@ -836,6 +846,10 @@ export class BankConnectionService {
         success: transactionsResponse.success,
         accountsUpdated: 0,
         transactionsImported: transactionsResponse.transactionsImported,
+        alreadyHeld:
+          (transactionsResponse.duplicatesSkipped ?? 0) + (transactionsResponse.idChurnRepaired ?? 0),
+        matchedToOwnRows:
+          (transactionsResponse.transfersAdopted ?? 0) + (transactionsResponse.importedRowsAdopted ?? 0),
         errors: transactionsResponse.error ? [transactionsResponse.error] : []
       };
     } catch (error) {

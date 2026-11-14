@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   syncWindowStart,
+  earliestRereadDay,
+  isBeyondRereadReach,
   FIRST_SYNC_WINDOW_DAYS,
+  REREAD_REACH_DAYS,
   ROUTINE_SYNC_OVERLAP_DAYS
 } from '../syncWindow';
 
@@ -55,5 +58,30 @@ describe('syncWindowStart — the long window only while authentication is fresh
 
   it('treats an unreadable stored value as never synced rather than guessing', () => {
     expect(syncWindowStart('not a date', NOW)).toEqual(daysBefore(NOW, FIRST_SYNC_WINDOW_DAYS));
+  });
+});
+
+describe('a re-read the owner asks for — as far as a bank serves, and no further', () => {
+  // Owner, 13 Nov 2026: a payment the feed skipped six weeks earlier could not
+  // be fetched, because nothing in the app asked further back than 30 days.
+  it('reaches one day inside the long window, never the protected ninetieth day', () => {
+    expect(REREAD_REACH_DAYS).toBe(FIRST_SYNC_WINDOW_DAYS - 1);
+    expect(earliestRereadDay(NOW)).toBe('2026-05-29');
+  });
+
+  it('counts in whole UTC days, whatever the hour', () => {
+    expect(earliestRereadDay(new Date('2026-08-26T00:00:01.000Z'))).toBe('2026-05-29');
+    expect(earliestRereadDay(new Date('2026-08-26T23:59:59.000Z'))).toBe('2026-05-29');
+  });
+
+  it('the limit day itself is allowed; the day before it is refused', () => {
+    expect(isBeyondRereadReach('2026-05-29', NOW)).toBe(false);
+    expect(isBeyondRereadReach('2026-05-29T00:00:00.000Z', NOW)).toBe(false);
+    expect(isBeyondRereadReach('2026-05-28', NOW)).toBe(true);
+    expect(isBeyondRereadReach('2026-05-28T23:59:59.999Z', NOW)).toBe(true);
+  });
+
+  it('thirty days back, the old catch-up, is well inside it', () => {
+    expect(isBeyondRereadReach(daysBefore(NOW, 30).toISOString(), NOW)).toBe(false);
   });
 });

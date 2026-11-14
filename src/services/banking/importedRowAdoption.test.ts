@@ -87,3 +87,27 @@ describe('the ±1-day pass is strictly one-to-one', () => {
     expect(inserts.map((c) => c.external_transaction_id)).toEqual(['e2']);
   });
 });
+
+describe('a row the owner typed in himself is recognised the same way', () => {
+  // Owner, 13 Nov 2026: a weekly payment the feed had skipped was added by
+  // hand, and a later re-read from a date would offer the bank's own copy. A
+  // hand-typed row has no bank id, exactly like an imported one, so the
+  // bank's copy takes it over and nothing is doubled. Amounts invented.
+  it("the bank's copy adopts the hand-typed row and is not inserted beside it", () => {
+    const { inserts, adoptions } = resolveImportedRowAdoption(
+      [cand('bank-1', '2026-10-02', -20)],
+      [row('typed-by-hand', '2026-10-02', -20)]
+    );
+    expect(adoptions).toEqual([{ existingRowId: 'typed-by-hand', candidate: cand('bank-1', '2026-10-02', -20) }]);
+    expect(inserts).toEqual([]);
+  });
+
+  it('a weekly payment a week away is a different payment and still arrives', () => {
+    const { inserts, adoptions } = resolveImportedRowAdoption(
+      [cand('bank-1', '2026-09-18', -20)],
+      [row('typed-by-hand', '2026-10-02', -20)]
+    );
+    expect(adoptions).toEqual([]);
+    expect(inserts).toHaveLength(1);
+  });
+});

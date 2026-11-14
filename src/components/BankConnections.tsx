@@ -16,7 +16,9 @@ import {
   PlusIcon,
   SearchIcon
 } from './icons';
-import { formatDateTime } from '../utils/dateFormatter';
+import { formatDate, formatDateTime } from '../utils/dateFormatter';
+import { describeReread } from '../utils/rereadOutcome';
+import { earliestRereadDay } from '../services/banking/syncWindow';
 import { createScopedLogger } from '../loggers/scopedLogger';
 
 // Module scope, not a useMemo: the loaders below are started from a mount
@@ -41,6 +43,9 @@ const thirtyDaysAgoIso = (): string => {
   d.setUTCDate(d.getUTCDate() - 30);
   return d.toISOString().slice(0, 10);
 };
+
+/** Today, YYYY-MM-DD, by the same UTC day the re-read's limit is counted in. */
+const todayIso = (): string => new Date().toISOString().slice(0, 10);
 
 export default function BankConnections({
   onAccountsLinked,
@@ -99,6 +104,15 @@ export default function BankConnections({
   // different unfinished jobs, and "Bank sync incomplete" over a message about
   // an authorisation still standing at the bank would name the wrong thing.
   const [notice, setNotice] = useState<{ title: string; body: string } | null>(null);
+  /**
+   * RE-READ FROM A DATE (owner, 13 Nov 2026 — see REREAD_REACH_DAYS). Which
+   * connection's date row is open, the day chosen, and what the last re-read
+   * did. The outcome is its own line and not the amber notice: that one means
+   * "something did not finish", and a re-read that worked must not wear it.
+   */
+  const [rereadOpenFor, setRereadOpenFor] = useState<string | null>(null);
+  const [rereadDay, setRereadDay] = useState('');
+  const [rereadOutcome, setRereadOutcome] = useState<{ connectionId: string; text: string } | null>(null);
 
   const { getToken } = useClerkAuth();
 
@@ -269,8 +283,19 @@ export default function BankConnections({
 
       if (result.success) {
         setNotice(null);
+        setRereadOutcome(startDate ? { connectionId, text: describeReread(startDate, result) } : null);
         void loadConnections();
         onAccountsLinked?.();
+      } else if (result.code === 'start_too_old') {
+        // The server's refusal of a start no bank would serve. The date field
+        // already stops at the limit, so this is a clock that turned midnight
+        // with the row open; say the limit rather than "sync incomplete".
+        setNotice({
+          title: 'That date is too far back',
+          body:
+            `Banks hand over about the last ninety days. The earliest day you can re-read from is ` +
+            `${formatDate(earliestRereadDay(new Date()))}. Nothing was changed.`
+        });
       } else if (result.code === 'rate_limited') {
         // A throttle is not a sync that lost anything. Say so, and say what
         // to do — which is nothing, for a minute.
@@ -582,6 +607,19 @@ export default function BankConnections({
                   >
                     Re-read 30 days
                   </button>
+                  <button
+                    onClick={() => {
+                      const opening = rereadOpenFor !== connection.id;
+                      setRereadOpenFor(opening ? connection.id : null);
+                      if (opening) setRereadDay(thirtyDaysAgoIso());
+                    }}
+                    disabled={syncingConnections.has(connection.id) || connection.status === 'reauth_required'}
+                    aria-expanded={rereadOpenFor === connection.id}
+                    className="px-2 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-50"
+                    title="Re-read from a day you choose — for a gap older than 30 days"
+                  >
+                    From a date…
+                  </button>
 {connection.status === 'reauth_required' && (
                     <button
                       onClick={() => handleReauthorize(connection.id)}
@@ -601,6 +639,54 @@ export default function BankConnections({
                   </button>
                 </div>
               </div>
+              {rereadOpenFor === connection.id && (
+                <form
+                  className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-end gap-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!rereadDay) return;
+                    setRereadOpenFor(null);
+                    void handleSync(connection.id, rereadDay);
+                  }}
+                >
+                  <label className="text-sm text-gray-700 dark:text-gray-300">
+                    <span className="block mb-1">Re-read from</span>
+                    <input
+                      type="date"
+                      value={rereadDay}
+                      min={earliestRereadDay(new Date())}
+                      max={todayIso()}
+                      required
+                      onChange={(event) => setRereadDay(event.target.value)}
+                      className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="px-3 py-2 text-sm font-medium bg-[#1a2332] text-white rounded-lg hover:bg-[#2d3a4d]"
+                  >
+                    Re-read
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRereadOpenFor(null)}
+                    className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400"
+                  >
+                    Cancel
+                  </button>
+                  <p className="basis-full text-xs text-gray-500 dark:text-gray-400">
+                    Banks hand over about the last ninety days, so that is as far back as this goes.
+                    Transactions already in your ledger are recognised, including ones you entered
+                    yourself for the same amount on that day or the day either side, so they are not
+                    added twice.
+                  </p>
+                </form>
+              )}
+              {rereadOutcome?.connectionId === connection.id && (
+                <p role="status" className="mt-3 text-sm text-gray-700 dark:text-gray-300">
+                  {rereadOutcome.text}
+                </p>
+              )}
             </div>
           ))}
         </div>
