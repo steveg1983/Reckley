@@ -847,3 +847,103 @@ describe('Budget page — opened at the wizard', () => {
     expect(screen.queryByTestId('budget-wizard')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * THE TRANSACTIONS BEHIND A CARD'S "SPENT" (owner, 14 Nov 2026): "we should be
+ * able to 'click' on a budget and see the transactions that make up what is
+ * showing as spent, whatever that period is".
+ */
+describe("Budget page — a click on a card's figure shows the transactions behind it", () => {
+  afterEach(() => {
+    __resetAppContextValue();
+    preferences.removeItem('budgetView');
+    cleanup();
+  });
+
+  beforeEach(() => {
+    __setAppContextValue({
+      accounts: ACCOUNTS,
+      categories: CATEGORIES,
+      transactions: [
+        txn({ id: 't-1', amount: -40, description: 'synthetic greengrocer' }),
+        txn({ id: 't-2', amount: -25, description: 'synthetic bakery' }),
+        // Another category's spending: on the page, not behind this figure.
+        txn({ id: 't-3', amount: -60, category: 'det-household', description: 'synthetic hardware' }),
+      ],
+      transactionSplits: [],
+      budgets: [
+        budget({ id: 'bud-groceries', categoryId: 'det-groceries', amount: 200 }),
+        budget({ id: 'bud-household', categoryId: 'det-household', amount: 300 }),
+      ]
+    });
+  });
+
+  it('the figure is a button that says what it opens', () => {
+    renderBudget();
+    const figure = within(card('Groceries')).getByTestId('budget-spent-drill');
+    expect(figure.tagName).toBe('BUTTON');
+    expect(figure).toHaveTextContent('£65.00 of £200.00');
+    expect(figure).toHaveAccessibleName(/Groceries: spent £65.00 of £200.00\. Show the transactions/);
+  });
+
+  it("opens the rows that were counted, titled with the budget and its days, and no other budget's rows", async () => {
+    renderBudget();
+    fireEvent.click(within(card('Groceries')).getByTestId('budget-spent-drill'));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/^Groceries — /)).toBeInTheDocument();
+    expect(within(dialog).getByText('synthetic greengrocer')).toBeInTheDocument();
+    expect(within(dialog).getByText('synthetic bakery')).toBeInTheDocument();
+    expect(within(dialog).queryByText('synthetic hardware')).not.toBeInTheDocument();
+  });
+
+  it('each card opens its own', async () => {
+    renderBudget();
+    fireEvent.click(within(card('Household')).getByTestId('budget-spent-drill'));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/^Household — /)).toBeInTheDocument();
+    expect(within(dialog).getByText('synthetic hardware')).toBeInTheDocument();
+    expect(within(dialog).queryByText('synthetic bakery')).not.toBeInTheDocument();
+  });
+
+  it('"whatever that period is": the list follows the reading on the card', async () => {
+    // A year that began two months ago, with one row from its first month and
+    // one from this month. "So far" counts both; "this month" counts one.
+    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const iso = (d: Date): string =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    __setAppContextValue({
+      accounts: ACCOUNTS,
+      categories: CATEGORIES,
+      transactions: [
+        txn({ id: 't-old', amount: -30, description: 'synthetic earlier shop', date: new Date(iso(new Date(twoMonthsAgo.getFullYear(), twoMonthsAgo.getMonth(), 10))) }),
+        txn({ id: 't-now', amount: -20, description: 'synthetic recent shop' }),
+      ],
+      transactionSplits: [],
+      budgets: [budget({
+        id: 'bud-groceries', categoryId: 'det-groceries', amount: 1200, period: 'yearly',
+        startDate: iso(twoMonthsAgo), createdAt: now, updatedAt: now
+      })]
+    });
+    renderBudget();
+
+    // So far (the default): both rows.
+    expect(within(card('Groceries')).getByTestId('budget-spent-drill')).toHaveTextContent('£50.00 of');
+    fireEvent.click(within(card('Groceries')).getByTestId('budget-spent-drill'));
+    let dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('synthetic earlier shop')).toBeInTheDocument();
+    expect(within(dialog).getByText('synthetic recent shop')).toBeInTheDocument();
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    cleanup();
+
+    // This month's share: only this month's row.
+    preferences.setItem('budgetView', 'month');
+    renderBudget();
+    expect(within(card('Groceries')).getByTestId('budget-spent-drill')).toHaveTextContent('£20.00 of');
+    fireEvent.click(within(card('Groceries')).getByTestId('budget-spent-drill'));
+    dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('synthetic recent shop')).toBeInTheDocument();
+    expect(within(dialog).queryByText('synthetic earlier shop')).not.toBeInTheDocument();
+  });
+});
