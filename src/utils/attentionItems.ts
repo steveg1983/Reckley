@@ -2,6 +2,7 @@ import type { Account } from '../types';
 import type { AutoSyncMode } from './bankAutoSync';
 import { toDecimal } from './decimal';
 import { isCardAccountType } from './accountNumberInput';
+import { isPastWarningLine } from './warningLine';
 
 /**
  * "Needs Your Attention": WHY each account is on the list, in words, and where
@@ -155,13 +156,12 @@ function buildAccountItem(
    * This also repairs the old semantics on cards, which were near-useless:
    * "balance below £500" is almost always TRUE of an account that lives
    * negative, so a card with this alert on was a card that warned forever.
+   *
+   * The comparison itself lives in utils/warningLine.ts, which the phone's
+   * low-balance push asks too (14 Nov 2026), so the two never disagree.
    */
   const isCard = isCardAccountType(account.type);
-  if (
-    account.lowBalanceAlertEnabled &&
-    account.lowBalanceThreshold != null &&
-    balance < (isCard ? -account.lowBalanceThreshold : account.lowBalanceThreshold)
-  ) {
+  if (account.lowBalanceThreshold != null && isPastWarningLine(account, balance)) {
     return isCard
       ? {
           account,
