@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { useNegativeTone } from '../contexts/NegativesInRedContext';
 
 /**
  * The ONE column definition the Accounts list's rows share.
@@ -365,10 +366,18 @@ export function AccountColumnHeader(): React.JSX.Element {
 export function AccountBalanceCell({
   label,
   value,
+  amount,
   smOnly = false,
   secondary,
 }: {
   label: string;
+  /**
+   * The number behind `value`, for "Negatives in red" (owner, 14 Nov 2026).
+   * The cell is handed a formatted string and cannot tell a debt from a
+   * credit by reading it — brackets or a minus sign are a locale's choice.
+   * Absent or null: the figure keeps its ordinary colour.
+   */
+  amount?: number | null;
   /**
    * The figure, already formatted — or `null` for NOT KNOWN, which renders an
    * em-dash.
@@ -393,10 +402,11 @@ export function AccountBalanceCell({
    */
   secondary?: string;
 }): React.JSX.Element {
+  const negativeTone = useNegativeTone();
   return (
     <div className={smOnly ? 'relative hidden lg:block text-right' : 'relative text-right'}>
       <p className={ROW_LABEL_CLASS}>{label}</p>
-      <p className={`${CELL_FIGURE_LINE_CLASS} ${CELL_FIGURE_CLASS} text-gray-900 dark:text-white`}>
+      <p className={`${CELL_FIGURE_LINE_CLASS} ${CELL_FIGURE_CLASS} ${negativeTone(amount, 'text-gray-900 dark:text-white')}`}>
         {value ?? '—'}
       </p>
       {secondary !== undefined && (

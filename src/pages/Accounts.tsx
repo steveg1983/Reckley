@@ -6,6 +6,7 @@ import { dataPort } from '@data';
 import { preserveDemoParam } from '../utils/navigation';
 import { DEPTH_LEVEL_1, DEPTH_LEVEL_2 } from '../styles/depthShading';
 import { WholePoundsScope, WholePoundsToggle } from '../contexts/WholePoundsContext';
+import { NegativesInRedScope, NegativesInRedToggle, useNegativeTone } from '../contexts/NegativesInRedContext';
 import { CHROME_HAS_BANK_FEEDS } from '@chrome';
 import AddAccountModal from '../components/AddAccountModal';
 import AccountSettingsModal from '../components/AccountSettingsModal';
@@ -215,6 +216,12 @@ const NO_GROUP_ENTRIES: ReadonlyMap<string, readonly AccountBalanceEntry[]> = ne
 interface BandTotalFigure {
   text: string;
   spoken: string;
+  /**
+   * The total as a number, for "Negatives in red" — or null where there is no
+   * one number: a band whose currencies could not be converted is printed as
+   * a pair of figures, and a pair has no sign.
+   */
+  amount: number | null;
 }
 
 type DisplayedList =
@@ -227,7 +234,9 @@ export default function Accounts() {
   // page-specific decimal display).
   return (
     <WholePoundsScope page="accounts">
-      <AccountsList />
+      <NegativesInRedScope page="accounts">
+        <AccountsList />
+      </NegativesInRedScope>
     </WholePoundsScope>
   );
 }
@@ -236,6 +245,9 @@ function AccountsList() {
   const { accounts, transactions, serverBalances, updateAccount, closeAccount, refreshAccountsAndTransactions, refreshCategories } = useApp();
   const { showError } = useToast();
   const { formatCurrency: formatDisplayCurrency, displayCurrency } = useCurrencyDecimal();
+  // "Negatives in red" — the person's choice, off unless ticked. Every balance
+  // this page draws asks this for its colour; see NegativesInRedContext.
+  const negativeTone = useNegativeTone();
   const navigate = useNavigate();
   const location = useLocation();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -1635,7 +1647,7 @@ function AccountsList() {
                               banking list puts it: right of the name. The
                               stats row's copy hides below sm to avoid saying
                               it twice. */}
-                          <span className="sm:hidden shrink-0 text-base font-semibold tabular-nums text-gray-900 dark:text-white">
+                          <span className={`sm:hidden shrink-0 text-base font-semibold tabular-nums ${negativeTone(computeValuedBalance(account.id), 'text-gray-900 dark:text-white')}`}>
                             {formatDisplayCurrency(computeValuedBalance(account.id), account.currency)}
                           </span>
                         </div>
@@ -1772,6 +1784,7 @@ function AccountsList() {
                                 value={account.bankBalance != null
                                   ? formatDisplayCurrency(account.bankBalance, account.currency)
                                   : null}
+                                amount={account.bankBalance ?? null}
                               />
                               {/* WHERE THE TWO FIGURES DIFFER, BOTH ARE SAID —
                                   INSIDE one cell. An investment account is
@@ -1789,6 +1802,7 @@ function AccountsList() {
                               <AccountBalanceCell
                                 label="Account Bal"
                                 value={formatDisplayCurrency(computeValuedBalance(account.id), account.currency)}
+                                amount={computeValuedBalance(account.id)}
                                 secondary={Math.abs(unrealisedGain(account.id)) >= 0.01
                                   ? `${formatDisplayCurrency(computeAccountBalance(account.id), account.currency)} in the register`
                                   : undefined}
@@ -2002,7 +2016,7 @@ function AccountsList() {
                             {/* Phones: the balance beside the name, exactly as
                                 the parent card does it, because the Account Bal
                                 column is off at that width. */}
-                            <span className="sm:hidden shrink-0 text-sm font-semibold tabular-nums text-gray-900 dark:text-white">
+                            <span className={`sm:hidden shrink-0 text-sm font-semibold tabular-nums ${negativeTone(computeValuedBalance(child.id), 'text-gray-900 dark:text-white')}`}>
                               {formatDisplayCurrency(computeValuedBalance(child.id), child.currency)}
                             </span>
                           </div>
@@ -2019,6 +2033,7 @@ function AccountsList() {
                             <AccountBalanceCell
                               label="Account Bal"
                               value={formatDisplayCurrency(computeValuedBalance(child.id), child.currency)}
+                              amount={computeValuedBalance(child.id)}
                               secondary={Math.abs(unrealisedGain(child.id)) >= 0.01
                                 ? `${formatDisplayCurrency(computeAccountBalance(child.id), child.currency)} in the register`
                                 : undefined}
@@ -2178,19 +2193,20 @@ function AccountsList() {
     const converted = convertedNetWorth.groupTotals.get(key);
 
     if (!converted?.isConverted) {
-      const plain = formatDisplayCurrency(totalForBand(bandAccounts));
-      return { text: plain, spoken: plain };
+      const total = totalForBand(bandAccounts);
+      const plain = formatDisplayCurrency(total);
+      return { text: plain, spoken: plain, amount: total.toNumber() };
     }
 
     if (converted.unconverted.length > 0) {
       const pair = converted.byCurrency
         .map(line => formatDisplayCurrency(line.amount, line.currency))
         .join(' + ');
-      return { text: pair, spoken: pair };
+      return { text: pair, spoken: pair, amount: null };
     }
 
     const figure = formatDisplayCurrency(converted.total);
-    return { text: `≈ ${figure}`, spoken: `approximately ${figure}` };
+    return { text: `≈ ${figure}`, spoken: `approximately ${figure}`, amount: Number(converted.total) };
   };
 
   /**
@@ -2335,7 +2351,7 @@ function AccountsList() {
                 </span>
               </div>
             </div>
-            <p className="text-card font-semibold text-primary dark:text-white whitespace-nowrap shrink-0">
+            <p className={`text-card font-semibold whitespace-nowrap shrink-0 ${negativeTone(bandTotal.amount, 'text-primary dark:text-white')}`}>
               {bandTotalNode(bandTotal)}
             </p>
           </div>
@@ -2427,7 +2443,7 @@ function AccountsList() {
                             ({countLabel})
                           </span>
                         </p>
-                        <p className="shrink-0 text-body font-semibold text-gray-700 dark:text-gray-300">
+                        <p className={`shrink-0 text-body font-semibold ${negativeTone(subTotal.amount, 'text-gray-700 dark:text-gray-300')}`}>
                           {/* The container already carries the spoken form in
                               its group label, so the mark is decoration here. */}
                           <span aria-hidden="true">{subTotal.text}</span>
@@ -2477,7 +2493,7 @@ function AccountsList() {
           )}
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
-          <p className="text-sm tabular-nums text-gray-900 dark:text-white">
+          <p className={`text-sm tabular-nums ${negativeTone(account.balance, 'text-gray-900 dark:text-white')}`}>
             {formatDisplayCurrency(account.balance, account.currency)}
           </p>
           <IconButton
@@ -2620,7 +2636,10 @@ function AccountsList() {
           the Add Account button instead (owner, 26 Aug, on the desktop
           build), and a decimals toggle over an empty page governs nothing. */}
       {accounts.length > 0 && (
-        <div className="-mt-4 mb-2 flex justify-end">
+        <div className="-mt-4 mb-2 flex flex-wrap justify-end gap-x-4 gap-y-1">
+          {/* Beside "Hide decimals", as asked (owner, 14 Nov 2026): the two
+              choices about how this page's figures are drawn, as a pair. */}
+          <NegativesInRedToggle />
           <WholePoundsToggle />
         </div>
       )}
