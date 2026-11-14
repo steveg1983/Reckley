@@ -26,6 +26,8 @@ import type { BudgetPeriodName } from '../utils/budgetPeriods';
 import { budgetPace, describeBudgetMeasure, describeBudgetWindow, paceDifference } from '../utils/budgetPace';
 import { measureBudget } from '../utils/budgetView';
 import BudgetViewChoice from '../components/budget/BudgetViewChoice';
+import ReportDrillModal, { type ReportDrillTarget } from '../components/reports/ReportDrillModal';
+import { expandSplitTransactions } from '../utils/transactionSplits';
 import { useBudgetView } from '../hooks/useBudgetView';
 import { toDecimal } from '../utils/decimal';
 import type { DecimalInstance } from '../utils/decimal';
@@ -178,11 +180,42 @@ function BudgetView() {
           caption: describeBudgetMeasure(window, measure),
           /** A shorter reading than the whole period is on the card. */
           short: measure.view !== 'period',
+          // What a click on the figure opens: the rows this spend was summed
+          // from, and the days they fall in — under the SAME reading the card
+          // is drawing, so the list can never total something else.
+          rowIds: measure.rowIds,
+          start: measure.start,
+          end: measure.end,
         },
         hasMonths: evaluated.months !== null,
       };
     });
   }, [budgets, transactions, transactionSplits, categories, foreignAccountIds, evaluatedAt, budgetView]);
+
+  /**
+   * THE TRANSACTIONS BEHIND A CARD'S "SPENT" (owner, 14 Nov 2026): "we should
+   * be able to 'click' on a budget and see the transactions that make up what
+   * is showing as spent, whatever that period is". The Dashboard's budget card
+   * has answered a click this way since 15 Oct; the page the budgets live on
+   * answered it with nothing.
+   *
+   * The same drill, fed the same way: the rows the evaluation COUNTED, by id,
+   * for the reading on the card — so far, this month, or the whole period —
+   * so the list sums to the figure that was clicked and to no other. The
+   * title says the days, because "whatever that period is" is the question.
+   */
+  const [budgetDrill, setBudgetDrill] = useState<ReportDrillTarget | null>(null);
+  const openBudgetDrill = useCallback(
+    (label: string, shown: { rowIds: ReadonlySet<string>; start: Date; end: Date; spent: number }): void => {
+      setBudgetDrill({
+        title: `${label} — ${describeBudgetWindow({ start: shown.start, end: shown.end })}`,
+        bucket: 'expense',
+        rows: expandSplitTransactions(transactions, transactionSplits).filter(row => shown.rowIds.has(row.id)),
+        total: shown.spent,
+      });
+    },
+    [transactions, transactionSplits]
+  );
 
   const categoryNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -660,12 +693,25 @@ function BudgetView() {
                 </p>
               ) : (
               <>
-              <div className="flex justify-between text-body">
+              {/* THE FIGURE IS THE BUTTON. "Spent £655 of £500" is a claim,
+                  and the click asks for its evidence: the transactions it was
+                  summed from, for the days the caption names. Spans inside,
+                  because a button holds phrasing content only; the negative
+                  margin lets the hover ground reach past the text without
+                  moving it. */}
+              <button
+                type="button"
+                onClick={() => openBudgetDrill(getBudgetCategoryLabel(budget), budget.shown)}
+                className="flex w-[calc(100%+1rem)] -mx-2 px-2 py-1 justify-between text-body text-left rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                aria-label={`${getBudgetCategoryLabel(budget)}: spent ${formatCurrency(budget.shown.spent)} of ${formatCurrency(budget.shown.allowance)}. Show the transactions`}
+                title="Show the transactions behind this figure"
+                data-testid="budget-spent-drill"
+              >
                 <span className="text-gray-600 dark:text-gray-400">Spent</span>
                 <span className="font-medium text-gray-900 dark:text-white">
                   {formatCurrency(budget.shown.spent)} of {formatCurrency(budget.shown.allowance)}
                 </span>
-              </div>
+              </button>
 
               {/* THE CARRY, NAMED (owner, 7 Nov 2026). An allowance that is
                   not the plan has to say why, and from where: the cycle
@@ -875,6 +921,13 @@ function BudgetView() {
         <Suspense fallback={null}>
           <BudgetWizard isOpen onClose={() => setIsSetupOpen(false)} />
         </Suspense>
+      )}
+
+      {/* The rows behind a card's figure. Mounted only while open, as on the
+          Dashboard: the modal reads live context and has no business doing so
+          for a list nobody asked for. */}
+      {budgetDrill && (
+        <ReportDrillModal target={budgetDrill} onClose={() => setBudgetDrill(null)} categories={categories} />
       )}
 
       <BudgetModal
