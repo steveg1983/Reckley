@@ -16,6 +16,7 @@ import { findReport } from './reports/reportRegistry';
 import ReportPeriodDefaultToggle from '../components/reports/ReportPeriodDefaultToggle';
 import { readReportPeriodDefault } from '../utils/reportPeriodDefaults';
 import { useReportPeriodDefault } from '../hooks/useReportPeriodDefault';
+import { useReportsWideView } from '../hooks/useReportsWideView';
 
 /** The window a report gets when it states no preference of its own. */
 const HUB_DEFAULT_PERIOD: PeriodKey = 'this-month';
@@ -39,6 +40,9 @@ const HUB_DEFAULT_PERIOD: PeriodKey = 'this-month';
  * reading over (net worth over time on ALL of it, not this month). The moment
  * they pick one, that choice wins everywhere and is never overridden.
  */
+/** Lifts every report's own width cap (they read --report-max). */
+const WIDE_REPORT_STYLE: React.CSSProperties & { '--report-max': string } = { '--report-max': 'none' };
+
 export default function ReportsHub(): React.JSX.Element {
   const { reportId } = useParams<{ reportId?: string }>();
   const location = useLocation();
@@ -90,6 +94,19 @@ export default function ReportsHub(): React.JSX.Element {
   // The save-as-default control's state, shared with the one report that
   // draws its own period bar (see hooks/useReportPeriodDefault).
   const periodDefault = useReportPeriodDefault(report?.id ?? '', picker);
+
+  // WIDE VIEW (owner, 15 Nov 2026): lifts the page frame's cap while a report
+  // is open, and the report's own through --report-max below. See the hook.
+  const [wideView, setWideView] = useReportsWideView();
+  const isWide = wideView && report !== null;
+  useEffect(() => {
+    if (!isWide) return undefined;
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--page-max', 'none');
+    return () => {
+      rootStyle.removeProperty('--page-max');
+    };
+  }, [isWide]);
 
   /**
    * What a drill-down from the Dashboard arrived asking for: the window the
@@ -180,6 +197,19 @@ export default function ReportsHub(): React.JSX.Element {
           </p>
         }
         contentClassName="space-y-6"
+        rightContent={
+          report ? (
+            <button
+              type="button"
+              onClick={() => setWideView(!wideView)}
+              aria-pressed={wideView}
+              title={wideView ? 'Back to the usual width' : 'Use the whole width of the window'}
+              className="hidden md:inline-flex items-center px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors aria-pressed:bg-gray-900 aria-pressed:text-white aria-pressed:border-gray-900 dark:aria-pressed:bg-white dark:aria-pressed:text-gray-900"
+            >
+              {wideView ? 'Normal width' : 'Wide view'}
+            </button>
+          ) : undefined
+        }
       >
         {/* Named for a screen reader even though it is the only period control
             on the page: out of the header it is no longer read straight after
@@ -216,7 +246,9 @@ export default function ReportsHub(): React.JSX.Element {
                 every report — nothing for a single-currency ledger. */}
             {report?.currency === 'flows' && <ReportCurrencyNote />}
             {report?.currency === undefined && <MixedCurrencyDisclosure />}
-            <ReportView picker={picker} focus={focus} />
+            <div style={isWide ? WIDE_REPORT_STYLE : undefined}>
+              <ReportView picker={picker} focus={focus} />
+            </div>
           </Suspense>
         ) : (
           <ReportGallery />

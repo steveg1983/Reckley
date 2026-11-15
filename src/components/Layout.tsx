@@ -928,7 +928,7 @@ export default function Layout(): React.JSX.Element {
             bottom nav and left the floating quick-add button sitting on top of
             whatever the page ended with. See index.css — the reservation is one
             number, beside the measurements it is made of. */}
-        <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto page-bottom-gutter md:pb-8">
+        <div className="p-4 md:p-6 lg:p-8 max-w-[var(--page-max,1600px)] mx-auto page-bottom-gutter md:pb-8">
           <PageTransition>
             <Outlet />
           </PageTransition>

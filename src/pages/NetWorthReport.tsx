@@ -424,7 +424,7 @@ export default function NetWorthReport({ picker, focus }: ReportViewProps): Reac
   }, [drillDate, navigate, location.search]);
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="max-w-[var(--report-max,1400px)] mx-auto">
       {/* The period comes from the hub, so it persists between reports. */}
       {/*
         THE SAME THREE FIGURES AS THE DASHBOARD AND THE ACCOUNTS LIST, SO THE

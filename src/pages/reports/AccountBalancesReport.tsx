@@ -85,7 +85,7 @@ export default function AccountBalancesReport({ picker }: ReportViewProps): Reac
   const cell = 'px-3 py-2 text-body text-right tabular-nums whitespace-nowrap';
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6">
+    <div className="max-w-[var(--report-max,1400px)] mx-auto space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-line dark:border-gray-700">
           <p className="text-label uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400">

@@ -190,7 +190,7 @@ export default function NetWorthStatementReport({ picker }: ReportViewProps): Re
   );
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6">
+    <div className="max-w-[var(--report-max,1400px)] mx-auto space-y-6">
       {/* THE SHARED CARD, and the plainer words kept.
 
           This page drew its own navy slab plus three white cards — the exact

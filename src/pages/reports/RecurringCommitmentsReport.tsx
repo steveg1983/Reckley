@@ -472,7 +472,7 @@ export default function RecurringCommitmentsReport(): React.JSX.Element {
   // over a long history is one of the few loads that will actually be seen.
   if (isLoading && transactions.length === 0) {
     return (
-      <div className="max-w-[1400px] mx-auto space-y-3">
+      <div className="max-w-[var(--report-max,1400px)] mx-auto space-y-3">
         {[0, 1, 2].map(i => (
           <div key={i} className="h-[72px] bg-gray-100 dark:bg-gray-800 rounded-lg" />
         ))}
@@ -481,7 +481,7 @@ export default function RecurringCommitmentsReport(): React.JSX.Element {
   }
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6">
+    <div className="max-w-[var(--report-max,1400px)] mx-auto space-y-6">
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-line dark:border-gray-700">
         <h2 className="text-label uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400">
           Committed each year

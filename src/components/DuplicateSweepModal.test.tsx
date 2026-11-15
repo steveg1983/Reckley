@@ -332,6 +332,33 @@ describe('DuplicateSweepModal — the bar has not moved', () => {
     }
   });
 
+  it('"Select all in view" ticks what is on screen, and pressing again after scrolling ADDS the next ones', () => {
+    // The owner, 15 Nov 2026. jsdom has no layout, so each row is placed by
+    // hand: the first on screen, the second below the fold until "scrolled".
+    __setAppContextValue({
+      transactions: [FEED, IMPORTED, RENAMED, AS_IMPORTED], categories: CATEGORIES,
+    });
+    renderModal();
+    Object.defineProperty(window, 'innerHeight', { value: 800, configurable: true });
+    const place = (row: Element, top: number): void => {
+      (row as HTMLElement).getBoundingClientRect = () => ({
+        top, bottom: top + 40, height: 40, left: 0, right: 100, width: 100, x: 0, y: top, toJSON: () => ({}),
+      });
+    };
+    const rows = Array.from(document.querySelectorAll('[data-pair-key]'));
+    expect(rows).toHaveLength(2);
+    place(rows[0], 200);
+    place(rows[1], 2000);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select all in view' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+
+    place(rows[0], -500);
+    place(rows[1], 300);
+    fireEvent.click(screen.getByRole('button', { name: 'Select all in view' }));
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+  });
+
   it('the bulk ticks refuse — they warn first, persist refusals, and can delete nothing', async () => {
     // The owner's nuclear button (1 Sep 2026: "save me going through over
     // 2000!"): select-all, one press, one warning that genuine duplicates

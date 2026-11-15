@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Modal, ModalBody, ModalFooter } from './common/Modal';
 import { useApp } from '../contexts/AppContextSupabase';
@@ -36,6 +36,7 @@ import { AlertTriangleIcon, ArrowUpRightIcon } from './icons';
 import type { SuggestionDismissal, Transaction } from '../types';
 import { getDateLocale } from '../utils/dateFormatter';
 import { formatCount, compareNames } from '../utils/localeFormat';
+import { keysOfRowsInView } from '../utils/rowsInView';
 
 /**
  * Find duplicates — the same sweep shape as "Match transfers", for the other
@@ -536,6 +537,25 @@ export default function DuplicateSweepModal({ isOpen, onClose, resume = null }: 
         : new Set(inScope.map(candidate => duplicateDismissalKey(candidate.a, candidate.b)))
     );
   };
+  /*
+   * SELECT ALL IN VIEW (owner, 15 Nov 2026): tick what is on screen, scroll,
+   * press again to ADD the next screenful. It only ever adds; the bar is
+   * pinned so the button is still there after scrolling, and a row hidden
+   * under the bar does not count as seen.
+   */
+  const bulkBarRef = useRef<HTMLDivElement>(null);
+  const selectAllInView = (): void => {
+    const bar = bulkBarRef.current;
+    const root = bar?.parentElement;
+    if (!bar || !root) return;
+    const visible = keysOfRowsInView(root, 'data-pair-key', bar.getBoundingClientRect().bottom);
+    if (visible.length === 0) return;
+    setSelectedKeys(previous => {
+      const next = new Set(previous);
+      for (const key of visible) next.add(key);
+      return next;
+    });
+  };
   const toggleSelected = (key: string): void => {
     setSelectedKeys(previous => {
       const next = new Set(previous);
@@ -709,6 +729,7 @@ export default function DuplicateSweepModal({ isOpen, onClose, resume = null }: 
             return (
               <tr
                 key={pairKey}
+                data-pair-key={pairKey}
                 ref={landedHere ? pairFocus.focusRef : undefined}
                 aria-current={landedHere ? 'true' : undefined}
                 onClick={() => review(candidate)}
@@ -937,7 +958,10 @@ export default function DuplicateSweepModal({ isOpen, onClose, resume = null }: 
                 the displayed cap — that is the point of it. The action only
                 appears once something is selected, and the press asks first:
                 see the confirmation dialog at the foot of this file. */}
-            <div className="flex flex-wrap items-center gap-3 mb-3">
+            <div
+              ref={bulkBarRef}
+              className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-white dark:bg-gray-900 flex flex-wrap items-center gap-3 mb-3"
+            >
               <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 min-h-[44px] sm:min-h-0 cursor-pointer">
                 <input
                   type="checkbox"
@@ -948,6 +972,15 @@ export default function DuplicateSweepModal({ isOpen, onClose, resume = null }: 
                 />
                 {allInScopeSelected ? 'Unselect all' : `Select all ${formatCount(inScope.length)}`}
               </label>
+              <button
+                type="button"
+                onClick={selectAllInView}
+                disabled={bulkSaving !== null || allInScopeSelected}
+                title="Tick every pair on screen now. Scroll and press again to add the next ones."
+                className="px-3 py-2 min-h-[44px] sm:min-h-0 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-50"
+              >
+                Select all in view
+              </button>
               {selectedInScope > 0 && (
                 <>
                   <span className="text-sm text-gray-600 dark:text-gray-400 tabular-nums">
