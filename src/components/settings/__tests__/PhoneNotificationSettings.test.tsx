@@ -54,7 +54,7 @@ describe('PhoneNotificationSettings', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('inside the shell, offers the four switches and names what each one needs', () => {
+  it('inside the shell, offers the five switches and names what each one needs', () => {
     pretendToBeTheShell();
     render(<PhoneNotificationSettings />);
 
@@ -63,6 +63,7 @@ describe('PhoneNotificationSettings', () => {
     const feedAttention = screen.getByRole('checkbox', { name: /A feed needs reconnecting/ });
     const reminders = screen.getByRole('checkbox', { name: /Balance reminders/ });
     const lowBalances = screen.getByRole('checkbox', { name: /Low balances/ });
+    const budgets = screen.getByRole('checkbox', { name: /^Budgets/ });
 
     // Bank feed refresh is not 'cloud', so every switch is disabled — cloud
     // mode is the door to the whole card (the owner's ruling, 11 Sep), and
@@ -71,7 +72,8 @@ describe('PhoneNotificationSettings', () => {
     expect(feedAttention).toBeDisabled();
     expect(reminders).toBeDisabled();
     expect(lowBalances).toBeDisabled();
-    expect(screen.getAllByText('Needs Bank feed refresh set to In the cloud, above.')).toHaveLength(4);
+    expect(budgets).toBeDisabled();
+    expect(screen.getAllByText('Needs Bank feed refresh set to In the cloud, above.')).toHaveLength(5);
     expect(screen.queryByText(/Needs a reminder schedule/)).not.toBeInTheDocument();
   });
 
@@ -82,6 +84,7 @@ describe('PhoneNotificationSettings', () => {
 
     expect(screen.getByRole('checkbox', { name: /New transactions/ })).toBeEnabled();
     expect(screen.getByRole('checkbox', { name: /Low balances/ })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: /^Budgets/ })).toBeEnabled();
     expect(screen.getByRole('checkbox', { name: /Balance reminders/ })).toBeDisabled();
     expect(screen.getByText('Needs a reminder schedule in Balance reminders, above.')).toBeInTheDocument();
   });

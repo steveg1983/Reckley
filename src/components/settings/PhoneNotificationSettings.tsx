@@ -18,7 +18,7 @@ import { loadReminderPrefs } from '../../utils/balanceReminders';
  * the desktop edition's absent panels are absent — a person on a settings
  * page did not come there to read about a device they are not holding.
  *
- * Four switches, each honest about what it needs:
+ * Five switches, each honest about what it needs:
  *
  *   New transactions      needs Bank feed refresh = In the cloud, because
  *   A feed stopped        only a SERVER-side sync can notice something while
@@ -37,6 +37,10 @@ import { loadReminderPrefs } from '../../utils/balanceReminders';
  *                         account's settings — the Dashboard's "Needs your
  *                         attention" rule (api/_lib/low-balance-push.ts,
  *                         owner, 14 Nov 2026).
+ *   Budgets               needs In the cloud. A running budget reaching the
+ *                         Budget Alerts threshold, or all of itself; once per
+ *                         band per period (api/_lib/budget-push.ts, owner,
+ *                         15 Nov 2026).
  *
  * A disabled switch says why in a line beneath it rather than vanishing:
  * the remedy is one card up, and naming it is what makes the pair one
@@ -80,7 +84,7 @@ export default function PhoneNotificationSettings(): React.JSX.Element | null {
     setPrefs(next);
     savePhoneNotificationPrefs(next);
     setNotice(null);
-    const turnedSomethingOn = next.feedActivity || next.feedAttention || next.balanceReminders || next.lowBalances;
+    const turnedSomethingOn = next.feedActivity || next.feedAttention || next.balanceReminders || next.lowBalances || next.budgets;
     if (!turnedSomethingOn || !databaseId) return;
 
     setRegistering(true);
@@ -136,6 +140,13 @@ export default function PhoneNotificationSettings(): React.JSX.Element | null {
       key: 'lowBalances',
       label: 'Low balances',
       detail: 'When an account goes past the warning level you set on it. Once each time it crosses, and never the amount.',
+      enabled: cloudMode,
+      needs: 'Needs Bank feed refresh set to In the cloud, above.',
+    },
+    {
+      key: 'budgets',
+      label: 'Budgets',
+      detail: 'When a budget reaches your Budget Alerts level, and again if it is all used. Once each period, as a percentage, never the amount.',
       enabled: cloudMode,
       needs: 'Needs Bank feed refresh set to In the cloud, above.',
     },
