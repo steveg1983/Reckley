@@ -12,7 +12,13 @@ describe('parsePhoneNotificationPrefs', () => {
       feedActivity: true,
       feedAttention: false,
       balanceReminders: false,
+      lowBalances: false,
     });
+    expect(parsePhoneNotificationPrefs('{"lowBalances":true}').lowBalances).toBe(true);
+  });
+
+  it('a phone with only "Low balances" on still counts as listening, so it registers for pushes', () => {
+    expect(anyPhoneNotificationOn({ ...DEFAULT_PHONE_NOTIFICATION_PREFS, lowBalances: true })).toBe(true);
   });
 
   it('anything unreadable is "asked for nothing" — a garbage entry must never become a push', () => {

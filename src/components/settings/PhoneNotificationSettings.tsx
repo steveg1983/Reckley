@@ -18,7 +18,7 @@ import { loadReminderPrefs } from '../../utils/balanceReminders';
  * the desktop edition's absent panels are absent — a person on a settings
  * page did not come there to read about a device they are not holding.
  *
- * Three switches, each honest about what it needs:
+ * Four switches, each honest about what it needs:
  *
  *   New transactions      needs Bank feed refresh = In the cloud, because
  *   A feed stopped        only a SERVER-side sync can notice something while
@@ -32,6 +32,11 @@ import { loadReminderPrefs } from '../../utils/balanceReminders';
  *                         same rule (api/_lib/reminder-push.ts), so a
  *                         switch left on by a user who later leaves cloud
  *                         mode goes quiet rather than lingering.
+ *   Low balances          needs In the cloud, by the same ruling. Fires once
+ *                         when an account crosses the line set on it in the
+ *                         account's settings — the Dashboard's "Needs your
+ *                         attention" rule (api/_lib/low-balance-push.ts,
+ *                         owner, 14 Nov 2026).
  *
  * A disabled switch says why in a line beneath it rather than vanishing:
  * the remedy is one card up, and naming it is what makes the pair one
@@ -75,7 +80,7 @@ export default function PhoneNotificationSettings(): React.JSX.Element | null {
     setPrefs(next);
     savePhoneNotificationPrefs(next);
     setNotice(null);
-    const turnedSomethingOn = next.feedActivity || next.feedAttention || next.balanceReminders;
+    const turnedSomethingOn = next.feedActivity || next.feedAttention || next.balanceReminders || next.lowBalances;
     if (!turnedSomethingOn || !databaseId) return;
 
     setRegistering(true);
@@ -126,6 +131,13 @@ export default function PhoneNotificationSettings(): React.JSX.Element | null {
       needs: cloudMode
         ? 'Needs a reminder schedule in Balance reminders, above.'
         : 'Needs Bank feed refresh set to In the cloud, above.',
+    },
+    {
+      key: 'lowBalances',
+      label: 'Low balances',
+      detail: 'When an account goes past the warning level you set on it. Once each time it crosses, and never the amount.',
+      enabled: cloudMode,
+      needs: 'Needs Bank feed refresh set to In the cloud, above.',
     },
   ];
 

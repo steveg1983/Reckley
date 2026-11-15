@@ -9,7 +9,7 @@
  * The browser's storage half is utils/phoneNotifications.ts; this is the file
  * format, the same split services/preferences/document.ts makes.
  *
- * Three switches, each an answer to "what would you want your phone to
+ * Four switches, each an answer to "what would you want your phone to
  * interrupt you for?":
  *
  *   feedActivity      new transactions arrived from a bank feed the SERVER
@@ -21,11 +21,15 @@
  *   balanceReminders  the balance-update reminder the person scheduled in
  *                     Settings, delivered to the lock screen rather than
  *                     waiting for the app to be opened
+ *   lowBalances       an account has gone past the line its owner set on it
+ *                     (the Dashboard's "Needs your attention" rule,
+ *                     utils/warningLine.ts) — once when it crosses, not every
+ *                     quarter-hour it stays there (owner, 14 Nov 2026)
  *
- * All three need Bank feed refresh = In the cloud — the owner's ruling (11
+ * All four need Bank feed refresh = In the cloud — the owner's ruling (11
  * Sep): phone alerts are what a cloud user opts into, one decision rather
- * than three. The first two need it by nature; the third is held to it by
- * the settings card and by api/_lib/reminder-push.ts alike.
+ * than three. The first two need it by nature; the others are held to it by
+ * the settings card and by their server halves alike.
  *
  * All off by default: a notification nobody asked for is not a feature.
  */
@@ -34,6 +38,7 @@ export interface PhoneNotificationPrefs {
   feedActivity: boolean;
   feedAttention: boolean;
   balanceReminders: boolean;
+  lowBalances: boolean;
 }
 
 /** The entry in the preferences document. */
@@ -51,6 +56,7 @@ export const DEFAULT_PHONE_NOTIFICATION_PREFS: PhoneNotificationPrefs = {
   feedActivity: false,
   feedAttention: false,
   balanceReminders: false,
+  lowBalances: false,
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -75,11 +81,12 @@ export function parsePhoneNotificationPrefs(raw: unknown): PhoneNotificationPref
     feedActivity: value.feedActivity === true,
     feedAttention: value.feedAttention === true,
     balanceReminders: value.balanceReminders === true,
+    lowBalances: value.lowBalances === true,
   };
 }
 
 export function anyPhoneNotificationOn(prefs: PhoneNotificationPrefs): boolean {
-  return prefs.feedActivity || prefs.feedAttention || prefs.balanceReminders;
+  return prefs.feedActivity || prefs.feedAttention || prefs.balanceReminders || prefs.lowBalances;
 }
 
 /** A stored zone is only usable if Intl knows it; anything else is "unknown". */
