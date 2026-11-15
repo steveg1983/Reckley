@@ -388,6 +388,32 @@ NEWFILEUID:NONE
       expect(result.statementBalance).toEqual({ amount: 0, dateAsOf: '2024-01-31' });
     });
 
+    it('ignores the balance in an Investec file, which prints 0.00 whatever the account holds', async () => {
+      // The owner, 15 Nov 2026: his account was well in credit on Investec's
+      // own site and every import set the bank balance to £0. The file said
+      // 0.00 for both balances under a server date of 2012. The transactions
+      // are right; only the balance is left out, as for a file with none.
+      // Invented figures (public repo).
+      const investec = [
+        'OFXHEADER:100', 'DATA:OFXSGML', 'VERSION:102', '',
+        '<OFX><SIGNONMSGSRSV1><SONRS><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>',
+        '<DTSERVER>20120614145837</DTSERVER><LANGUAGE>ENG</LANGUAGE><FI><ORG>Investec (UK)</ORG><FID>1</FID></FI></SONRS></SIGNONMSGSRSV1>',
+        '<BANKMSGSRSV1><STMTTRNRS><TRNUID>1</TRNUID><STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS><STMTRS><CURDEF>GBP</CURDEF>',
+        '<BANKACCTFROM><BANKID>1</BANKID><ACCTID>12345678Voyage</ACCTID><ACCTTYPE>CHECKING</ACCTTYPE></BANKACCTFROM>',
+        '<BANKTRANLIST><DTSTART>20261015000000</DTSTART><DTEND>20261115235959</DTEND>',
+        '<STMTTRN><TRNTYPE>DEBIT</TRNTYPE><DTPOSTED>20261103020322</DTPOSTED><TRNAMT>-10.00</TRNAMT><FITID>syn-1</FITID><NAME>Synthetic payment</NAME></STMTTRN>',
+        '</BANKTRANLIST><LEDGERBAL><BALAMT>0.00</BALAMT><DTASOF>20261115214546</DTASOF></LEDGERBAL>',
+        '<AVAILBAL><BALAMT>0.00</BALAMT><DTASOF>20261115214546</DTASOF></AVAILBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>',
+      ].join('\n');
+
+      const parsed = ofxImportService.parseOFX(investec);
+      expect(parsed.balance).toBeUndefined();
+      expect(parsed.transactions).toHaveLength(1);
+
+      const result = await ofxImportService.importTransactions(investec, mockAccounts, []);
+      expect(result.statementBalance).toBeUndefined();
+    });
+
     it('survives an unreadable BALAMT instead of failing the whole import', () => {
       // `new Decimal('12.34CR')` throws; one odd tag must not cost the user
       // their transactions.
