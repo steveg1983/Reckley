@@ -112,8 +112,9 @@ export class OFXImportService {
     // Parse transactions
     const { transactions, unreadableRows } = this.parseTransactions(ofxContent);
 
-    // Parse balance
-    const balance = this.parseBalance(ofxContent);
+    // Parse balance — unless the file comes from a bank whose export is known
+    // to print a balance it never worked out (see BALANCE_NOT_TRUSTED_FROM).
+    const balance = this.balanceIsTrusted(ofxContent) ? this.parseBalance(ofxContent) : undefined;
     
     // Parse date range
     const startDate = this.readTag(ofxContent, 'DTSTART');
@@ -275,6 +276,29 @@ export class OFXImportService {
    * that is not a plain signed decimal. `new Decimal('12.34CR')` THROWS, and a
    * throw here would fail the whole import over one unreadable tag.
    */
+  /**
+   * Banks whose OFX export prints a balance that is not the account's balance.
+   *
+   * INVESTEC (owner, 15 Nov 2026). Its "Investec (UK)" export writes
+   * <LEDGERBAL> and <AVAILBAL> as 0.00 whatever the account holds: a file for
+   * an account Investec's own site showed well in credit said 0.00 for both,
+   * stamped with a server date of 2012 above transactions from this month —
+   * a template, not a statement. Copying that zero made every import set the
+   * bank balance to £0 and the reconcile screen propose £0 as the closing
+   * balance. The transactions in the same files are right; only the balance
+   * is ignored, exactly as for a file that carries none.
+   *
+   * Matched on the file's own <FI><ORG>, case-insensitively, by the bank's
+   * name: the organisation is what the bank says it is, and the name is the
+   * part of it that has stayed the same.
+   */
+  private static readonly BALANCE_NOT_TRUSTED_FROM = ['investec'];
+
+  private balanceIsTrusted(content: string): boolean {
+    const institution = this.readTag(content, 'ORG')?.toLowerCase() ?? '';
+    return !OFXImportService.BALANCE_NOT_TRUSTED_FROM.some(name => institution.includes(name));
+  }
+
   private parseBalance(content: string): StatementBalance | undefined {
     const ledgerBlock = this.extractBlock(content, 'LEDGERBAL');
     if (!ledgerBlock) {
