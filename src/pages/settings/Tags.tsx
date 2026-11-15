@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../contexts/AppContextSupabase';
 import { HashIcon, AlertCircleIcon } from '../../components/icons';
 import { EditIcon, DeleteIcon, XIcon, CheckIcon } from '../../components/icons';
 import { IconButton } from '../../components/icons/IconButton';
 import type { Tag } from '../../contexts/AppContextSupabase';
 import PageWrapper from '../../components/PageWrapper';
+import ReportDrillModal, { type ReportDrillTarget } from '../../components/reports/ReportDrillModal';
+import { expandSplitTransactions } from '../../utils/transactionSplits';
+import { toDecimal } from '../../utils/decimal';
 
 interface TagFormData {
   name: string;
@@ -36,7 +39,26 @@ const PREDEFINED_COLOURS = [
 ];
 
 export default function Tags() {
-  const { tags, addTag, updateTag, deleteTag, getTagUsageCount, getAllUsedTags } = useApp();
+  const { tags, addTag, updateTag, deleteTag, getTagUsageCount, getAllUsedTags, transactions, transactionSplits, categories } = useApp();
+
+  /*
+   * A TAG OPENS ITS TRANSACTIONS (owner, 15 Nov 2026: "if I click in the box
+   * of a tag, a list of those tagged transactions pops up ... and then those
+   * transactions can be clicked in to"). The same drill the reports and the
+   * Budget page use, so each row opens the transaction editor.
+   */
+  const [tagDrill, setTagDrill] = useState<ReportDrillTarget | null>(null);
+  const openTagDrill = useCallback((tagName: string): void => {
+    const tagged = transactions.filter(transaction => transaction.tags?.includes(tagName) ?? false);
+    if (tagged.length === 0) return;
+    const total = tagged.reduce((sum, transaction) => sum.plus(toDecimal(transaction.amount)), toDecimal(0));
+    setTagDrill({
+      title: `Tagged “${tagName}”`,
+      bucket: 'neutral',
+      rows: expandSplitTransactions(tagged, transactionSplits),
+      total: total.toNumber(),
+    });
+  }, [transactions, transactionSplits]);
   const [editingTag, setEditingTag] = useState<string | null>(null);
   const [formData, setFormData] = useState<TagFormData>({
     name: '',
@@ -259,9 +281,23 @@ export default function Tags() {
             {tags.map((tag) => {
               const usageCount = getTagUsageCount(tag.name);
               return (
-                <div key={tag.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                <div
+                  key={tag.id}
+                  data-testid="tag-row"
+                  onClick={() => openTagDrill(tag.name)}
+                  className={`p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${usageCount > 0 ? 'cursor-pointer' : ''}`}
+                >
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={event => {
+                        event.stopPropagation();
+                        openTagDrill(tag.name);
+                      }}
+                      disabled={usageCount === 0}
+                      aria-label={`${tag.name}: show its ${usageCount} transaction${usageCount !== 1 ? 's' : ''}`}
+                      className="flex items-center gap-3 text-left disabled:cursor-default"
+                    >
                       <div
                         className="w-4 h-4 rounded-full"
                         style={{ backgroundColor: tag.color }}
@@ -276,9 +312,9 @@ export default function Tags() {
                           </p>
                         )}
                       </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-4">
+                    </button>
+
+                    <div className="flex items-center gap-4" onClick={event => event.stopPropagation()}>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
                         {usageCount} transaction{usageCount !== 1 ? 's' : ''}
                       </div>
@@ -345,6 +381,10 @@ export default function Tags() {
             </div>
           </div>
         </div>
+      )}
+
+      {tagDrill && (
+        <ReportDrillModal target={tagDrill} onClose={() => setTagDrill(null)} categories={categories} />
       )}
     </PageWrapper>
   );

@@ -318,7 +318,7 @@ export default function CustomReportViewer({
   };
 
   return (
-    <div className="max-w-[1400px] mx-auto">
+    <div className="max-w-[var(--report-max,1400px)] mx-auto">
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{report.name}</h2>

@@ -132,7 +132,7 @@ export default function SpendingByCategoryReport({ picker, focus }: ReportViewPr
     : null;
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6">
+    <div className="max-w-[var(--report-max,1400px)] mx-auto space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ReportAccountMultiSelect accounts={accounts} selection={selection} />
         <ReportExportBar

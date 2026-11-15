@@ -158,7 +158,7 @@ export default function HoldingsReport({ picker }: ReportViewProps): React.JSX.E
   const headCell = 'px-3 py-2 text-dense font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400';
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6">
+    <div className="max-w-[var(--report-max,1400px)] mx-auto space-y-6">
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-line dark:border-gray-700 p-6">
         <p className="text-label uppercase tracking-wider font-medium text-gray-500 dark:text-gray-400">
           Holdings

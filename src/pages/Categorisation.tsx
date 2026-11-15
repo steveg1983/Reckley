@@ -5,7 +5,7 @@ import { useCurrencyDecimal } from '../hooks/useCurrencyDecimal';
 import { computeIncomeExpense } from '../utils/incomeExpense';
 import { expandSplitTransactions, type SplitExpandedTransaction } from '../utils/transactionSplits';
 import { groupUncategorisedByAccount } from '../utils/uncategorisedByAccount';
-import { groupSuggestedByCategory, groupSuggestedByAccount } from '../utils/categoryProvenance';
+import { groupSuggestedByCategory, groupSuggestedByAccount, isCategorySuggested } from '../utils/categoryProvenance';
 import { awaitsFiling } from '../utils/transactionReview';
 import { CATEGORY_REFILE_DANGLING_PATH } from '../utils/categoryRefileLink';
 import {
@@ -25,6 +25,7 @@ import { useAccountNames } from '../hooks/useAccountNames';
 import { useToast } from '../contexts/ToastContext';
 import TransferSweepModal from '../components/TransferSweepModal';
 import BulkCategorizeModal from '../components/BulkCategorizeModal';
+import RejectSuggestionsModal from '../components/RejectSuggestionsModal';
 import FileOutstandingSection from '../components/FileOutstandingSection';
 import ReportDrillModal, { type ReportDrillTarget } from '../components/reports/ReportDrillModal';
 import { ArrowRightLeftIcon, TagIcon, ListIcon, CheckCircleIcon, ChevronRightIcon } from '../components/icons';
@@ -64,7 +65,7 @@ const SUGGESTED_VIEW_KEY = 'categorisationSuggestedView';
  * seam declines to convert and the Phase 0 sentence is what says so.
  */
 export default function Categorisation(): React.JSX.Element {
-  const { accounts, transactions, transactionSplits, categories, confirmTransactionCategories } = useApp();
+  const { accounts, transactions, transactionSplits, categories, confirmTransactionCategories, updateTransaction } = useApp();
   const { formatCurrency } = useCurrencyDecimal();
   const { showSuccess, showError } = useToast();
   // One rule, app-wide — see utils/attentionLadder.
@@ -248,6 +249,42 @@ export default function Categorisation(): React.JSX.Element {
       showError(error);
     } finally {
       setConfirmingCategoryId(null);
+    }
+  };
+
+  /*
+   * "NOT THESE" (owner, 15 Nov 2026). Which group's rows are being refused;
+   * held by ids, so the pop-up's list follows the ledger while it is open.
+   */
+  const [rejecting, setRejecting] = useState<{ categoryId: string; ids: ReadonlySet<string> } | null>(null);
+  const rejectingRows = useMemo(
+    () => (rejecting
+      ? transactions.filter(row => rejecting.ids.has(row.id) && row.category.trim() === rejecting.categoryId && isCategorySuggested(row))
+      : []),
+    [rejecting, transactions]
+  );
+  const rejectSuggestions = async (ids: string[]): Promise<void> => {
+    if (!rejecting) return;
+    const label = categoryLabel(rejecting.categoryId);
+    let done = 0;
+    try {
+      // Through the editor's own audited write, a few at a time: the guess is
+      // taken off and the row goes back to be filed.
+      for (let start = 0; start < ids.length; start += 10) {
+        const batch = ids.slice(start, start + 10);
+        await Promise.all(batch.map(id => updateTransaction(id, { category: '', categoryConfirmed: false, needsReview: true })));
+        done += batch.length;
+      }
+      showSuccess(
+        `${formatCount(done)} transaction${done === 1 ? '' : 's'} no longer suggested as ${label}. File ${done === 1 ? 'it' : 'them'} above.`,
+        'Suggestion taken off'
+      );
+    } catch (error) {
+      if (done > 0) {
+        showSuccess(`${formatCount(done)} of ${formatCount(ids.length)} done before the error.`, 'Partly done');
+      }
+      showError(error);
+      throw error;
     }
   };
 
@@ -530,6 +567,7 @@ export default function Categorisation(): React.JSX.Element {
                     confirming={confirmingCategoryId === categoryId}
                     onOpen={() => openSuggestedDrill(categoryId, groupRows)}
                     onConfirm={() => void confirmGroup(categoryId, groupRows)}
+                    onReject={() => setRejecting({ categoryId, ids: new Set(groupRows.map(row => row.id)) })}
                   />
                 ))
               : suggestedByAccount.map(({ accountId, rows: accountRows, categories: accountCategories }) => (
@@ -556,6 +594,7 @@ export default function Categorisation(): React.JSX.Element {
                         // Confirms THIS ACCOUNT's rows for that category, not
                         // every account's: the view is the scope.
                         onConfirm={() => void confirmGroup(categoryId, groupRows, `${accountId}-${categoryId}`)}
+                        onReject={() => setRejecting({ categoryId, ids: new Set(groupRows.map(row => row.id)) })}
                       />
                     ))}
                   </div>
@@ -567,6 +606,15 @@ export default function Categorisation(): React.JSX.Element {
       <ReportDrillModal target={drill} onClose={() => setDrill(null)} categories={categories} />
       <TransferSweepModal isOpen={showTransferSweep} onClose={() => setShowTransferSweep(false)} />
       <BulkCategorizeModal isOpen={showBulkCategorize} onClose={() => setShowBulkCategorize(false)} />
+      {rejecting && (
+        <RejectSuggestionsModal
+          label={categoryLabel(rejecting.categoryId)}
+          rows={rejectingRows}
+          accountName={accountName}
+          onClose={() => setRejecting(null)}
+          onReject={rejectSuggestions}
+        />
+      )}
     </div>
   );
 }
@@ -629,6 +677,7 @@ function SuggestedGroupRow({
   confirming,
   onOpen,
   onConfirm,
+  onReject,
 }: {
   label: string;
   rows: readonly Transaction[];
@@ -637,6 +686,8 @@ function SuggestedGroupRow({
   confirming: boolean;
   onOpen: () => void;
   onConfirm: () => void;
+  /** Opens the "which are not this?" list (owner, 15 Nov 2026). */
+  onReject: () => void;
 }): React.JSX.Element {
   return (
     <div
@@ -665,6 +716,15 @@ function SuggestedGroupRow({
         className="px-4 h-[42px] inline-flex items-center justify-center text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
       >
         {confirming ? 'Confirming…' : 'Confirm these'}
+      </button>
+      <button
+        type="button"
+        onClick={onReject}
+        disabled={busy}
+        title="Choose which of these are not this category"
+        className="px-4 h-[42px] inline-flex items-center justify-center text-sm font-medium rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap flex-shrink-0"
+      >
+        Not these…
       </button>
     </div>
   );
