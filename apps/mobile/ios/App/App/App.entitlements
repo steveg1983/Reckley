@@ -8,6 +8,7 @@
 	<array>
 		<string>webcredentials:www.wealthtrackerpro.co.uk</string>
 		<string>webcredentials:www.reckley.co.uk</string>
+		<string>webcredentials:reckley.co.uk</string>
 	</array>
 	<key>keychain-access-groups</key>
 	<array>
