@@ -97,7 +97,7 @@ believes neither:
 
 | half | where | says |
 | --- | --- | --- |
-| the claim | `ios/App/App/App.entitlements` | `webcredentials:www.wealthtrackerpro.co.uk` and `webcredentials:www.reckley.co.uk` |
+| the claim | `ios/App/App/App.entitlements` | `webcredentials:www.wealthtrackerpro.co.uk`, `webcredentials:www.reckley.co.uk` and (passkeys, 19 Nov) `webcredentials:reckley.co.uk` |
 | the answer | `public/.well-known/apple-app-site-association` | `VT6W829WRX.com.wealthtracker.mobile` |
 
 Three things that are easy to get wrong, all of which we did:
@@ -107,13 +107,21 @@ Three things that are easy to get wrong, all of which we did:
   `index.html` for it. The rewrite now exempts `/.well-known`, and a header
   rule pins `application/json`. A `200` is not evidence; check the
   content-type.
-- **Only `www` is claimed, on each domain.** Both apexes 308-redirect to
+- **For passwords, `www` is what counts, on each domain.** Both apexes 308-redirect to
   their `www` (measured) and Apple does not follow redirects. Both hosts serve
   the same association file from the same deployment (measured 14 Oct: `200`,
   `application/json`), and both are claimed for the length of the move, so a
   credential saved under either keeps filling. `www` is also the
   origin the web view actually loads, so it is the origin a saved credential
   is scoped to.
+- **A passkey is not scoped to `www`.** Clerk binds passkeys to its primary
+  domain, `reckley.co.uk` (the RP ID), and WebKit lets an app's web view use a
+  passkey only when the app claims that exact domain. With only `www`
+  claimed, passkeys worked in Safari and failed in the app ("Passkey
+  registration was cancelled or timed out", 19 Nov), so the apex is claimed
+  too. Apple's association CDN does hold a copy for the apex despite the 308
+  (measured 19 Nov: `app-site-association.cdn-apple.com/a/v1/reckley.co.uk`
+  returns the file) — check that URL, not the redirect, before blaming it.
 - **The entitlement is Xcode's file, not ours.** Xcode rewrites it and strips
   comments whenever the capability is touched, which is why this explanation
   lives here instead. The capability itself is enabled through Xcode
