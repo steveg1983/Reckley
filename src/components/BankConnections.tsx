@@ -20,6 +20,7 @@ import { formatDate, formatDateTime } from '../utils/dateFormatter';
 import { describeReread } from '../utils/rereadOutcome';
 import { earliestRereadDay } from '../services/banking/syncWindow';
 import { createScopedLogger } from '../loggers/scopedLogger';
+import { holdSignOutForBankConnection, releaseBankConnectionHold } from '../utils/bankConnectionHold';
 
 // Module scope, not a useMemo: the loaders below are started from a mount
 // effect, and a logger created inside the component makes them look unstable to
@@ -127,6 +128,9 @@ export default function BankConnections({
   }, []);
 
   const startOAuthFlow = (authUrl: string) => {
+    // "When I leave the app" would otherwise sign the person out while they
+    // are at the bank; the callback releases this on any outcome.
+    holdSignOutForBankConnection();
     const authWindow = window.open(
       authUrl,
       'bankAuth',
@@ -160,6 +164,7 @@ export default function BankConnections({
 
       settled = true;
       cleanup();
+      releaseBankConnectionHold();
       void loadConnections();
       if (payload.status === 'success') {
         setOauthError(null);
@@ -181,6 +186,7 @@ export default function BankConnections({
     const closeCheckInterval = window.setInterval(() => {
       if (authWindow.closed) {
         cleanup();
+        releaseBankConnectionHold();
         if (!settled) {
           void loadConnections();
         }

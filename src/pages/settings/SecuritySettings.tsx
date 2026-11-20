@@ -13,6 +13,7 @@ import PageWrapper from '../../components/PageWrapper';
 import { DangerZone } from '@service';
 import type { SecuritySettings as SecuritySettingsType } from '../../services/securityService';
 import { formatDateTime } from '../../utils/dateFormatter';
+import { SESSION_ENDS_ON_LEAVE } from '../../hooks/useSessionTimeout';
 
 export default function SecuritySettings() {
   const [settings, setSettings] = useState<SecuritySettingsType>(
@@ -94,6 +95,10 @@ export default function SecuritySettings() {
                       set — no listeners, no interval. A "never" that quietly
                       kept measuring would be the same lie in the other
                       direction. */}
+                  {/* The strictest, owner's ask 19 Nov 2026: signed out
+                      whenever the app is left or closed, for somebody who
+                      signs back in with a passkey in a glance. */}
+                  <option value={SESSION_ENDS_ON_LEAVE}>When I leave the app</option>
                   <option value={0}>Never</option>
                   <option value={5}>5 minutes</option>
                   <option value={15}>15 minutes</option>

@@ -4,6 +4,7 @@ import { useAuth as useClerkAuth } from '@clerk/clerk-react';
 import PageWrapper from '../components/PageWrapper';
 import { bankConnectionService } from '../services/bankConnectionService';
 import { createScopedLogger } from '../loggers/scopedLogger';
+import { releaseBankConnectionHold } from '../utils/bankConnectionHold';
 
 const logger = createScopedLogger('BankingCallback');
 
@@ -23,6 +24,8 @@ export default function BankingCallback() {
   const errorDescription = params.get('error_description');
 
   const notifyOpener = useCallback((payload: { status: 'success' | 'error'; error?: string; connectionId?: string }) => {
+    // An outcome either way ends the bank's hold on "when I leave the app".
+    releaseBankConnectionHold();
     if (window.opener && !window.opener.closed) {
       window.opener.postMessage(
         {
