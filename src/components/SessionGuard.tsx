@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import { useSessionTimeout } from '../hooks/useSessionTimeout';
+import { useSessionTimeout, forgetSessionSeen } from '../hooks/useSessionTimeout';
 import { forgetWidgetKeyIfHeld } from '../services/widget/widgetBridge';
 
 /**
@@ -44,6 +44,7 @@ export default function SessionGuard(): React.JSX.Element | null {
   useEffect(() => {
     if (!isLoaded || isSignedIn) return;
     void forgetWidgetKeyIfHeld();
+    forgetSessionSeen();
   }, [isLoaded, isSignedIn]);
 
   useSessionTimeout(() => {

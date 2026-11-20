@@ -37,11 +37,16 @@ import { bankConnectionHoldActive } from '../utils/bankConnectionHold';
  * day passkeys made signing back in a glance rather than a password and a
  * code. Stored as this sentinel in the same minutes field.
  *
- * Leaving is the page going hidden: another app, the home screen, the app
- * switcher a phone is closed from, a locked screen, another tab. The moment
- * is written down then, and read when the page is seen again — on return, or
- * on the next launch, which is how a phone that killed the app is caught: the
- * page that wrote the mark never came back to read it.
+ * The app says "still here" every few seconds while it is on screen, and a
+ * launch or a return reads how long ago that last was. NOT a mark written at
+ * the moment of leaving: on the owner's phone (20 Nov 2026) that write never
+ * reached the disk — the storage copied off the device after Reckley was sent
+ * to the background held no mark, while Clerk's own write from the launch a
+ * moment earlier was there. WebKit suspends the app before it saves, so the
+ * only time a write is safe is while the app is in front. The heartbeat
+ * needs no event at all: a suspended app runs no timers, so on return the
+ * next tick finds the gap by itself, and a killed app leaves its last
+ * heartbeat for the next launch.
  *
  * A short grace, not zero, so the system's own sheets that can hide the page
  * for a moment (a file picker, Control Centre, a notification pulled down)
@@ -49,11 +54,12 @@ import { bankConnectionHoldActive } from '../utils/bankConnectionHold';
  */
 export const SESSION_ENDS_ON_LEAVE = -1;
 const LEAVE_GRACE_MS = 30_000;
-const LEFT_AT_KEY = 'ledger_session_left_at';
+const HEARTBEAT_MS = 5_000;
+const SEEN_KEY = 'ledger_session_seen_at';
 
-function readLeftAt(): number | null {
+function readSeenAt(): number | null {
   try {
-    const raw = window.localStorage.getItem(LEFT_AT_KEY);
+    const raw = window.localStorage.getItem(SEEN_KEY);
     if (raw === null) return null;
     const value = Number(raw);
     return Number.isFinite(value) ? value : null;
@@ -62,16 +68,26 @@ function readLeftAt(): number | null {
   }
 }
 
-function writeLeftAt(value: number | null): void {
+function writeSeenAt(value: number | null): void {
   try {
-    if (value === null) window.localStorage.removeItem(LEFT_AT_KEY);
-    else window.localStorage.setItem(LEFT_AT_KEY, String(value));
+    if (value === null) window.localStorage.removeItem(SEEN_KEY);
+    else window.localStorage.setItem(SEEN_KEY, String(value));
   } catch {
-    // Storage refused (private mode, quota): the mark is lost and the person
+    // Storage refused (private mode, quota): no heartbeat, and the person
     // stays signed in on return — the lenient failure, said here rather than
-    // thrown into the middle of a visibility event.
+    // thrown out of a timer.
   }
 }
+
+/**
+ * Forgets the heartbeat. SessionGuard calls it whenever nobody is signed in,
+ * however the session ended: a heartbeat left over from a session Clerk's own
+ * menu ended would otherwise sign the next sign-in straight back out.
+ */
+export function forgetSessionSeen(): void {
+  writeSeenAt(null);
+}
+
 /**
  * Announced by Security Settings when the choice changes, so the hook starts
  * the new mode at once. Without it the old mode ran until the next launch:
@@ -110,35 +126,47 @@ export function useSessionTimeout(onTimeout: () => void, active = true): void {
     if (!active) return;
     const settings = securityService.getSecuritySettings();
     if (settings.sessionTimeout === SESSION_ENDS_ON_LEAVE) {
-      const endIfAwayTooLong = (): void => {
-        const leftAt = readLeftAt();
-        writeLeftAt(null);
+      let lastSeen = readSeenAt();
+      let interval = 0;
+      let ended = false;
+      const stop = (): void => {
+        window.clearInterval(interval);
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('focus', beat);
+        window.removeEventListener('pageshow', beat);
+      };
+      // One step: compare the clock with the last heartbeat, then beat.
+      const beat = (): void => {
+        // Off screen is away: no heartbeat, or a tab left hidden would keep
+        // itself signed in. The gap is read when it is shown again.
+        if (document.visibilityState === 'hidden') return;
+        const now = Date.now();
+        const away = lastSeen !== null && now - lastSeen > LEAVE_GRACE_MS;
         // Away at the bank, connecting it: the hold says so, and signing
         // out now would strand the connection (utils/bankConnectionHold).
-        if (bankConnectionHoldActive()) return;
-        if (leftAt !== null && Date.now() - leftAt > LEAVE_GRACE_MS) {
+        if (away && !bankConnectionHoldActive()) {
+          writeSeenAt(null);
+          ended = true;
+          stop();
           onTimeoutRef.current();
+          return;
         }
+        lastSeen = now;
+        writeSeenAt(now);
       };
-      // A launch after the app was closed: the mark is still there.
-      endIfAwayTooLong();
-      const onVisibility = (): void => {
-        if (document.visibilityState === 'hidden') writeLeftAt(Date.now());
-        else endIfAwayTooLong();
-      };
+      const onVisibility = (): void => beat();
+      // A launch after the app was closed: the last heartbeat is still there.
+      beat();
+      if (ended) return;
+      interval = window.setInterval(beat, HEARTBEAT_MS);
       document.addEventListener('visibilitychange', onVisibility);
-      // `pagehide` too: a tab or window closed outright may never report
-      // hidden first.
-      const onPageHide = (): void => writeLeftAt(Date.now());
-      window.addEventListener('pagehide', onPageHide);
-      return () => {
-        document.removeEventListener('visibilitychange', onVisibility);
-        window.removeEventListener('pagehide', onPageHide);
-      };
+      window.addEventListener('focus', beat);
+      window.addEventListener('pageshow', beat);
+      return stop;
     }
     // Any other choice clears a mark the strict mode left behind, so switching
     // away from it never signs somebody out on the next launch.
-    writeLeftAt(null);
+    writeSeenAt(null);
     if (settings.sessionTimeout <= 0) return; // Never
 
     // Starting the clock on mount, not on the last sign-in: a reload is the
