@@ -28,7 +28,10 @@ vi.mock('@clerk/clerk-react', () => ({
   useAuth: () => ({ ...state.auth, signOut: async () => undefined }),
 }));
 
-vi.mock('../../hooks/useSessionTimeout', () => ({ useSessionTimeout: () => undefined }));
+vi.mock('../../hooks/useSessionTimeout', () => ({
+  useSessionTimeout: () => undefined,
+  forgetSessionSeen: () => undefined
+}));
 
 vi.mock('@capacitor/core', () => ({
   registerPlugin: () => {
