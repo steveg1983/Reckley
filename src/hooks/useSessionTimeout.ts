@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { securityService } from '../services/securityService';
 import { bankConnectionHoldActive } from '../utils/bankConnectionHold';
 
@@ -72,19 +72,42 @@ function writeLeftAt(value: number | null): void {
     // thrown into the middle of a visibility event.
   }
 }
+/**
+ * Announced by Security Settings when the choice changes, so the hook starts
+ * the new mode at once. Without it the old mode ran until the next launch:
+ * choosing "When I leave the app" and closing the app left no mark, because
+ * the session that was closed was still timing by minutes (19 Nov 2026).
+ */
+export const SESSION_TIMEOUT_CHANGED_EVENT = 'ledger:session-timeout-changed';
+
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'scroll', 'touchstart'] as const;
 
 /** How often to compare the clock against the last activity. */
 const CHECK_INTERVAL_MS = 30_000;
 
-export function useSessionTimeout(onTimeout: () => void): void {
+/**
+ * `active` is whether there is a session to end yet. The caller passes
+ * Clerk's "loaded and signed in": at launch the page mounts before Clerk has
+ * loaded, and a sign-out asked for then does nothing — while the check that
+ * asked had already used up the mark. So nothing is read, cleared or started
+ * until there is somebody to sign out.
+ */
+export function useSessionTimeout(onTimeout: () => void, active = true): void {
   // Held in a ref so a caller passing an inline arrow does not re-subscribe
   // every render — which would reset the listeners, not the session, but would
   // churn for no reason.
   const onTimeoutRef = useRef(onTimeout);
   onTimeoutRef.current = onTimeout;
+  const [settingsVersion, setSettingsVersion] = useState(0);
 
   useEffect(() => {
+    const onChanged = (): void => setSettingsVersion((v) => v + 1);
+    window.addEventListener(SESSION_TIMEOUT_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(SESSION_TIMEOUT_CHANGED_EVENT, onChanged);
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
     const settings = securityService.getSecuritySettings();
     if (settings.sessionTimeout === SESSION_ENDS_ON_LEAVE) {
       const endIfAwayTooLong = (): void => {
@@ -148,7 +171,6 @@ export function useSessionTimeout(onTimeout: () => void): void {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-    // Re-read on every mount. The setting is changed on a page that stays
-    // mounted, so the caller re-keys this hook when it changes — see App.
-  }, []);
+    // Re-read when a session appears and whenever the choice changes.
+  }, [active, settingsVersion]);
 }

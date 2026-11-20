@@ -13,7 +13,7 @@ import PageWrapper from '../../components/PageWrapper';
 import { DangerZone } from '@service';
 import type { SecuritySettings as SecuritySettingsType } from '../../services/securityService';
 import { formatDateTime } from '../../utils/dateFormatter';
-import { SESSION_ENDS_ON_LEAVE } from '../../hooks/useSessionTimeout';
+import { SESSION_ENDS_ON_LEAVE, SESSION_TIMEOUT_CHANGED_EVENT } from '../../hooks/useSessionTimeout';
 
 export default function SecuritySettings() {
   const [settings, setSettings] = useState<SecuritySettingsType>(
@@ -23,6 +23,8 @@ export default function SecuritySettings() {
   const handleSessionTimeoutChange = (timeout: number) => {
     securityService.updateSecuritySettings({ sessionTimeout: timeout });
     setSettings({ ...settings, sessionTimeout: timeout });
+    // Takes effect now, not at the next launch.
+    window.dispatchEvent(new Event(SESSION_TIMEOUT_CHANGED_EVENT));
   };
 
   return (

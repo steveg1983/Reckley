@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { securityService } from '../../services/securityService';
-import { useSessionTimeout, SESSION_ENDS_ON_LEAVE } from '../useSessionTimeout';
+import { useSessionTimeout, SESSION_ENDS_ON_LEAVE, SESSION_TIMEOUT_CHANGED_EVENT } from '../useSessionTimeout';
 import { holdSignOutForBankConnection, releaseBankConnectionHold } from '../../utils/bankConnectionHold';
 
 /**
@@ -109,5 +109,36 @@ describe('useSessionTimeout — when I leave the app', () => {
 
     expect(onTimeout).not.toHaveBeenCalled();
     expect(window.localStorage.getItem(LEFT_AT_KEY)).toBeNull();
+  });
+
+  it('at launch, waits for a session to exist before reading the mark', () => {
+    // The phone case of 19 Nov: the page mounts before Clerk has loaded, and
+    // a sign-out asked for then did nothing while the mark was used up.
+    chooseTimeout(SESSION_ENDS_ON_LEAVE);
+    window.localStorage.setItem(LEFT_AT_KEY, String(Date.parse('2026-11-19T09:00:00Z')));
+    const onTimeout = vi.fn();
+    const { rerender } = renderHook(({ active }) => useSessionTimeout(onTimeout, active), {
+      initialProps: { active: false }
+    });
+
+    expect(onTimeout).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(LEFT_AT_KEY)).not.toBeNull();
+
+    rerender({ active: true });
+    expect(onTimeout).toHaveBeenCalledTimes(1);
+  });
+
+  it('choosing it takes effect at once, not at the next launch', () => {
+    chooseTimeout(30);
+    const onTimeout = vi.fn();
+    renderHook(() => useSessionTimeout(onTimeout));
+
+    chooseTimeout(SESSION_ENDS_ON_LEAVE);
+    act(() => {
+      window.dispatchEvent(new Event(SESSION_TIMEOUT_CHANGED_EVENT));
+    });
+    setVisibility('hidden');
+
+    expect(window.localStorage.getItem(LEFT_AT_KEY)).not.toBeNull();
   });
 });
