@@ -272,6 +272,28 @@ const clerkAppearance: Appearance = {
     // Social / secondary buttons stay neutral (near-black label, never blue).
     socialButtonsBlockButton: { color: '#111827' },
     /*
+     * THE MODAL CLEARS THE PHONE'S CUT-OUTS. On the owner's iPhone Duo the
+     * account window ran to the right edge and its close ✕ sat under the
+     * camera pill, so there was no way out but quitting the app (19 Nov
+     * 2026). The backdrop is padded by the same named insets the app's own
+     * chrome pays (index.css), so every Clerk modal — account, sign-in —
+     * steps in from the pill and the status bar; on a screen without them
+     * each is 0px and nothing moves.
+     */
+    modalBackdrop: {
+      paddingTop: 'var(--wt-status-bar-inset, 0px)',
+      paddingRight: 'var(--wt-side-inset-right, 0px)',
+      paddingBottom: 'var(--wt-home-indicator-inset, 0px)',
+      paddingLeft: 'var(--wt-side-inset-left, 0px)',
+      boxSizing: 'border-box'
+    },
+    // …and the ✕ is a full 44px touch target, the size the app's own phone
+    // controls keep, rather than Clerk's small glyph-sized button.
+    modalCloseButton: {
+      minWidth: '2.75rem',
+      minHeight: '2.75rem'
+    },
+    /*
      * THE AVATAR — no rule, deliberately, after two attempts that made it worse.
      *
      * The design review's "single most-seen element in the product and the only
