@@ -51,7 +51,7 @@ export default function SessionGuard(): React.JSX.Element | null {
     // load: a timed-out session that stays on /accounts shows an empty ledger,
     // which reads as data loss rather than as a sign-out.
     void signOut({ redirectUrl: '/' });
-  });
+  }, isLoaded && isSignedIn === true);
 
   return null;
 }
